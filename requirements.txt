@@ -1,0 +1,30 @@
+# Core
+pydantic>=2.4.2
+pydantic-settings>=2.0.3
+PyYAML>=6.0.1
+python-dotenv>=1.0.0
+
+# Database
+psycopg2-binary>=2.9.9
+SQLAlchemy>=2.0.21
+
+# APIs and Gateway
+fastapi>=0.104.0
+uvicorn>=0.23.2
+
+# Interfaces
+Flask>=3.0.0
+click>=8.1.7
+
+# Container Management
+docker>=6.1.3
+
+# HashiCorp Vault Integration
+hvac>=1.2.1
+
+# Utilities
+cryptography>=41.0.4
+PyJWT>=2.8.0
+
+# Security / Semantic Evaluator
+requests>=2.31.0
