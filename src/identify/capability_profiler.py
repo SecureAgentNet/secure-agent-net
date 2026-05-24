@@ -1,5 +1,6 @@
 from typing import List, Dict
 import logging
+from src.utils.persistence import PersistenceStore
 
 logger = logging.getLogger("SecureAgentNet.Identify")
 
@@ -15,12 +16,27 @@ class CapabilityProfiler:
         "agent-007": ["read_file", "execute_sql", "search_web"],
         "agent-rogue": ["search_web"]
     }
-    
+    _loaded: bool = False
+
+    @classmethod
+    def _persist(cls):
+        PersistenceStore.save("capability_profiler", cls._mock_db)
+
+    @classmethod
+    def _load(cls):
+        data = PersistenceStore.load("capability_profiler", None)
+        if data is not None:
+            cls._mock_db = data
+
+    @classmethod
+    def _ensure_loaded(cls):
+        if not cls._loaded:
+            cls._load()
+            cls._loaded = True
+
     @classmethod
     def is_authorized(cls, agent_id: str, action_name: str) -> bool:
-        """
-        Checks if the agent has the specific capability whitelisted.
-        """
+        cls._ensure_loaded()
         allowed_actions = cls._mock_db.get(agent_id, [])
         
         if action_name in allowed_actions:
@@ -32,9 +48,10 @@ class CapabilityProfiler:
         
     @classmethod
     def add_capability(cls, agent_id: str, action_name: str):
-        """Grants a new capability to an agent (Admin only function)."""
+        cls._ensure_loaded()
         if agent_id not in cls._mock_db:
             cls._mock_db[agent_id] = []
         if action_name not in cls._mock_db[agent_id]:
             cls._mock_db[agent_id].append(action_name)
+            cls._persist()
             logger.info(f"Granted '{action_name}' to agent {agent_id}.")

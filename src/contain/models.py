@@ -1,34 +1,52 @@
+import base64
+from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
-import uuid
+from typing import List, Dict, Optional
 
 
 class SandboxConfig(BaseModel):
-    """Configuration for the isolated execution environment."""
-    image: str = Field(default="python:3.11-slim", description="The Docker image to use as the base sandbox.")
-    mem_limit: str = Field(default="128m", description="Maximum memory the container can use.")
-    cpu_quota: int = Field(default=50000, description="CPU quota (50000 = 0.5 CPU core).")
-    network_disabled: bool = Field(default=True, description="If True, container has no network access.")
-    read_only: bool = Field(default=True, description="Mount the root filesystem as read-only.")
-    work_dir: str = Field(default="/workspace", description="The working directory inside the sandbox.")
-    drop_capabilities: List[str] = Field(
-        default=["ALL"],
-        description="Linux capabilities to drop (default: drop all)."
-    )
+    image: str = Field(default="python:3.11-slim")
+    mem_limit: str = Field(default="128m")
+    cpu_quota: int = Field(default=50000)
+    network_disabled: bool = Field(default=True)
+    network_isolation_level: str = Field(default="strict")
+    read_only: bool = Field(default=True)
+    work_dir: str = Field(default="/workspace")
+    tmpfs_size: str = Field(default="64m")
+    drop_capabilities: List[str] = Field(default=["ALL"])
+    timeout_seconds: int = Field(default=30)
+    max_concurrent_containers: int = Field(default=10)
+    max_containers_per_agent: int = Field(default=3)
+
+
+class InjectedFile(BaseModel):
+    path: str = Field(..., description="Destination path in the sandbox, e.g. /workspace/script.py")
+    content_base64: str = Field(..., description="Base64-encoded file content")
+    executable: bool = Field(default=False)
+
+    def write_to(self, parent_dir: Path) -> Path:
+        dest = parent_dir / self.path.lstrip("/")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        decoded = base64.b64decode(self.content_base64)
+        dest.write_bytes(decoded)
+        if self.executable:
+            dest.chmod(0o755)
+        return dest
 
 
 class ExecutionRequest(BaseModel):
-    """The request to execute a specific command or script inside the sandbox."""
-    command: str = Field(..., description="The command to run (e.g., 'python script.py').")
-    environment_vars: Dict[str, str] = Field(default_factory=dict, description="Safe env vars to inject.")
-    # In a real scenario, you'd also pass file contents to mount into the workspace.
+    command: str = Field(..., description="The command to run (e.g. 'python script.py')")
+    args: List[str] = Field(default_factory=list, description="Command + args for exec form (Docker best practice)")
+    environment_vars: Dict[str, str] = Field(default_factory=dict)
+    files: List[InjectedFile] = Field(default_factory=list, description="Files to inject into workspace")
 
 
 class ExecutionResult(BaseModel):
-    """The result of the sandbox execution."""
     sandbox_id: str
     exit_code: int
     stdout: str
     stderr: str
     execution_time_ms: int
-    was_killed: bool = Field(default=False, description="True if killed due to timeout or resource exhaustion.")
+    was_killed: bool = Field(default=False)
+    oom_killed: bool = Field(default=False)
+    resource_usage: Dict[str, Optional[float]] = Field(default_factory=dict)

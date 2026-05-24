@@ -1,0 +1,10 @@
+[MASTER]
+ignore = .git,__pycache__,venv,.venv,build,dist,migrations
+max-line-length = 100
+
+[MESSAGES CONTROL]
+disable = C0111, C0103, C0301, W0611, R0903, R0913, R0801, E0401
+
+[REPORTS]
+output-format = colorized
+score = no

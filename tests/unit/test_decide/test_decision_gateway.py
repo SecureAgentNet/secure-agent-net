@@ -66,3 +66,39 @@ def test_tier3_llm_block(gateway, monkeypatch):
     assert result.is_allowed is False
     assert result.evaluated_by == "SemanticEvaluator"
     assert result.risk_score == 0.95
+
+
+def test_block_threshold_from_config(monkeypatch):
+    import src.decide
+    monkeypatch.setattr(src.decide, "get_settings", lambda: type("S", (), {"block_threshold": 0.5, "presidio_score_threshold": 0.4})())
+
+    gw2 = DecisionGateway()
+    assert gw2.block_threshold == 0.5
+
+    def mock_evaluate(request, redacted_payload):
+        return 0.6, "Moderate risk"
+    monkeypatch.setattr(gw2.semantic_evaluator, "evaluate", mock_evaluate)
+
+    result = gw2.evaluate_request(EvaluationRequest(
+        agent_id="test", action_name="read_file", target_resource="/tmp/test",
+        intent_summary="Reading file", payload={},
+    ))
+    assert result.is_allowed is False
+    assert result.risk_score == 0.6
+
+
+def test_tier2_pii_redactor_fail_closed(gateway, monkeypatch):
+    from src.core.exceptions import PIIRedactionError
+    from src.decide import PiiRedactor
+
+    def mock_redact(payload):
+        raise PIIRedactionError("Presidio engine crashed")
+    monkeypatch.setattr(PiiRedactor, "redact_payload", staticmethod(mock_redact))
+
+    result = gateway.evaluate_request(EvaluationRequest(
+        agent_id="test", action_name="read_file", target_resource="/tmp/test",
+        intent_summary="Reading file", payload={"email": "a@b.com"},
+    ))
+    assert result.is_allowed is False
+    assert result.risk_score == 1.0
+    assert "PiiRedactor" in result.evaluated_by

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Any, Dict, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AgentActionRequest(BaseModel):
@@ -16,7 +16,7 @@ class CapturedLog(BaseModel):
     """The structured log event that will be stored."""
     log_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     agent_id: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     action_request: AgentActionRequest
     risk_score: Optional[float] = None
     decision: str = "pending"

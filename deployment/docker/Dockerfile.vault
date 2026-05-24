@@ -1,0 +1,7 @@
+FROM hashicorp/vault:latest
+
+COPY vault-config/vault.json /vault/config/vault.json
+
+EXPOSE 8200
+
+ENTRYPOINT ["vault", "server", "-config=/vault/config/vault.json"]

@@ -24,3 +24,11 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int = Field(3600, description="Token expiration in seconds.")
+
+
+class ExecuteRequest(BaseModel):
+    """Request to execute a tool through the ITCD pipeline."""
+    action_name: str = Field(..., description="Action type (e.g., execute, read_file)")
+    target_resource: str = Field("shell", description="Target resource identifier")
+    intent_summary: str = Field("", description="Agent's stated intent")
+    payload: dict = Field(default_factory=dict, description="Action parameters")

@@ -1,6 +1,7 @@
 import time
 import logging
 from typing import Dict, Tuple
+from src.database.repositories import CircuitBreakerRepository
 
 logger = logging.getLogger("SecureAgentNet.CircuitBreaker")
 
@@ -19,6 +20,15 @@ class CircuitBreaker:
         # Format: {agent_id: {"failures": [timestamp1, timestamp2], "state": "CLOSED", "tripped_at": None}}
         # State: CLOSED = Normal operation, OPEN = Suspended
         self._state_store: Dict[str, dict] = {}
+        self._load()
+
+    def _persist(self):
+        CircuitBreakerRepository.save_all(self._state_store)
+
+    def _load(self):
+        data = CircuitBreakerRepository.load_all()
+        if data:
+            self._state_store = data
 
     def _get_agent_state(self, agent_id: str) -> dict:
         if agent_id not in self._state_store:
@@ -43,6 +53,7 @@ class CircuitBreaker:
             if now - t <= self.time_window
         ]
         
+        self._persist()
         # Check if threshold is reached
         if len(agent_state["failures"]) >= self.failure_threshold and agent_state["state"] == "CLOSED":
             agent_state["state"] = "OPEN"
@@ -64,6 +75,7 @@ class CircuitBreaker:
                 agent_state["state"] = "CLOSED"
                 agent_state["failures"] = []
                 agent_state["tripped_at"] = None
+                self._persist()
                 return True, "Circuit closed."
             else:
                 remaining = int(self.reset_timeout - (now - agent_state["tripped_at"]))

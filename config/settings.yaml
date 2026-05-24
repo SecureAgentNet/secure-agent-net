@@ -1,0 +1,44 @@
+secureagentnet:
+  environment: development
+  deploy_mode: docker
+
+  identify:
+    rate_limit: 100
+    challenge_timeout_seconds: 300
+    jwt_expiration_seconds: 3600
+    rogue_detection:
+      anomaly_threshold: 0.8
+      failure_threshold: 10
+      time_window_seconds: 60
+
+  track:
+    log_level: INFO
+    vault_enabled: true
+    log_retention_days: 30
+    max_log_entries: 10000
+
+  contain:
+    default_image: python:3.11-slim
+    cpu_limit: 1.0
+    memory_limit_mb: 512
+    network_disabled: true
+    read_only_root: true
+    container_timeout_seconds: 60
+    pids_limit: 50
+
+  decide:
+    block_threshold: 0.7
+    kill_switch:
+      denial_threshold: 3
+      block_duration_seconds: 900
+    circuit_breaker:
+      failure_threshold: 3
+      time_window_seconds: 60
+      reset_timeout_seconds: 120
+    presidio_score_threshold: 0.4
+
+  api:
+    host: 0.0.0.0
+    port: 5000
+    mcp_port: 8443
+    cors_origins: ["*"]

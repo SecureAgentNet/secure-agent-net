@@ -1,0 +1,171 @@
+x-logging: &prod-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-restart: &restart-policy
+  restart: unless-stopped
+
+x-resources: &app-resources
+  resources:
+    limits:
+      cpus: '2'
+      memory: 2G
+    reservations:
+      cpus: '0.5'
+      memory: 512M
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: securenet-postgres
+    <<: *restart-policy
+    environment:
+      POSTGRES_DB: securenet_db
+      POSTGRES_USER: ${POSTGRES_USER:-secureagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../src/database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-secureagent} -d securenet_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *prod-logging
+
+  vault:
+    image: hashicorp/vault:1.18
+    container_name: securenet-vault
+    <<: *restart-policy
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_LOCAL_CONFIG: |
+        {
+          "storage": {
+            "raft": {
+              "path": "/vault/file",
+              "node_id": "node1"
+            }
+          },
+          "listener": {
+            "tcp": {
+              "address": "0.0.0.0:8200",
+              "tls_disable": true
+            }
+          },
+          "api_addr": "http://vault:8200",
+          "cluster_addr": "http://vault:8201",
+          "ui": true
+        }
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-root}
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - vault_data:/vault/file
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *prod-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: securenet-redis
+    <<: *restart-policy
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *prod-logging
+
+  ollama:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile.ollama
+    image: secureagentnet/ollama:${OLLAMA_TAG:-latest}
+    container_name: securenet-ollama
+    <<: *restart-policy
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:7b}
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    logging: *prod-logging
+
+  app:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        - ENVIRONMENT=production
+    image: secureagentnet/app:${IMAGE_TAG:-latest}
+    container_name: securenet-app
+    <<: *restart-policy
+    <<: *app-resources
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    env_file:
+      - ../.env
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/securenet_db
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_TOKEN}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      OLLAMA_API_URL: http://ollama:11434/api/generate
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:7b}
+      MCP_PORT: 8443
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+    ports:
+      - "5000:5000"
+    logging: *prod-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  pgdata:
+  vault_data:
+  redis_data:
+  ollama_data:

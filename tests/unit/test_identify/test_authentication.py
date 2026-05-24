@@ -74,6 +74,8 @@ def test_verify_and_login_success(mock_agent_db, rsa_key_pair, monkeypatch):
     class MockSettings:
         secret_key = "test_super_secret"
         agent_jwt_algorithm = "HS256"
+        def resolve_secret_key(self):
+            return self.secret_key
         
     monkeypatch.setattr("src.identify.authentication.get_settings", MockSettings)
 
