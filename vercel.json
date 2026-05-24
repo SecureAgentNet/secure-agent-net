@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "buildCommand": "",
-  "outputDirectory": "website",
-  "framework": null,
-  "routes": [
-    { "src": "/docs/(.*)", "dest": "/docs/index.html", "status": 200 }
-  ]
-}
