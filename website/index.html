@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecureAgentNet — Zero-Trust Security Gateway for AI Agents</title>
+<meta name="description" content="Zero-trust security orchestration for autonomous AI agents. Every action flows through a 4-phase pipeline: identify, track intent, evaluate risk, and sandbox execution. Brew install, pip install, or curl | sh.">
+<meta name="keywords" content="ai security, zero trust, agent security, docker sandbox, llm evaluation, pii redaction, vault audit, itcd pipeline">
+<meta name="author" content="SecureAgentNet">
+<link rel="canonical" href="https://secureagentnet.dev/">
+
+<meta property="og:title" content="SecureAgentNet — Zero-Trust Security for Autonomous AI Agents">
+<meta property="og:description" content="IDENTIFY → TRACK → DECIDE → CONTAIN. Every agent action passes through all four phases. Install in one command on any OS.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://secureagentnet.dev/">
+<meta property="og:site_name" content="SecureAgentNet">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SecureAgentNet — Zero-Trust Security Gateway for AI Agents">
+<meta name="twitter:description" content="Every AI agent action passes through a 4-phase security pipeline. Brew install, pip install, or curl | sh.">
+
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0e14'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' font-size='18' fill='%2358a6ff' font-family='monospace'%3E🛡%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "SecureAgentNet",
+  "applicationCategory": "SecurityApplication",
+  "operatingSystem": "Linux, macOS, Windows",
+  "description": "Zero-trust security gateway for autonomous AI agents with 4-phase ITCD pipeline.",
+  "url": "https://secureagentnet.dev",
+  "author": { "@type": "Organization", "name": "SecureAgentNet" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <div class="logo">
+      <span style="font-size:22px">🛡️</span> SecureAgentNet
+    </div>
+    <div class="links">
+      <a href="#install">Install</a>
+      <a href="#features">Features</a>
+      <a href="#modes">Modes</a>
+      <a href="#quickstart">Quick Start</a>
+      <a href="docs/">Docs</a>
+      <a href="https://github.com/secure-agent-net/secure-agent-net">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <div class="badge">
+      <span style="color:var(--accent2)">●</span> v2.0.0 — Production Ready
+    </div>
+    <h1>Zero-Trust Security<br>for Autonomous AI Agents</h1>
+    <p class="subtitle">
+      Every action an AI agent takes flows through a 4-phase security pipeline:
+      identify the agent, track its intent, evaluate the risk, and sandbox the execution.
+      Nothing executes without passing all checks.
+    </p>
+    <div class="pipeline">
+      <div class="phase">
+        <div class="name" style="color:var(--accent)">IDENTIFY</div>
+        <div class="desc">Verify identity, check capabilities, detect rogue behavior</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="phase">
+        <div class="name" style="color:var(--accent2)">TRACK</div>
+        <div class="desc">Capture intent to Vault with HMAC-signed audit trail</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="phase">
+        <div class="name" style="color:var(--warn)">DECIDE</div>
+        <div class="desc">3-tier evaluation: rules → PII redaction → LLM analysis</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="phase">
+        <div class="name" style="color:var(--danger)">CONTAIN</div>
+        <div class="desc">Docker sandbox with seccomp, AppArmor, read-only rootfs</div>
+      </div>
+    </div>
+    <div class="buttons">
+      <a href="#install" class="btn btn-primary">Get Started</a>
+      <a href="https://github.com/secure-agent-net/secure-agent-net" class="btn btn-outline">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="container">
+    <h2>Install Anywhere</h2>
+    <p class="section-desc">One command on any platform. Works with or without Docker, Redis, or Ollama.</p>
+    <div class="install-grid">
+      <div class="install-card">
+        <div class="os">🍎 macOS</div>
+        <code>brew tap secure-agent-net/tap<br>brew install secureagentnet</code>
+        <div class="note">Or <code>pip install secureagentnet</code></div>
+      </div>
+      <div class="install-card">
+        <div class="os">🐧 Linux</div>
+        <code>pip install secureagentnet</code>
+        <div class="note">Arch: <code>yay -S secureagentnet</code></div>
+      </div>
+      <div class="install-card">
+        <div class="os">🪟 Windows</div>
+        <code>pip install secureagentnet</code>
+        <div class="note">Docker Desktop recommended for full sandboxing</div>
+      </div>
+      <div class="install-card">
+        <div class="os">⬇️ One-liner</div>
+        <code>curl -fsSL https://raw.githubusercontent.com/secure-agent-net/secure-agent-net/main/scripts/install.sh | sh</code>
+        <div class="note">Auto-detects OS, installs prerequisites, sets up config</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="container">
+    <h2>Quick Start</h2>
+    <p class="section-desc">From zero to evaluating agent actions in 60 seconds.</p>
+    <div class="quick-start">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <strong>Install</strong>
+          <div class="code-block">
+            <span class="prompt">$</span> pip install secureagentnet
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <strong>Check your system</strong>
+          <div class="code-block">
+<span class="prompt">$</span> secureagentnet doctor
+<span class="output">
+SecureAgentNet System Health
+==================================================
+  ✓ Python 3.14.5 (3.10+ required)
+  ✓ Platform: Linux
+  ✓ Deploy Mode: docker
+  ✓ Identity Registry: 0 agents registered
+  ✓ Log Indexer: 0 events indexed
+  ✓ Docker: Docker version 29.5.1
+  ✓ Ollama: ollama version is 0.24.0
+  ✓ Redis: connected
+  ✓ Environment: development
+
+╭────────────────────╮
+│ All checks passed! │
+╰────────────────────╯</span>
+          </div>
+          <div class="note" style="margin-top:8px">Missing Docker or Ollama? Run <code>secureagentnet doctor --deploy-mode minimal</code></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <strong>Initialize and evaluate</strong>
+          <div class="code-block">
+<span class="prompt">$</span> secureagentnet init --seed
+<span class="output">SecureAgentNet initialized successfully</span>
+
+<span class="prompt">$</span> secureagentnet evaluate 'ls -la'
+<span class="output">Decision: ALLOWED
+Risk Score: 0.0000
+Evaluated By: SemanticEvaluator
+Reason: Safe command</span>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div>
+          <strong>Register an agent and run through the pipeline</strong>
+          <div class="code-block">
+<span class="prompt">$</span> secureagentnet agent register my-agent --type LangChain --capabilities execute
+<span class="output">✓ Agent 'my-agent' registered with ID: a1b2c3d4...</span>
+
+<span class="prompt">$</span> secureagentnet run my-agent "echo hello world"
+<span class="output">
+╭─────────────────────────────────────╮
+│ ACTION ALLOWED &amp; EXECUTED           │
+│ Sandbox: sandbox-a1b2c3d4          │
+│ Exit Code: 0                       │
+│ Execution Time: 234ms              │
+│ Vault Receipt: vault-audit/...     │
+╰─────────────────────────────────────╯</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="modes">
+  <div class="container">
+    <h2>Deployment Modes</h2>
+    <p class="section-desc">Scale from a quick local test to full production, without changing your code.</p>
+    <div class="modes-grid">
+      <div class="mode-card">
+        <h3>🔒 Docker <span style="font-size:13px;color:var(--accent2);font-weight:400">(default)</span></h3>
+        <p style="font-size:14px;color:var(--text-dim)">Full security — container sandboxing, LLM evaluation, Redis rate limiting, Vault audit logging.</p>
+        <div class="deps">
+          <span class="dep active">Docker</span>
+          <span class="dep active">Redis</span>
+          <span class="dep active">Ollama</span>
+          <span class="dep active">Vault</span>
+        </div>
+        <div class="code-block" style="margin-top:12px"><span class="prompt">$</span> export DEPLOY_MODE=docker<br><span class="prompt">$</span> secureagentnet init</div>
+      </div>
+      <div class="mode-card">
+        <h3>💻 Local</h3>
+        <p style="font-size:14px;color:var(--text-dim)">Development mode — SQLite database, no Docker/Redis/Vault required.</p>
+        <div class="deps">
+          <span class="dep inactive">Docker</span>
+          <span class="dep inactive">Redis</span>
+          <span class="dep inactive">Ollama</span>
+          <span class="dep inactive">Vault</span>
+        </div>
+        <div class="code-block" style="margin-top:12px"><span class="prompt">$</span> export DEPLOY_MODE=local<br><span class="prompt">$</span> secureagentnet init --mode local</div>
+      </div>
+      <div class="mode-card">
+        <h3>⚡ Minimal</h3>
+        <p style="font-size:14px;color:var(--text-dim)">Zero dependencies — JSON file storage, no external services at all. Works on any OS instantly.</p>
+        <div class="deps">
+          <span class="dep inactive">Docker</span>
+          <span class="dep inactive">Redis</span>
+          <span class="dep inactive">Ollama</span>
+          <span class="dep inactive">Vault</span>
+        </div>
+        <div class="code-block" style="margin-top:12px"><span class="prompt">$</span> export DEPLOY_MODE=minimal<br><span class="prompt">$</span> secureagentnet init --mode minimal</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="container">
+    <h2>Key Features</h2>
+    <p class="section-desc">Every layer of defense is independent. If one fails, the pipeline fails closed — never open.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="icon">🔐</div>
+        <h3>Challenge-Response Auth</h3>
+        <p>Agents prove identity by signing a cryptographic nonce with their Ed25519 or RSA private key. Short-lived JWTs issued on success.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📋</div>
+        <h3>Tamper-Proof Audit Trail</h3>
+        <p>Every agent intent is HMAC-signed via HashiCorp Vault Transit before execution. Verify integrity with <code>forensics verify</code>.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🧠</div>
+        <h3>LLM Semantic Evaluation</h3>
+        <p>Local Ollama models analyze agent intent for prompt injection, goal hijacking, and data exfiltration. PII is redacted by Microsoft Presidio before reaching the LLM.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📦</div>
+        <h3>Docker Sandboxing</h3>
+        <p>Commands execute in ephemeral containers with seccomp whitelisting, read-only rootfs, dropped capabilities, and network isolation.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">⚡</div>
+        <h3>Circuit Breaker &amp; Kill Switch</h3>
+        <p>Per-agent failure tracking auto-opens circuit breakers. System-wide kill switch halts all operations at the first sign of an attack.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🖥️</div>
+        <h3>CLI-First, API-Ready</h3>
+        <p>14 CLI subcommands for full control. FastAPI with JWT middleware for programmatic access. Optional Flask dashboard for visualization.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🌍</div>
+        <h3>Cross-Platform</h3>
+        <p>Runs on Linux, macOS, and Windows. Docker Desktop detection. Seccomp and AppArmor gracefully skipped on non-Linux hosts.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📊</div>
+        <h3>Resource Metrics</h3>
+        <p>Per-execution CPU, memory, and network usage collected from Docker stats API. OOM detection from container inspect.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🎯</div>
+        <h3>Intent Scoping</h3>
+        <p>IntentCapsule restricts agents to approved actions within a session. Goal-hijack detection blocks deviation from the original task.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>
+      <strong>SecureAgentNet v2.0.0</strong> &mdash;
+      <a href="https://github.com/secure-agent-net/secure-agent-net">GitHub</a> ·
+      <a href="docs/">Documentation</a> ·
+      <a href="https://github.com/secure-agent-net/secure-agent-net/blob/main/SECURITY.md">Security</a> ·
+      <a href="https://github.com/secure-agent-net/secure-agent-net/blob/main/CONTRIBUTING.md">Contributing</a>
+    </p>
+    <p style="margin-top:8px">MIT License · Built with Python, Docker, HashiCorp Vault, Ollama, Microsoft Presidio</p>
+  </div>
+</footer>
+
+</body>
+</html>

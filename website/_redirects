@@ -1,0 +1,2 @@
+# Netlify redirects — SPA-friendly
+/docs/*  /docs/index.html  200

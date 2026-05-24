@@ -1,0 +1,16 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include setup.py
+include requirements.txt
+include .env.example
+include pytest.ini
+include alembic.ini
+recursive-include config *.json *.yaml *.yml
+recursive-include scripts *.sh
+recursive-include packaging *
+recursive-include src *.py *.json *.yaml *.yml
+recursive-include docs *
+prune **/__pycache__
+prune **/.pytest_cache
+prune **/*.pyc

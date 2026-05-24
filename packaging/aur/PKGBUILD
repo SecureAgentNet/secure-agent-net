@@ -1,0 +1,67 @@
+# Maintainer: SecureAgentNet Team <secureagentnet@example.com>
+pkgname=secureagentnet
+pkgver=2.0.0
+pkgrel=1
+pkgdesc="Zero-Trust Security Gateway for Autonomous AI Agents (ITCD Pipeline)"
+arch=('any')
+url="https://github.com/secure-agent-net/secure-agent-net"
+license=('MIT')
+depends=(
+    'python>=3.10'
+    'python-click'
+    'python-rich'
+    'python-pydantic'
+    'python-pydantic-settings'
+    'python-fastapi'
+    'python-uvicorn'
+    'python-sqlalchemy'
+    'python-flask'
+    'python-docker'
+    'python-hvac'
+    'python-cryptography'
+    'python-pyjwt'
+    'python-requests'
+    'python-pyyaml'
+    'python-redis'
+    'python-alembic'
+    'python-presidio-analyzer'
+    'python-presidio-anonymizer'
+)
+optdepends=(
+    'docker: container sandboxing (CONTAIN phase)'
+    'ollama: local LLM semantic evaluation'
+    'redis: rate limiting and caching'
+    'vault: tamper-proof audit logging'
+)
+makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/secure-agent-net/secure-agent-net/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('REPLACE_WITH_ACTUAL_SHA256')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+
+post_install() {
+    echo ">>> SecureAgentNet v$pkgver installed!"
+    echo ">>> Quick start:"
+    echo "    export DEPLOY_MODE=docker"
+    echo "    secureagentnet doctor"
+    echo "    secureagentnet init"
+    echo ""
+    echo ">>> For minimal setup (no Docker/Redis/Ollama):"
+    echo "    export DEPLOY_MODE=minimal"
+    echo "    secureagentnet doctor --deploy-mode minimal"
+}
+
+post_upgrade() {
+    post_install
+}

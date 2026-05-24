@@ -1,0 +1,42 @@
+{
+  "name": "secureagentnet",
+  "version": "2.0.0",
+  "description": "Zero-Trust Security Orchestration for Autonomous AI Agents",
+  "keywords": [
+    "ai-security",
+    "multi-agent",
+    "zero-trust",
+    "llm-security",
+    "agent-orchestration",
+    "prompt-injection-defense",
+    "container-sandbox"
+  ],
+  "homepage": "https://secureagentnet.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/secureagentnet/secureagentnet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/secureagentnet/secureagentnet/issues"
+  },
+  "license": "MIT",
+  "author": "SecureAgentNet Team",
+  "bin": {
+    "secureagentnet": "./bin/secureagentnet.js",
+    "san": "./bin/secureagentnet.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "scripts": {
+    "postinstall": "node ./bin/install-python.js",
+    "preuninstall": "node ./bin/uninstall.js"
+  },
+  "dependencies": {},
+  "preferGlobal": true
+}
