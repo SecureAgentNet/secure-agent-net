@@ -17,3 +17,4 @@ class EvaluationResult(BaseModel):
     risk_score: float = Field(..., ge=0.0, le=1.0, description="0.0 is completely safe, 1.0 is definitely malicious.")
     reason: str
     evaluated_by: str = Field(..., description="Which tier made the final decision (e.g., 'RuleFilter', 'SemanticEvaluator').")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (e.g., HITL request ID)")

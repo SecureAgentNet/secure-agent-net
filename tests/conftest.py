@@ -1,6 +1,9 @@
 import pytest
+import os
+import tempfile
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone
+from pathlib import Path
 
 from src.core.config import Settings, get_settings
 from src.identify.identity_registry import IdentityRegistry
@@ -14,6 +17,39 @@ from src.decide.kill_switch import KillSwitchController
 from src.identify.rogue_detector import RogueDetector
 from src.track.structured_logger import AgentAuditor, StructuredLogger
 from src.decide.semantic_evaluator import SemanticEvaluator
+
+
+@pytest.fixture(autouse=True)
+def isolate_test_environment(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".secureagentnet" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = tmp_path / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tldextract_cache = tmp_path / ".tldextract_cache"
+    tldextract_cache.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("INSTALL_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
+    monkeypatch.setenv("TLDEXTRACT_CACHE", str(tldextract_cache))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("SAN_TESTING", "1")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def mock_redis(monkeypatch):
+    monkeypatch.setattr("src.utils.redis_client.is_available", lambda: False)
+    monkeypatch.setattr("src.utils.redis_client.get_limiter_storage_uri", lambda: "memory://")
+    monkeypatch.setattr("src.identify.authentication.is_available", lambda: False)
+
+
+@pytest.fixture(autouse=True)
+def disable_limiter():
+    try:
+        from src.interfaces.web_dashboard.app import limiter
+        limiter.enabled = False
+    except ImportError:
+        pass
 
 
 @pytest.fixture(autouse=True)
@@ -36,10 +72,11 @@ def mock_settings(monkeypatch):
 @pytest.fixture(autouse=True)
 def reset_identity_registry():
     from src.database.repositories import AgentRepository
-    from src.database.connection import dispose_engine
+    from src.database.connection import dispose_engine, init_database
     from src.utils.persistence import PersistenceStore
     PersistenceStore.delete("identity_registry")
     dispose_engine()
+    init_database()
     AgentRepository.save_all({})
     IdentityRegistry._agents = {}
     IdentityRegistry._initialized = False
@@ -50,11 +87,12 @@ def reset_identity_registry():
 def reset_log_indexer():
     from src.track.log_indexer import LogIndexer
     from src.database import models
-    from src.database.connection import get_db_session, dispose_engine
+    from src.database.connection import get_db_session, dispose_engine, init_database
     from sqlalchemy import delete as sa_delete
     from src.utils.persistence import PersistenceStore
     PersistenceStore.delete("log_indexer")
     dispose_engine()
+    init_database()
     try:
         with get_db_session() as session:
             session.execute(sa_delete(models.AuditLogEntry))
@@ -66,14 +104,12 @@ def reset_log_indexer():
 
 @pytest.fixture(autouse=True)
 def reset_capability_profiler():
-    from src.identify.capability_profiler import CapabilityProfiler
-    from src.utils.persistence import PersistenceStore
-    PersistenceStore.delete("capability_profiler")
-    CapabilityProfiler._mock_db = {
+    from src.identify.capability_profiler import CapabilityProfiler, _SEED_CAPABILITIES
+    _SEED_CAPABILITIES.clear()
+    _SEED_CAPABILITIES.update({
         "agent-007": ["read_file", "execute_sql", "search_web"],
         "agent-rogue": ["search_web"],
-    }
-    CapabilityProfiler._loaded = False
+    })
 
 
 @pytest.fixture(autouse=True)
@@ -82,11 +118,35 @@ def reset_persistence():
     from src.database.repositories import (
         CircuitBreakerRepository, KillSwitchRepository, ContainerRepository
     )
-    for key in ("rogue_detector",):
+    for key in ("rogue_detector", "kill_switch"):
         PersistenceStore.delete(key)
     CircuitBreakerRepository.save_all({})
-    KillSwitchRepository.save({})
+    KillSwitchRepository.save({
+        "_armed": True,
+        "_active": False,
+        "_trigger_count": 0,
+        "_denial_counts": {},
+        "_last_triggered_at": None,
+        "_last_reset_at": None,
+    })
     ContainerRepository.save_all({})
+
+    # Reset in-memory state of any cached global pipelines
+    import sys
+    for module_name in ("src.interfaces.web_dashboard.app", "src.interfaces.cli.commands"):
+        if module_name in sys.modules:
+            try:
+                mod = sys.modules[module_name]
+                pipeline = getattr(mod, "pipeline", None)
+                if pipeline and hasattr(pipeline, "kill_switch"):
+                    pipeline.kill_switch._active = False
+                    pipeline.kill_switch._trigger_count = 0
+                    pipeline.kill_switch._denial_counts.clear()
+                    pipeline.kill_switch._armed = True
+            except Exception:
+                pass
+
+
 
 
 @pytest.fixture

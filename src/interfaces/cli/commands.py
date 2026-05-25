@@ -6,6 +6,7 @@ import time
 import subprocess
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional, List, Any
 
 # Silence noisy loggers in CLI mode
@@ -13,6 +14,7 @@ logging.getLogger("SecureAgentNet").setLevel(logging.WARNING)
 logging.getLogger("SecureAgentNet.Track.Indexer").setLevel(logging.WARNING)
 logging.getLogger("SecureAgentNet.Track").setLevel(logging.WARNING)
 logging.getLogger("SecureAgentNet.Identify.Registry").setLevel(logging.WARNING)
+logging.getLogger("SecureAgentNet.Identify.Discovery").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 import click
@@ -301,6 +303,89 @@ def capabilities(agent_id: str):
     for cap, enabled in caps.items():
         icon = "[green]✓[/]" if enabled else "[red]✗[/]"
         console.print(f"  {icon} {cap}")
+
+
+@agent.command()
+@click.option("--scanner", "scanner_filter", default=None,
+              type=click.Choice(["docker", "mcp", "process", "network", "filesystem"]),
+              help="Run only a specific scanner")
+@click.option("--register", "auto_register", is_flag=True, help="Auto-register discovered agents")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@click.option("--no-dedup", "no_dedup", is_flag=True, help="Show all results without deduplication")
+def discover(scanner_filter: Optional[str], auto_register: bool, json_output: bool, no_dedup: bool):
+    """Scan system-wide for AI agents (Docker, MCP, processes, network, filesystem)
+
+    Runs all 5 scanners in parallel and deduplicates results.
+    """
+    from src.identify.agent_discovery import AgentDiscoveryOrchestrator
+
+    scanners = [scanner_filter] if scanner_filter else None
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        progress.add_task(description="[bold cyan]Scanning system for AI agents...[/]", total=None)
+        agents = AgentDiscoveryOrchestrator.discover_all(scanners=scanners, deduplicate=not no_dedup)
+
+    if json_output:
+        _print_json([a.to_dict() for a in agents])
+        return
+
+    if not agents:
+        _print_warning("No AI agents discovered on this system")
+        return
+
+    source_colors = {
+        "docker": "[blue]docker[/]", "mcp": "[green]mcp[/]",
+        "process": "[yellow]process[/]", "network": "[magenta]network[/]",
+        "filesystem": "[dim]filesystem[/]",
+    }
+
+    rows = []
+    for a in agents:
+        src = source_colors.get(a.source, a.source)
+        fw = a.framework if a.framework != "unknown" else "—"
+        detail = (
+            f"port:{a.port}" if a.port else
+            f"pid:{a.pid}" if a.pid else
+            f"cid:{a.container_id}" if a.container_id else
+            f"cfg:{Path(a.config_path).name}" if a.config_path else
+            "—"
+        )
+        rows.append([src, a.name, fw, detail, a.status[:12]])
+
+    _print_table(
+        f"Discovered AI Agents ({len(agents)} found)",
+        ["Source", "Name", "Framework", "Detail", "Status"],
+        rows,
+        caption=f"Scanners used: {', '.join(AgentDiscoveryOrchestrator.list_scanners())}"
+    )
+
+    if auto_register:
+        registered = 0
+        for a in agents:
+            existing = IdentityRegistry.get_agent_by_name(a.name)
+            if existing:
+                continue
+            try:
+                agent_data = {
+                    "name": a.name,
+                    "type": a.framework,
+                    "description": f"Discovered via {a.source} scanner",
+                    "capabilities": {c: True for c in (a.capabilities or [])},
+                    "metadata": {"discovered_by": a.source, "discovered_at": a.discovered_at},
+                    "created_by": "auto-discover",
+                }
+                result = IdentityRegistry.register_agent(agent_data)
+                for cap in a.capabilities or []:
+                    CapabilityProfiler.add_capability(result["agent_id"], cap)
+                registered += 1
+                _print_success(f"Registered: {a.name} ({result['agent_id'][:8]}...)")
+            except Exception as exc:
+                _print_error(f"Failed to register {a.name}: {exc}")
+        if registered:
+            _print_success(f"Auto-registered {registered} new agent(s)")
+
+        if registered:
+            console.print(f"\n[dim]Use [bold]san agent list[/] to see all agents.[/]")
 
 
 # ============================================================

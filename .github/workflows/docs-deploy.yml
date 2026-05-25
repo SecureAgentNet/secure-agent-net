@@ -1,0 +1,51 @@
+name: Docs & Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'securenet-website/**'
+      - 'README.md'
+      - 'QUICKSTART.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'securenet-website/**'
+
+permissions:
+  contents: read
+
+jobs:
+  docs-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check docs are not empty
+        run: |
+          for f in README.md QUICKSTART.md SECURITY.md CONTRIBUTING.md LICENSE; do
+            if [ ! -s "$f" ]; then
+              echo "ERROR: $f is empty"
+              exit 1
+            fi
+            echo "OK: $f ($(wc -l < "$f") lines)"
+          done
+
+      - name: Validate CHANGELOG
+        run: |
+          if [ ! -s CHANGELOG.md ]; then
+            echo "WARNING: CHANGELOG.md is empty"
+          fi
+
+  website-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+        working-directory: securenet-website
+      - run: npm run build
+        working-directory: securenet-website

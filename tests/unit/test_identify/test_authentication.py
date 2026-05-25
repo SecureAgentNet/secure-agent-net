@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 
 from src.identify.models import ChallengeRequest, LoginRequest
 # noinspection PyProtectedMember
-from src.identify.authentication import AuthenticationService, _active_challenges
+from src.identify.authentication import AuthenticationService, _in_memory_challenges
 
 
 @pytest.fixture
@@ -53,8 +53,8 @@ def test_initiate_challenge_success(mock_agent_db, rsa_key_pair):
     
     assert response.nonce is not None
     assert response.session_id is not None
-    assert response.session_id in _active_challenges
-    assert _active_challenges[response.session_id]["nonce"] == response.nonce
+    assert response.session_id in _in_memory_challenges
+    assert _in_memory_challenges[response.session_id]["nonce"] == response.nonce
 
 
 def test_initiate_challenge_invalid_agent(mock_agent_db):
@@ -108,7 +108,7 @@ def test_verify_and_login_success(mock_agent_db, rsa_key_pair, monkeypatch):
     assert token_resp.access_token is not None
     assert token_resp.token_type == "bearer"
     # Ensure the challenge was consumed (deleted) to prevent replay attacks
-    assert challenge_resp.session_id not in _active_challenges
+    assert challenge_resp.session_id not in _in_memory_challenges
 
 
 def test_verify_and_login_invalid_signature(mock_agent_db, rsa_key_pair):
@@ -130,7 +130,7 @@ def test_verify_and_login_invalid_signature(mock_agent_db, rsa_key_pair):
     assert exc_info.value.status_code == 401
     assert "Invalid cryptographic signature" in exc_info.value.detail
     # Challenge should still be removed even on failure to prevent brute forcing
-    assert challenge_resp.session_id not in _active_challenges
+    assert challenge_resp.session_id not in _in_memory_challenges
 
 
 def test_verify_and_login_invalid_session(mock_agent_db):

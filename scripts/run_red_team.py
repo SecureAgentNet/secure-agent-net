@@ -10,7 +10,7 @@ import json
 from typing import Dict, List, Tuple
 
 from src.core.pipeline import ITCDPipeline
-from src.core.models import AgentActionRequest
+from src.track.models import AgentActionRequest
 from src.identify.identity_registry import IdentityRegistry
 from src.decide.kill_switch import KillSwitchController
 

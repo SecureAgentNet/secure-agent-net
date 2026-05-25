@@ -14,16 +14,16 @@
                 "dup", "dup2", "epoll_create", "epoll_ctl",
                 "epoll_pwait", "epoll_wait", "exit", "exit_group",
                 "faccessat", "fchmod", "fchown", "fcntl", "fstat",
-                "futex", "getdents64", "getegid", "geteuid", "getgid",
-                "getpid", "getrandom", "getuid", "ioctl", "listen",
-                "lseek", "mmap", "mprotect", "munmap", "nanosleep",
-                "newfstatat", "openat", "pipe2", "poll", "prctl",
-                "pread64", "pselect6", "pwrite64", "read", "readlink",
+                "fstatfs", "futex", "getcwd", "getdents64", "getegid", "geteuid", "getgid",
+                "getpid", "getppid", "getrandom", "getrusage", "gettid", "getuid",
+                "ioctl", "listen", "lseek", "mkdir", "mmap", "mprotect", "munmap",
+                "name_to_handle_at", "nanosleep", "newfstatat", "openat", "openat2",
+                "pipe", "pipe2", "poll", "ppoll", "prctl", "pread64",
                 "recvfrom", "recvmsg", "rseq", "rt_sigaction",
                 "rt_sigprocmask", "rt_sigreturn", "sched_getaffinity",
                 "select", "sendmmsg", "sendto", "set_robust_list",
                 "setitimer", "setsockopt", "socket", "splice", "stat",
-                "sysinfo", "tgkill", "uname", "wait4", "write", "writev"
+                "statfs", "statx", "sysinfo", "tgkill", "uname", "wait4", "write", "writev"
             ],
             "action": "SCMP_ACT_ALLOW"
         },

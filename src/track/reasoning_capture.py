@@ -31,13 +31,16 @@ class ReasoningCaptureMiddleware:
             }
         except PipelineBlockedError as blocked:
             log_event.decision = "blocked"
-            return {
+            result = {
                 "status": "blocked",
                 "vault_receipt": log_event.vault_receipt_id,
                 "reason": blocked.reason,
                 "risk_score": blocked.risk_score,
                 "evaluated_by": blocked.evaluated_by,
             }
+            if getattr(blocked, "metadata", None):
+                result["metadata"] = blocked.metadata
+            return result
         except Exception as e:
             log_event.decision = "failed"
             return {

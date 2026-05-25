@@ -20,7 +20,7 @@ from src.contain.models import ExecutionRequest, SandboxConfig
 from src.contain.resource_manager import ContainerResourceManager
 from src.identify.identity_registry import IdentityRegistry
 from src.identify.capability_profiler import CapabilityProfiler
-from src.identify.rogue_detector import RogueDetector
+from src.identify.rogue_detector import RogueDetector, get_rogue_detector
 from src.utils.helpers import generate_correlation_id, calculate_execution_time_ms
 from src.utils.validators import sanitize_command
 
@@ -35,7 +35,7 @@ class ITCDPipeline:
             failure_threshold=3, time_window_seconds=60, reset_timeout_seconds=120
         )
         self.kill_switch = KillSwitchController()
-        self.rogue_detector = RogueDetector()
+        self.rogue_detector = get_rogue_detector()
         self.auditor = AgentAuditor()
         self.logger = StructuredLogger()
         self._initialized = True
@@ -155,10 +155,12 @@ class ITCDPipeline:
                 correlation_id,
             )
             if not decision.is_allowed:
+                metadata = getattr(decision, "metadata", {}) or {}
                 raise PipelineBlockedError(
                     reason=decision.reason,
                     evaluated_by=decision.evaluated_by,
                     risk_score=decision.risk_score,
+                    metadata=metadata,
                 )
 
             safe_command = sanitize_command(command)
@@ -169,6 +171,14 @@ class ITCDPipeline:
             sandbox_config = SandboxConfig(
                 timeout_seconds=get_settings().container_timeout_seconds,
             )
+            self._log_event(
+                agent_id,
+                "container_executed",
+                PipelinePhase.CONTAIN,
+                EventSeverity.INFO,
+                {"command": safe_command},
+                correlation_id,
+            )
             return self.provisioner.run_in_sandbox(exec_req, sandbox_config)
 
         result = await ReasoningCaptureMiddleware.capture_and_evaluate(
@@ -178,18 +188,21 @@ class ITCDPipeline:
         )
 
         if result["status"] == "blocked":
-            self.circuit_breaker.record_failure(agent_id)
-            IdentityRegistry.update_trust_score(agent_id, -10)
-            self.rogue_detector.record_failure(agent_id)
-            self.kill_switch.record_denial(agent_id)
+            is_hitl = result.get("metadata", {}).get("hitl_required", False)
+            if not is_hitl:
+                self.circuit_breaker.record_failure(agent_id)
+                IdentityRegistry.update_trust_score(agent_id, -10)
+                self.rogue_detector.record_failure(agent_id)
+                self.kill_switch.record_denial(agent_id)
             return {
-                "status": "blocked",
+                "status": "escalated" if is_hitl else "blocked",
                 "risk_score": result.get("risk_score", 1.0),
                 "reason": result["reason"],
                 "evaluated_by": result.get("evaluated_by", "DECIDE"),
                 "phase": "DECIDE",
                 "vault_receipt": result.get("vault_receipt"),
                 "correlation_id": correlation_id,
+                "metadata": result.get("metadata", {}),
             }
 
         if result["status"] == "error":

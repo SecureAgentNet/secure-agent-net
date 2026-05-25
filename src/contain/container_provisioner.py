@@ -18,6 +18,10 @@ from src.contain.models import SandboxConfig, ExecutionRequest, ExecutionResult,
 from src.contain.network_isolation import create_isolated_network, get_network_isolation_profile
 from src.contain.resource_manager import ContainerResourceManager, ResourceQuota
 from src.contain.security_profiles import APPARMOR_DEFAULT
+from src.contain.secret_injector import get_secret_injector
+from src.contain.network_whitelist import create_domain_whitelist_for_agent
+from src.contain.microvm import MicroVMSandbox, create_microvm_config
+from src.contain.dynamic_profiles import get_profile_compiler
 from src.utils.platform import docker_socket_path, detect_platform, Platform
 
 logger = logging.getLogger("SecureAgentNet.Contain")
@@ -54,16 +58,14 @@ class ContainerProvisioner:
         try:
             with open(profile_path, 'r') as f:
                 profile_data = json.load(f)
-            tmp = tempfile.NamedTemporaryFile(
-                mode="w", suffix=".json", prefix="seccomp_", delete=False,
-            )
-            json.dump(profile_data, tmp)
-            tmp.flush()
-            tmp_path = tmp.name
-            logger.info("Loaded seccomp profile to %s", tmp_path)
-            return tmp_path
+            seccomp_json = json.dumps(profile_data)
+            logger.info("Loaded seccomp profile (%d bytes)", len(seccomp_json))
+            return seccomp_json
         except FileNotFoundError:
             logger.warning("Seccomp profile not found. Using Docker default.")
+            return None
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Failed to load seccomp profile: %s. Using Docker default.", e)
             return None
 
     def _load_apparmor_profile(self) -> Optional[str]:
@@ -184,6 +186,17 @@ class ContainerProvisioner:
 
         self._check_container_limits(agent_id, config)
 
+        # --- Dynamic Secrets Injection ---
+        secret_injector = get_secret_injector()
+        injected_env = secret_injector.inject_into_environment(
+            agent_id=agent_id,
+            existing_env=request.environment_vars,
+        )
+        request.environment_vars = injected_env
+
+        # --- Network Whitelisting ---
+        net_whitelist = create_domain_whitelist_for_agent(agent_id)
+
         try:
             self.client.images.get(config.image)
         except ImageNotFound:
@@ -196,10 +209,37 @@ class ContainerProvisioner:
         )
 
         security_opt = []
-        if self.seccomp_profile:
+
+        # --- Dynamic Seccomp Profile (per-agent capability synthesis) ---
+        compiler = get_profile_compiler()
+        dynamic_seccomp = compiler.get_seccomp_for_agent(agent_id)
+        if dynamic_seccomp:
+            security_opt.append(f"seccomp={dynamic_seccomp}")
+            logger.info("Applied dynamic seccomp profile for agent %s", agent_id)
+        elif self.seccomp_profile:
             security_opt.append(f"seccomp={self.seccomp_profile}")
+
+        # --- Dynamic AppArmor Profile (least-privilege for agent caps) ---
         if self.apparmor_profile:
-            security_opt.append(f"apparmor={self.apparmor_profile}")
+            dynamic_apparmor = compiler.get_apparmor_for_agent(agent_id)
+            if dynamic_apparmor:
+                try:
+                    import subprocess as sp
+                    result = sp.run(
+                        ["sudo", "-n", "apparmor_parser", "-r", dynamic_apparmor],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    if result.returncode == 0:
+                        security_opt.append(f"apparmor=securenet-agent-{str(hash(agent_id))[-8:]}")
+                        logger.info("Loaded dynamic AppArmor profile for agent %s", agent_id)
+                    else:
+                        security_opt.append(f"apparmor={self.apparmor_profile}")
+                        logger.warning("AppArmor parser failed for agent %s — using default profile", agent_id)
+                except (OSError, sp.TimeoutExpired) as e:
+                    security_opt.append(f"apparmor={self.apparmor_profile}")
+                    logger.debug("Could not load dynamic AppArmor for agent %s: %s — using default", agent_id, e)
+            else:
+                security_opt.append(f"apparmor={self.apparmor_profile}")
 
         network_mode = None
         network_name = None
@@ -225,10 +265,26 @@ class ContainerProvisioner:
                 security_opt=security_opt,
                 working_dir=config.work_dir,
                 environment=request.environment_vars,
+                user="1000:1000",
+                pids_limit=50,
             )
+
+            # --- gVisor Micro-VM Sandboxing ---
+            microvm = create_microvm_config(agent_id)
+            if microvm.get("runtime"):
+                run_kwargs["runtime"] = microvm["runtime"]
+                logger.info("Sandbox %s running with gVisor (runsc) micro-VM isolation", sandbox_id)
+            if microvm.get("labels"):
+                run_kwargs.setdefault("labels", {}).update(microvm["labels"])
 
             if network_mode:
                 run_kwargs["network"] = network_mode
+
+            whitelist_config = net_whitelist.to_docker_config()
+            if whitelist_config.get("dns"):
+                run_kwargs["dns"] = whitelist_config["dns"]
+            if whitelist_config.get("dns_search"):
+                run_kwargs["dns_search"] = whitelist_config["dns_search"]
 
             if config.read_only:
                 size = config.tmpfs_size
@@ -239,8 +295,10 @@ class ContainerProvisioner:
 
             if request.args:
                 run_kwargs["command"] = request.args
-            else:
+            elif request.command and isinstance(request.command, list):
                 run_kwargs["command"] = request.command
+            else:
+                run_kwargs["command"] = ["/bin/sh", "-c", str(request.command)]
 
             container = self.client.containers.run(**run_kwargs)
             ContainerResourceManager.update_status(sandbox_id, "running")
@@ -282,6 +340,9 @@ class ContainerProvisioner:
                 metrics = {}
                 ContainerResourceManager.remove_container(sandbox_id)
 
+            # Revoke any injected secrets for this run
+            secret_injector.revoke_secrets(agent_id, sandbox_id)
+
         execution_time = int((time.time() - start_time) * 1000)
 
         return ExecutionResult(
@@ -297,13 +358,6 @@ class ContainerProvisioner:
 
     def cleanup(self):
         self._unload_apparmor_profile()
-        seccomp_path = getattr(self, "seccomp_profile", None)
-        if seccomp_path and os.path.exists(seccomp_path):
-            try:
-                os.unlink(seccomp_path)
-                logger.debug("Seccomp temp file removed.")
-            except Exception:
-                pass
 
     def _unload_apparmor_profile(self):
         path = getattr(self, "_apparmor_profile_path", None)

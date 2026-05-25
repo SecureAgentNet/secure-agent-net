@@ -41,6 +41,7 @@ def reset_state():
 def flask_client():
     from src.interfaces.web_dashboard.app import app as flask_app
     flask_app.config["TESTING"] = True
+    flask_app.config["RATELIMIT_ENABLED"] = False
     with flask_app.test_client() as client:
         yield client
 

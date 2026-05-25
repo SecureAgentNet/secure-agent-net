@@ -1,4 +1,7 @@
 import logging
+import os
+import tempfile
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
@@ -21,6 +24,14 @@ SUPPORTED_ENTITIES = [
 
 _analyzer: Optional[AnalyzerEngine] = None
 _anonymizer: Optional[AnonymizerEngine] = None
+
+
+def _ensure_cache_dir():
+    tldextract_cache = os.environ.get("TLDEXTRACT_CACHE")
+    if not tldextract_cache:
+        tldextract_cache = str(Path(tempfile.gettempdir()) / "san_tldextract_cache")
+        os.environ["TLDEXTRACT_CACHE"] = tldextract_cache
+    Path(tldextract_cache).mkdir(parents=True, exist_ok=True)
 
 
 class _NoOpNlpEngine(NlpEngine):
@@ -52,6 +63,7 @@ class _NoOpNlpEngine(NlpEngine):
 def _get_analyzer() -> AnalyzerEngine:
     global _analyzer
     if _analyzer is None:
+        _ensure_cache_dir()
         registry = RecognizerRegistry()
         registry.add_recognizer(CreditCardRecognizer())
         registry.add_recognizer(EmailRecognizer())
@@ -60,8 +72,7 @@ def _get_analyzer() -> AnalyzerEngine:
         registry.add_recognizer(IpRecognizer())
         registry.add_recognizer(UsPassportRecognizer())
         _analyzer = AnalyzerEngine(registry=registry, nlp_engine=_NoOpNlpEngine())
-        recognizer_count = len(_analyzer.registry.recognizers)
-        logger.info("Presidio AnalyzerEngine initialized with %d recognizers", recognizer_count)
+        logger.info("Presidio AnalyzerEngine initialized with %d recognizers", len(_analyzer.registry.recognizers))
     return _analyzer
 
 
@@ -73,7 +84,6 @@ def _get_anonymizer() -> AnonymizerEngine:
 
 
 class PiiRedactor:
-    """Tier 2 Evaluation: Redacts PII using Microsoft Presidio."""
 
     @classmethod
     def redact_payload(cls, payload: Dict[str, Any]) -> Dict[str, Any]:

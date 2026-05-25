@@ -72,8 +72,9 @@ class InvalidConfigurationError(SecureAgentNetError):
 
 class PipelineBlockedError(SecureAgentNetError):
     """Raised when the pipeline blocks an action (carries block details)."""
-    def __init__(self, reason: str, evaluated_by: str = "DECIDE", risk_score: float = 1.0):
+    def __init__(self, reason: str, evaluated_by: str = "DECIDE", risk_score: float = 1.0, metadata: dict = None):
         self.reason = reason
         self.evaluated_by = evaluated_by
         self.risk_score = risk_score
+        self.metadata = metadata or {}
         super().__init__(reason)

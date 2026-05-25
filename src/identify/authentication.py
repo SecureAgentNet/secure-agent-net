@@ -1,24 +1,22 @@
 from typing import Dict, Optional
-import uuid
+import hashlib
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel
 
 from src.core.config import get_settings
 from src.identify.models import ChallengeRequest, ChallengeResponse, LoginRequest, TokenResponse
 from src.utils.crypto import generate_nonce, generate_session_id, verify_signature, create_access_token
 from src.utils.redis_client import set_value, get_value, delete_key, is_available
+from src.identify.identity_registry import IdentityRegistry
 
-# In-memory fallback store for active challenges (Redis preferred)
-# Format: {session_id: {"nonce": "...", "public_key": "...", "agent_id": "..."}}
-_active_challenges: Dict[str, dict] = {}
-CHALLENGE_TTL = 300  # 5 minutes
+_in_memory_challenges: Dict[str, dict] = {}
+CHALLENGE_TTL = 300
 
 
 def _store_challenge(session_id: str, data: dict):
     if is_available():
         set_value(f"challenge:{session_id}", data, ttl=CHALLENGE_TTL)
-    _active_challenges[session_id] = data
+    _in_memory_challenges[session_id] = data
 
 
 def _get_challenge(session_id: str) -> Optional[dict]:
@@ -26,39 +24,47 @@ def _get_challenge(session_id: str) -> Optional[dict]:
     if is_available():
         data = get_value(f"challenge:{session_id}")
     if data is None:
-        data = _active_challenges.get(session_id)
+        data = _in_memory_challenges.get(session_id)
     return data
 
 
 def _remove_challenge(session_id: str):
     if is_available():
         delete_key(f"challenge:{session_id}")
-    _active_challenges.pop(session_id, None)
+    _in_memory_challenges.pop(session_id, None)
 
 
-# --- Mock Database Interaction ---
-# For now, we mock looking up an agent by their public key.
-# Later, this will use SQLAlchemy to query the `agents` table.
+def public_key_fingerprint(public_key: str) -> str:
+    return hashlib.sha256(public_key.encode()).hexdigest()[:16]
+
+
 def get_agent_by_public_key(public_key: str) -> Optional[dict]:
-    """Mocks database lookup for an agent using their public key."""
-    # Assuming this public key exists in our DB for demonstration
-    if "BEGIN PUBLIC KEY" in public_key:
+    if not public_key or not public_key.strip():
+        return None
+    agent = IdentityRegistry.get_agent_by_public_key(public_key)
+    if agent and agent["status"] == "active":
         return {
-            "id": str(uuid.uuid4()),
-            "name": "Test-Agent-Alpha",
-            "public_key": public_key,
-            "status": "active"
+            "id": agent["agent_id"],
+            "name": agent["name"],
+            "public_key": agent["public_key"],
+            "status": agent["status"],
+            "capabilities": agent.get("capabilities", {}),
         }
     return None
 
 
 class AuthenticationService:
-    """Handles the Zero-Trust Challenge-Response logic."""
 
     @staticmethod
     def initiate_challenge(request: ChallengeRequest) -> ChallengeResponse:
+        if not request.public_key or not request.public_key.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Public key is required."
+            )
+
         agent = get_agent_by_public_key(request.public_key)
-        
+
         if not agent:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -82,7 +88,6 @@ class AuthenticationService:
 
         return ChallengeResponse(nonce=nonce, session_id=session_id)
 
-
     @staticmethod
     def verify_and_login(request: LoginRequest) -> TokenResponse:
         challenge_data = _get_challenge(request.session_id)
@@ -98,10 +103,9 @@ class AuthenticationService:
         agent_id = challenge_data["agent_id"]
         _remove_challenge(request.session_id)
 
-        # Cryptographic verification
         is_valid = verify_signature(
-            public_key_pem=public_key, 
-            nonce=nonce, 
+            public_key_pem=public_key,
+            nonce=nonce,
             signature_hex=request.signature
         )
 
@@ -111,7 +115,6 @@ class AuthenticationService:
                 detail="Invalid cryptographic signature."
             )
 
-        # Generate JWT
         settings = get_settings()
         jwt_data = {"sub": agent_id, "type": "agent"}
         token = create_access_token(

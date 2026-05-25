@@ -30,7 +30,7 @@ services:
     logging: *default-logging
 
   vault:
-    image: vault:latest
+    image: hashicorp/vault:latest
     container_name: securenet-vault
     cap_add:
       - IPC_LOCK
@@ -71,13 +71,6 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s

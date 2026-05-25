@@ -102,8 +102,9 @@ class TestITCDPipelineFullPipeline:
         monkeypatch.setattr(
             pipeline.provisioner, "run_in_sandbox", _mock_container_success
         )
+        from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
-            pipeline.auditor.vault_client, "secure_log", lambda x: "vault-receipt-abc123"
+            VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-abc123"
         )
         monkeypatch.setattr(
             pipeline.gateway.semantic_evaluator, "evaluate",
@@ -478,8 +479,9 @@ class TestLoggingIntegration:
         monkeypatch.setattr(
             pipeline.provisioner, "run_in_sandbox", _mock_container_success
         )
+        from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
-            pipeline.auditor.vault_client, "secure_log", lambda x: "vault-receipt-xyz"
+            VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-xyz"
         )
         monkeypatch.setattr(
             pipeline.gateway.semantic_evaluator, "evaluate",
@@ -535,8 +537,9 @@ class TestLoggingIntegration:
         monkeypatch.setattr(
             pipeline.provisioner, "run_in_sandbox", _mock_container_success
         )
+        from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
-            pipeline.auditor.vault_client, "secure_log", lambda x: "vault-receipt-logs"
+            VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-logs"
         )
         monkeypatch.setattr(
             pipeline.gateway.semantic_evaluator, "evaluate",
@@ -554,7 +557,8 @@ class TestLoggingIntegration:
             assert event["correlation_id"] == corr_id
 
     @pytest.mark.asyncio
-    async def test_log_indexer_max_events(self):
+    async def test_log_indexer_max_events(self, monkeypatch):
+        monkeypatch.setattr(LogIndexer, "_persist", lambda: None)
         for i in range(10005):
             LogIndexer.index_event({
                 "timestamp": "2025-01-01T00:00:00",
@@ -570,8 +574,9 @@ class TestLoggingIntegration:
         monkeypatch.setattr(
             pipeline.provisioner, "run_in_sandbox", _mock_container_success
         )
+        from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
-            pipeline.auditor.vault_client, "secure_log", lambda x: "vault-receipt-iso"
+            VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-iso"
         )
         monkeypatch.setattr(
             pipeline.gateway.semantic_evaluator, "evaluate",

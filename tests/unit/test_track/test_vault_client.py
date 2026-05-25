@@ -172,5 +172,5 @@ class TestVaultAuditClient:
         c = VaultAuditClient()
         assert c._transit_ready is True
         mock_client.secrets.transit.create_key.assert_called_once_with(
-            name="audit-log-key", key_type="hmac", key_size=0,
+            name="audit-log-key", key_type="aes256-gcm96",
         )

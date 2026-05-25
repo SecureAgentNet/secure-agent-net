@@ -116,9 +116,9 @@ async def test_pipeline_blocks_circuit_breaker_open(pipeline):
 async def test_pipeline_blocks_unauthorized_action(pipeline):
     agent = IdentityRegistry.register_agent({
         "name": "limited-agent",
+        "capabilities": {"read_file": True},
     })
     agent_id = agent["agent_id"]
-    CapabilityProfiler._mock_db[agent_id] = ["read_file"]
 
     request = AgentActionRequest(
         action_name="delete_database",
@@ -136,9 +136,9 @@ async def test_pipeline_blocks_unauthorized_action(pipeline):
 async def test_pipeline_passes_authorized_action(pipeline):
     agent = IdentityRegistry.register_agent({
         "name": "good-agent",
+        "capabilities": {"read_file": True},
     })
     agent_id = agent["agent_id"]
-    CapabilityProfiler._mock_db[agent_id] = ["read_file"]
 
     request = AgentActionRequest(
         action_name="read_file",

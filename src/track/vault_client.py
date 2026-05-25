@@ -42,8 +42,7 @@ class VaultAuditClient:
         try:
             self.client.secrets.transit.create_key(
                 name=TRANSIT_KEY_NAME,
-                key_type="hmac",
-                key_size=0,
+                key_type="aes256-gcm96",
             )
             self._transit_ready = True
             logger.info("Created Transit key '%s'", TRANSIT_KEY_NAME)
@@ -75,7 +74,10 @@ class VaultAuditClient:
         try:
             raw = self._canonical_json(log_data)
             b64_input = base64.b64encode(raw).decode("ascii")
-            result = self.client.secrets.transit.verify_hmac(
+            verify_fn = getattr(self.client.secrets.transit, "verify_hmac", None)
+            if verify_fn is None:
+                verify_fn = self.client.secrets.transit.verify_signed_data
+            result = verify_fn(
                 name=TRANSIT_KEY_NAME,
                 hash_input=b64_input,
                 hmac=hmac_value,

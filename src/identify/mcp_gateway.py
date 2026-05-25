@@ -77,7 +77,7 @@ async def refresh_token(
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     settings = get_settings()
-    payload = decode_access_token(credentials.credentials, settings.secret_key, settings.agent_jwt_algorithm)
+    payload = decode_access_token(credentials.credentials, settings.resolve_secret_key(), settings.agent_jwt_algorithm)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     agent_id = payload.get("sub")
