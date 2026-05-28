@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -19,6 +19,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("blog-server")
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./blog.db")
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 Base = declarative_base()
@@ -38,7 +40,7 @@ class BlogPost(Base):
     published = Column(Boolean, default=True)
 
 
-if DATABASE_URL.startswith("postgres"):
+if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 else:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -124,7 +126,7 @@ def operator_login(body: LoginRequest):
 
 
 @app.post("/api/v1/blog/posts", status_code=201)
-def create_post(body: CreatePostRequest, db: Session = next(get_db())):
+def create_post(body: CreatePostRequest, db: Session = Depends(get_db)):
     existing = db.query(BlogPost).filter(BlogPost.slug == body.slug).first()
     if existing:
         raise HTTPException(status_code=409, detail="A post with this slug already exists")
@@ -145,13 +147,13 @@ def create_post(body: CreatePostRequest, db: Session = next(get_db())):
 
 
 @app.get("/api/v1/blog/posts")
-def list_posts(db: Session = next(get_db())):
+def list_posts(db: Session = Depends(get_db)):
     posts = db.query(BlogPost).filter(BlogPost.published == True).order_by(BlogPost.created_at.desc()).all()
     return [_serialize(p) for p in posts]
 
 
 @app.get("/api/v1/blog/posts/{slug}")
-def get_post(slug: str, db: Session = next(get_db())):
+def get_post(slug: str, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug, BlogPost.published == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
