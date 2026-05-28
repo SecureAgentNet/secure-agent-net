@@ -220,7 +220,10 @@ def upload_image(file: UploadFile = File(...)):
     file_path = uploads_dir / filename
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return {"url": f"/uploads/{filename}"}
+    base_url = os.environ.get("RENDER_EXTERNAL_URL", "")
+    if not base_url:
+        base_url = "https://san-blog-api.onrender.com"
+    return {"url": f"{base_url}/uploads/{filename}"}
 
 
 @app.put("/api/v1/blog/posts/{slug}")
