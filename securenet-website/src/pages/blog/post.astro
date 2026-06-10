@@ -287,6 +287,10 @@
                 <span class="bg-primary/10 px-2 py-0.5 rounded border border-primary/20" id="postTag">RESEARCH</span>
                 <span>/</span>
                 <span id="postReadTime">5 MIN READ</span>
+                <span id="adminControls" class="ml-auto flex gap-2 hidden">
+                    <a id="editLink" href="#" class="bg-white/10 hover:bg-primary/20 text-on-surface-variant hover:text-primary px-3 py-1 rounded text-xs transition-all border border-white/10 hover:border-primary/30">Edit</a>
+                    <button id="deleteBtn" class="bg-white/10 hover:bg-error-container/30 text-on-surface-variant hover:text-error px-3 py-1 rounded text-xs transition-all border border-white/10 hover:border-error/30">Delete</button>
+                </span>
             </div>
             <h1 class="font-headline-lg text-headline-lg lg:text-display text-on-surface mb-6 leading-tight max-w-4xl" id="postTitle">
                 <!-- Dynamic Title -->
@@ -403,6 +407,10 @@
         const urlParams = new URLSearchParams(window.location.search);
         const slug = urlParams.get('slug');
 
+        if (localStorage.getItem('san_bearer_token')) {
+            document.getElementById('adminControls').classList.remove('hidden');
+        }
+
         const loadingState = document.getElementById('loadingState');
         const errorState = document.getElementById('errorState');
         const errorMessage = document.getElementById('errorMessage');
@@ -477,12 +485,28 @@
             }
             document.getElementById('integritySig').innerText = Math.abs(hashVal).toString(16).padEnd(24, 'f');
 
+            // Edit / Delete buttons
+            document.getElementById('editLink').href = `/blog/write/?slug=${post.slug}`;
+            document.getElementById('deleteBtn').addEventListener('click', async () => {
+                if (!confirm('Delete this post? This cannot be undone.')) return;
+                try {
+                    const delRes = await fetch(`${API_HOST}/api/v1/blog/posts/${post.slug}`, { method: 'DELETE' });
+                    if (delRes.ok) {
+                        window.location.href = '/blog/';
+                    } else {
+                        alert('Failed to delete post.');
+                    }
+                } catch(e) {
+                    alert('Delete failed: ' + e.message);
+                }
+            });
+
             // Toggle view states
             loadingState.classList.add('hidden');
             postContent.classList.remove('hidden');
 
             // Load comments
-            loadComments(post.id || 0);
+            loadComments(post.slug);
 
         } catch (err) {
             console.error(err);

@@ -57,7 +57,12 @@ def reset_kill_switch():
 def mock_sandbox(monkeypatch):
     from src.core import pipeline as pipeline_module
 
-    def fake_run_in_sandbox(self, request, config=None):
+    from types import SimpleNamespace
+
+    def fake_provision(self, request, config=None):
+        return SimpleNamespace(sandbox_id="sandbox-e2e")
+
+    def fake_execute(self, handle):
         return ExecutionResult(
             sandbox_id="sandbox-e2e",
             exit_code=0,
@@ -67,8 +72,17 @@ def mock_sandbox(monkeypatch):
             was_killed=False,
         )
 
+    def fake_teardown(self, handle, executed=True):
+        return None
+
     monkeypatch.setattr(
-        pipeline_module.ContainerProvisioner, "run_in_sandbox", fake_run_in_sandbox
+        pipeline_module.ContainerProvisioner, "provision_sandbox", fake_provision
+    )
+    monkeypatch.setattr(
+        pipeline_module.ContainerProvisioner, "execute_in_sandbox", fake_execute
+    )
+    monkeypatch.setattr(
+        pipeline_module.ContainerProvisioner, "teardown_sandbox", fake_teardown
     )
 
     from src.track import vault_client as vault_module

@@ -11,6 +11,7 @@ SQLAlchemy>=2.0.21
 # APIs and Gateway
 fastapi>=0.104.0
 uvicorn>=0.23.2
+python-multipart>=0.0.7
 
 # Interfaces
 Flask>=3.0.0

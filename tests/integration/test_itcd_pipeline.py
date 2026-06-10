@@ -93,15 +93,29 @@ def _mock_container_failure(*args, **kwargs):
     raise RuntimeError("Container crashed with OOM")
 
 
+def _patch_sandbox(monkeypatch, pipeline, result_fn):
+    """Stub the split CONTAIN seams (provision → execute → teardown) so the ITCD
+    ordering runs without a real Docker daemon. The container is 'provisioned'
+    before DECIDE; ``execute_in_sandbox`` only runs when DECIDE approves."""
+    from types import SimpleNamespace
+    monkeypatch.setattr(
+        pipeline.provisioner, "provision_sandbox",
+        lambda request, config=None: SimpleNamespace(sandbox_id="sandbox-test"),
+    )
+    monkeypatch.setattr(pipeline.provisioner, "execute_in_sandbox", result_fn)
+    monkeypatch.setattr(
+        pipeline.provisioner, "teardown_sandbox",
+        lambda handle, executed=True: None,
+    )
+
+
 class TestITCDPipelineFullPipeline:
 
     @pytest.mark.asyncio
     async def test_full_pipeline_benign_request(self, pipeline, registered_agent, benign_request, monkeypatch):
         agent_id = registered_agent["agent_id"]
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
         from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-abc123"
@@ -165,9 +179,7 @@ class TestITCDPipelineFullPipeline:
     async def test_full_pipeline_agent_not_found(self, pipeline, benign_request, monkeypatch):
         unknown_id = "non-existent-agent-999"
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
 
         result = await pipeline.execute_agent_action(
             agent_id=unknown_id,
@@ -210,9 +222,7 @@ class TestITCDPipelineFullPipeline:
             payload={"confirm": True},
         )
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
 
         result = await pipeline.execute_agent_action(
             agent_id=agent_id, request=req, command="DROP DATABASE production"
@@ -245,9 +255,7 @@ class TestITCDPipelineFullPipeline:
     async def test_pipeline_container_failure(self, pipeline, registered_agent, benign_request, monkeypatch):
         agent_id = registered_agent["agent_id"]
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_failure
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_failure)
         monkeypatch.setattr(
             pipeline.gateway.semantic_evaluator, "evaluate",
             lambda req, redacted: (0.1, "Benign - allowing for container failure test")
@@ -360,9 +368,7 @@ class TestCircuitBreakerIntegration:
         state = pipeline.circuit_breaker._get_agent_state(agent_id)
         state["tripped_at"] = time.time() - 10
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
         monkeypatch.setattr(
             pipeline.gateway.semantic_evaluator, "evaluate",
             lambda req, redacted: (0.1, "Benign query")
@@ -476,9 +482,7 @@ class TestLoggingIntegration:
     async def test_logging_integration(self, pipeline, registered_agent, benign_request, monkeypatch):
         agent_id = registered_agent["agent_id"]
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
         from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-xyz"
@@ -534,9 +538,7 @@ class TestLoggingIntegration:
     async def test_logging_stores_correlation_id(self, pipeline, registered_agent, benign_request, monkeypatch):
         agent_id = registered_agent["agent_id"]
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
         from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-logs"
@@ -571,9 +573,7 @@ class TestLoggingIntegration:
     async def test_multiple_correlation_ids_isolated(self, pipeline, registered_agent, benign_request, monkeypatch):
         agent_id = registered_agent["agent_id"]
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
         from src.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-iso"
@@ -614,9 +614,7 @@ class TestLoggingIntegration:
 
         pipeline.kill_switch.disarm()
 
-        monkeypatch.setattr(
-            pipeline.provisioner, "run_in_sandbox", _mock_container_success
-        )
+        _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
 
         pipeline.rogue_detector._anomaly_threshold = 0.1
         pipeline.rogue_detector._failure_threshold = 1

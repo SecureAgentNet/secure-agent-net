@@ -39,7 +39,7 @@ class ITCDPipeline:
         self.auditor = AgentAuditor()
         self.logger = StructuredLogger()
         self._initialized = True
-        logger.info("ITCD Pipeline initialized. Phase order: IDENTIFY → TRACK → DECIDE → CONTAIN")
+        logger.info("ITCD Pipeline initialized. Phase order: IDENTIFY → TRACK → CONTAIN → DECIDE")
 
     def _log_event(
         self,
@@ -135,34 +135,10 @@ class ITCDPipeline:
         IdentityRegistry.update_trust_score(agent_id, 1)
         self._log_event(agent_id, "identify_passed", PipelinePhase.IDENTIFY, correlation_id=correlation_id)
 
-        # === TRACK (intent capture) + DECIDE + CONTAIN ===
+        # === TRACK (intent capture) wraps CONTAIN → DECIDE → execute ===
 
-        async def decide_and_contain():
-            eval_req = EvaluationRequest(
-                agent_id=agent_id,
-                action_name=request.action_name,
-                target_resource=request.target_resource,
-                intent_summary=request.intent_summary,
-                payload=request.payload,
-            )
-            decision = self.gateway.evaluate_request(eval_req)
-            self._log_event(
-                agent_id,
-                f"decision_{'approved' if decision.is_allowed else 'denied'}",
-                PipelinePhase.DECIDE,
-                EventSeverity.INFO if decision.is_allowed else EventSeverity.WARNING,
-                {"risk_score": decision.risk_score, "evaluated_by": decision.evaluated_by, "reason": decision.reason},
-                correlation_id,
-            )
-            if not decision.is_allowed:
-                metadata = getattr(decision, "metadata", {}) or {}
-                raise PipelineBlockedError(
-                    reason=decision.reason,
-                    evaluated_by=decision.evaluated_by,
-                    risk_score=decision.risk_score,
-                    metadata=metadata,
-                )
-
+        async def contain_decide_execute():
+            # --- CONTAIN PHASE: provision the isolated sandbox up-front ---
             safe_command = sanitize_command(command)
             exec_req = ExecutionRequest(
                 command=safe_command,
@@ -171,20 +147,77 @@ class ITCDPipeline:
             sandbox_config = SandboxConfig(
                 timeout_seconds=get_settings().container_timeout_seconds,
             )
+            handle = self.provisioner.provision_sandbox(exec_req, sandbox_config)
+            self._log_event(
+                agent_id,
+                "container_provisioned",
+                PipelinePhase.CONTAIN,
+                EventSeverity.INFO,
+                {"sandbox_id": handle.sandbox_id, "command": safe_command},
+                correlation_id,
+            )
+
+            # --- DECIDE PHASE: evaluate the request inside the containment ---
+            try:
+                eval_req = EvaluationRequest(
+                    agent_id=agent_id,
+                    action_name=request.action_name,
+                    target_resource=request.target_resource,
+                    intent_summary=request.intent_summary,
+                    payload=request.payload,
+                )
+                decision = self.gateway.evaluate_request(eval_req)
+            except Exception:
+                # Any DECIDE failure — destroy the provisioned container unexecuted.
+                self.provisioner.teardown_sandbox(handle, executed=False)
+                raise
+
+            self._log_event(
+                agent_id,
+                f"decision_{'approved' if decision.is_allowed else 'denied'}",
+                PipelinePhase.DECIDE,
+                EventSeverity.INFO if decision.is_allowed else EventSeverity.WARNING,
+                {"risk_score": decision.risk_score, "evaluated_by": decision.evaluated_by, "reason": decision.reason},
+                correlation_id,
+            )
+
+            if not decision.is_allowed:
+                # Denied (or escalated to HITL) — kill the container without running it.
+                self.provisioner.teardown_sandbox(handle, executed=False)
+                self._log_event(
+                    agent_id,
+                    "container_killed_unexecuted",
+                    PipelinePhase.CONTAIN,
+                    EventSeverity.WARNING,
+                    {"sandbox_id": handle.sandbox_id, "evaluated_by": decision.evaluated_by},
+                    correlation_id,
+                )
+                metadata = getattr(decision, "metadata", {}) or {}
+                raise PipelineBlockedError(
+                    reason=decision.reason,
+                    evaluated_by=decision.evaluated_by,
+                    risk_score=decision.risk_score,
+                    metadata=metadata,
+                )
+
+            # --- Approved: execute the workload within the contained sandbox ---
             self._log_event(
                 agent_id,
                 "container_executed",
                 PipelinePhase.CONTAIN,
                 EventSeverity.INFO,
-                {"command": safe_command},
+                {"command": safe_command, "sandbox_id": handle.sandbox_id},
                 correlation_id,
             )
-            return self.provisioner.run_in_sandbox(exec_req, sandbox_config)
+            try:
+                return self.provisioner.execute_in_sandbox(handle)
+            finally:
+                self.provisioner.teardown_sandbox(handle)
 
         result = await ReasoningCaptureMiddleware.capture_and_evaluate(
             agent_id=agent_id,
             request=request,
-            execute_callback=decide_and_contain,
+            execute_callback=contain_decide_execute,
         )
 
         if result["status"] == "blocked":

@@ -35,6 +35,8 @@ def pipeline():
         mock_container.wait.return_value = {"StatusCode": 0}
         mock_container.logs.return_value = b"output"
         mock_docker_client.containers.run.return_value = mock_container
+        mock_docker_client.containers.create.return_value = mock_container
+        mock_docker_client.containers.get.return_value = mock_container
         mock_docker.return_value = mock_docker_client
 
         mock_vault_client = MagicMock()

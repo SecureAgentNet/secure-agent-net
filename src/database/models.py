@@ -187,3 +187,18 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_login = Column(DateTime(timezone=True), nullable=True)
     active = Column(Boolean, default=True)
+
+
+class BlogPost(Base):
+    __tablename__ = "blog_posts"
+
+    post_id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    slug = Column(String(255), unique=True, nullable=False)
+    summary = Column(Text, nullable=True)
+    content = Column(Text, nullable=False)
+    author = Column(String(100), nullable=False)
+    tags = Column(JSON, default=[])
+    read_time = Column(String(20), default="5 MIN")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    published = Column(Boolean, default=True)

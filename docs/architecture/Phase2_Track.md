@@ -5,7 +5,7 @@
 TRACK is the second phase of the ITCD pipeline. Its purpose is to **capture agent intent and reasoning before execution**, ensuring a tamper-proof audit trail even for actions that are later blocked.
 
 ```
-IDENTIFY → TRACK → DECIDE → CONTAIN
+IDENTIFY → TRACK → CONTAIN → DECIDE
               ↑
      Intent captured here,
      before any decision is made
@@ -17,7 +17,7 @@ In the original pipeline (v1.0.0), TRACK ran AFTER the DECIDE + CONTAIN phases:
 
 ```
 v1.0:  IDENTIFY → DECIDE → CONTAIN → TRACK
-v2.0:  IDENTIFY → TRACK → DECIDE → CONTAIN
+v2.0:  IDENTIFY → TRACK → CONTAIN → DECIDE
 ```
 
 **Problem with v1.0**: Blocked actions were never logged. If the pipeline denied a request at the IDENTIFY or DECIDE phase, the agent's intent was never captured. This made forensic investigation impossible — there was no record of what the agent was *trying* to do.

@@ -5,6 +5,6 @@ ollama serve &
 
 sleep 5
 
-ollama pull llama3.2:7b
+ollama pull ${OLLAMA_MODEL:-llama3.2}
 
 wait

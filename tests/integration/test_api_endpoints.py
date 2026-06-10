@@ -218,7 +218,12 @@ class TestPipelineExecuteAPI:
         import src.core.pipeline as pipeline_module
         from src.contain.models import ExecutionResult
 
-        def mock_run_in_sandbox(self, request, config=None):
+        from types import SimpleNamespace
+
+        def mock_provision(self, request, config=None):
+            return SimpleNamespace(sandbox_id="sandbox-api-test")
+
+        def mock_execute(self, handle):
             return ExecutionResult(
                 sandbox_id="sandbox-api-test",
                 exit_code=0,
@@ -228,8 +233,17 @@ class TestPipelineExecuteAPI:
                 was_killed=False,
             )
 
+        def mock_teardown(self, handle, executed=True):
+            return None
+
         monkeypatch.setattr(
-            pipeline_module.ContainerProvisioner, "run_in_sandbox", mock_run_in_sandbox
+            pipeline_module.ContainerProvisioner, "provision_sandbox", mock_provision
+        )
+        monkeypatch.setattr(
+            pipeline_module.ContainerProvisioner, "execute_in_sandbox", mock_execute
+        )
+        monkeypatch.setattr(
+            pipeline_module.ContainerProvisioner, "teardown_sandbox", mock_teardown
         )
 
         import src.track.vault_client as vault_module

@@ -4,7 +4,7 @@
 
 ### Added
 - **Phase A — Database Migration**: 12 SQLAlchemy ORM models, 5 repository classes with transparent JSON fallback, SQLite default for dev, PostgreSQL for production, Alembic with initial migration.
-- **Phase B — Pipeline Reordering**: ITCD pipeline now flows IDENTIFY → TRACK → DECIDE → CONTAIN. `ReasoningCaptureMiddleware` wired into main flow with pre-execution Vault logging and `PipelineBlockedError` handling.
+- **Phase B — Pipeline Reordering**: ITCD pipeline now flows IDENTIFY → TRACK → CONTAIN → DECIDE. `ReasoningCaptureMiddleware` wired into main flow with pre-execution Vault logging and `PipelineBlockedError` handling.
 - **Phase C — Vault Transit Engine**: HMAC-SHA256 signing of all audit logs via HashiCorp Vault Transit. `forensics verify` CLI command for log integrity verification. `verify_receipt()` method with tamper detection.
 - **Phase D — Presidio PII Redaction**: Microsoft Presidio replaces regex-based PII detection. 6 built-in recognizers (EMAIL_ADDRESS, PHONE_NUMBER, US_SSN, CREDIT_CARD, IP_ADDRESS, US_PASSPORT). `NoOpNlpEngine` avoids 400MB spaCy model download. `PIIRedactionError` now fails-closed in DecisionGateway.
 - **Phase E — MCP Gateway**: JWT validation middleware (`get_current_agent` FastAPI dependency). 7 protected MCP routes: `/tools`, `/execute`, `/agent`, `/heartbeat`, `/capabilities`, `/auth/challenge`, `/auth/login`, `/auth/refresh`. `decode_access_token()` with expiry validation.
@@ -43,7 +43,7 @@
 ## [1.0.0] — 2025-11-01
 
 ### Added
-- Initial release: ITCD Pipeline (Identify → Decide → Contain → Track).
+- Initial release: ITCD Pipeline (Identify → Track → Contain → Decide).
 - CLI with 14 subcommands (`secureagentnet`/`san`).
 - Flask web dashboard with login, agent management, forensics, security panels.
 - FastAPI gateway with challenge-response authentication.

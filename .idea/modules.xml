@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/secure-agent-net.iml" filepath="$PROJECT_DIR$/.idea/secure-agent-net.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/secureagentnet.iml" filepath="$PROJECT_DIR$/.idea/secureagentnet.iml" />
     </modules>
   </component>
 </project>

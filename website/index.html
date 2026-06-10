@@ -1,317 +1,116 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SecureAgentNet — Zero-Trust Security Gateway for AI Agents</title>
-<meta name="description" content="Zero-trust security orchestration for autonomous AI agents. Every action flows through a 4-phase pipeline: identify, track intent, evaluate risk, and sandbox execution. Brew install, pip install, or curl | sh.">
-<meta name="keywords" content="ai security, zero trust, agent security, docker sandbox, llm evaluation, pii redaction, vault audit, itcd pipeline">
-<meta name="author" content="SecureAgentNet">
-<link rel="canonical" href="https://secureagentnet.dev/">
-
-<meta property="og:title" content="SecureAgentNet — Zero-Trust Security for Autonomous AI Agents">
-<meta property="og:description" content="IDENTIFY → TRACK → DECIDE → CONTAIN. Every agent action passes through all four phases. Install in one command on any OS.">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://secureagentnet.dev/">
-<meta property="og:site_name" content="SecureAgentNet">
-
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="SecureAgentNet — Zero-Trust Security Gateway for AI Agents">
-<meta name="twitter:description" content="Every AI agent action passes through a 4-phase security pipeline. Brew install, pip install, or curl | sh.">
-
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0e14'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.1em' font-size='18' fill='%2358a6ff' font-family='monospace'%3E🛡%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/style.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "SecureAgentNet",
-  "applicationCategory": "SecurityApplication",
-  "operatingSystem": "Linux, macOS, Windows",
-  "description": "Zero-trust security gateway for autonomous AI agents with 4-phase ITCD pipeline.",
-  "url": "https://secureagentnet.dev",
-  "author": { "@type": "Organization", "name": "SecureAgentNet" },
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
-}
-</script>
-</head>
-<body>
-
-<nav>
-  <div class="container">
-    <div class="logo">
-      <span style="font-size:22px">🛡️</span> SecureAgentNet
-    </div>
-    <div class="links">
-      <a href="#install">Install</a>
-      <a href="#features">Features</a>
-      <a href="#modes">Modes</a>
-      <a href="#quickstart">Quick Start</a>
-      <a href="docs/">Docs</a>
-      <a href="https://github.com/secure-agent-net/secure-agent-net">GitHub</a>
-    </div>
-  </div>
-</nav>
-
-<section class="hero">
-  <div class="container">
-    <div class="badge">
-      <span style="color:var(--accent2)">●</span> v2.0.0 — Production Ready
-    </div>
-    <h1>Zero-Trust Security<br>for Autonomous AI Agents</h1>
-    <p class="subtitle">
-      Every action an AI agent takes flows through a 4-phase security pipeline:
-      identify the agent, track its intent, evaluate the risk, and sandbox the execution.
-      Nothing executes without passing all checks.
-    </p>
-    <div class="pipeline">
-      <div class="phase">
-        <div class="name" style="color:var(--accent)">IDENTIFY</div>
-        <div class="desc">Verify identity, check capabilities, detect rogue behavior</div>
-      </div>
-      <div class="arrow">→</div>
-      <div class="phase">
-        <div class="name" style="color:var(--accent2)">TRACK</div>
-        <div class="desc">Capture intent to Vault with HMAC-signed audit trail</div>
-      </div>
-      <div class="arrow">→</div>
-      <div class="phase">
-        <div class="name" style="color:var(--warn)">DECIDE</div>
-        <div class="desc">3-tier evaluation: rules → PII redaction → LLM analysis</div>
-      </div>
-      <div class="arrow">→</div>
-      <div class="phase">
-        <div class="name" style="color:var(--danger)">CONTAIN</div>
-        <div class="desc">Docker sandbox with seccomp, AppArmor, read-only rootfs</div>
-      </div>
-    </div>
-    <div class="buttons">
-      <a href="#install" class="btn btn-primary">Get Started</a>
-      <a href="https://github.com/secure-agent-net/secure-agent-net" class="btn btn-outline">View on GitHub</a>
-    </div>
-  </div>
-</section>
-
-<section id="install">
-  <div class="container">
-    <h2>Install Anywhere</h2>
-    <p class="section-desc">One command on any platform. Works with or without Docker, Redis, or Ollama.</p>
-    <div class="install-grid">
-      <div class="install-card">
-        <div class="os">🍎 macOS</div>
-        <code>brew tap secure-agent-net/tap<br>brew install secureagentnet</code>
-        <div class="note">Or <code>pip install secureagentnet</code></div>
-      </div>
-      <div class="install-card">
-        <div class="os">🐧 Linux</div>
-        <code>pip install secureagentnet</code>
-        <div class="note">Arch: <code>yay -S secureagentnet</code></div>
-      </div>
-      <div class="install-card">
-        <div class="os">🪟 Windows</div>
-        <code>pip install secureagentnet</code>
-        <div class="note">Docker Desktop recommended for full sandboxing</div>
-      </div>
-      <div class="install-card">
-        <div class="os">⬇️ One-liner</div>
-        <code>curl -fsSL https://raw.githubusercontent.com/secure-agent-net/secure-agent-net/main/scripts/install.sh | sh</code>
-        <div class="note">Auto-detects OS, installs prerequisites, sets up config</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="quickstart">
-  <div class="container">
-    <h2>Quick Start</h2>
-    <p class="section-desc">From zero to evaluating agent actions in 60 seconds.</p>
-    <div class="quick-start">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div>
-          <strong>Install</strong>
-          <div class="code-block">
-            <span class="prompt">$</span> pip install secureagentnet
-          </div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div>
-          <strong>Check your system</strong>
-          <div class="code-block">
-<span class="prompt">$</span> secureagentnet doctor
-<span class="output">
-SecureAgentNet System Health
-==================================================
-  ✓ Python 3.14.5 (3.10+ required)
-  ✓ Platform: Linux
-  ✓ Deploy Mode: docker
-  ✓ Identity Registry: 0 agents registered
-  ✓ Log Indexer: 0 events indexed
-  ✓ Docker: Docker version 29.5.1
-  ✓ Ollama: ollama version is 0.24.0
-  ✓ Redis: connected
-  ✓ Environment: development
-
-╭────────────────────╮
-│ All checks passed! │
-╰────────────────────╯</span>
-          </div>
-          <div class="note" style="margin-top:8px">Missing Docker or Ollama? Run <code>secureagentnet doctor --deploy-mode minimal</code></div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div>
-          <strong>Initialize and evaluate</strong>
-          <div class="code-block">
-<span class="prompt">$</span> secureagentnet init --seed
-<span class="output">SecureAgentNet initialized successfully</span>
-
-<span class="prompt">$</span> secureagentnet evaluate 'ls -la'
-<span class="output">Decision: ALLOWED
-Risk Score: 0.0000
-Evaluated By: SemanticEvaluator
-Reason: Safe command</span>
-          </div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div>
-          <strong>Register an agent and run through the pipeline</strong>
-          <div class="code-block">
-<span class="prompt">$</span> secureagentnet agent register my-agent --type LangChain --capabilities execute
-<span class="output">✓ Agent 'my-agent' registered with ID: a1b2c3d4...</span>
-
-<span class="prompt">$</span> secureagentnet run my-agent "echo hello world"
-<span class="output">
-╭─────────────────────────────────────╮
-│ ACTION ALLOWED &amp; EXECUTED           │
-│ Sandbox: sandbox-a1b2c3d4          │
-│ Exit Code: 0                       │
-│ Execution Time: 234ms              │
-│ Vault Receipt: vault-audit/...     │
-╰─────────────────────────────────────╯</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="modes">
-  <div class="container">
-    <h2>Deployment Modes</h2>
-    <p class="section-desc">Scale from a quick local test to full production, without changing your code.</p>
-    <div class="modes-grid">
-      <div class="mode-card">
-        <h3>🔒 Docker <span style="font-size:13px;color:var(--accent2);font-weight:400">(default)</span></h3>
-        <p style="font-size:14px;color:var(--text-dim)">Full security — container sandboxing, LLM evaluation, Redis rate limiting, Vault audit logging.</p>
-        <div class="deps">
-          <span class="dep active">Docker</span>
-          <span class="dep active">Redis</span>
-          <span class="dep active">Ollama</span>
-          <span class="dep active">Vault</span>
-        </div>
-        <div class="code-block" style="margin-top:12px"><span class="prompt">$</span> export DEPLOY_MODE=docker<br><span class="prompt">$</span> secureagentnet init</div>
-      </div>
-      <div class="mode-card">
-        <h3>💻 Local</h3>
-        <p style="font-size:14px;color:var(--text-dim)">Development mode — SQLite database, no Docker/Redis/Vault required.</p>
-        <div class="deps">
-          <span class="dep inactive">Docker</span>
-          <span class="dep inactive">Redis</span>
-          <span class="dep inactive">Ollama</span>
-          <span class="dep inactive">Vault</span>
-        </div>
-        <div class="code-block" style="margin-top:12px"><span class="prompt">$</span> export DEPLOY_MODE=local<br><span class="prompt">$</span> secureagentnet init --mode local</div>
-      </div>
-      <div class="mode-card">
-        <h3>⚡ Minimal</h3>
-        <p style="font-size:14px;color:var(--text-dim)">Zero dependencies — JSON file storage, no external services at all. Works on any OS instantly.</p>
-        <div class="deps">
-          <span class="dep inactive">Docker</span>
-          <span class="dep inactive">Redis</span>
-          <span class="dep inactive">Ollama</span>
-          <span class="dep inactive">Vault</span>
-        </div>
-        <div class="code-block" style="margin-top:12px"><span class="prompt">$</span> export DEPLOY_MODE=minimal<br><span class="prompt">$</span> secureagentnet init --mode minimal</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="features">
-  <div class="container">
-    <h2>Key Features</h2>
-    <p class="section-desc">Every layer of defense is independent. If one fails, the pipeline fails closed — never open.</p>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="icon">🔐</div>
-        <h3>Challenge-Response Auth</h3>
-        <p>Agents prove identity by signing a cryptographic nonce with their Ed25519 or RSA private key. Short-lived JWTs issued on success.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">📋</div>
-        <h3>Tamper-Proof Audit Trail</h3>
-        <p>Every agent intent is HMAC-signed via HashiCorp Vault Transit before execution. Verify integrity with <code>forensics verify</code>.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">🧠</div>
-        <h3>LLM Semantic Evaluation</h3>
-        <p>Local Ollama models analyze agent intent for prompt injection, goal hijacking, and data exfiltration. PII is redacted by Microsoft Presidio before reaching the LLM.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">📦</div>
-        <h3>Docker Sandboxing</h3>
-        <p>Commands execute in ephemeral containers with seccomp whitelisting, read-only rootfs, dropped capabilities, and network isolation.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">⚡</div>
-        <h3>Circuit Breaker &amp; Kill Switch</h3>
-        <p>Per-agent failure tracking auto-opens circuit breakers. System-wide kill switch halts all operations at the first sign of an attack.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">🖥️</div>
-        <h3>CLI-First, API-Ready</h3>
-        <p>14 CLI subcommands for full control. FastAPI with JWT middleware for programmatic access. Optional Flask dashboard for visualization.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">🌍</div>
-        <h3>Cross-Platform</h3>
-        <p>Runs on Linux, macOS, and Windows. Docker Desktop detection. Seccomp and AppArmor gracefully skipped on non-Linux hosts.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">📊</div>
-        <h3>Resource Metrics</h3>
-        <p>Per-execution CPU, memory, and network usage collected from Docker stats API. OOM detection from container inspect.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">🎯</div>
-        <h3>Intent Scoping</h3>
-        <p>IntentCapsule restricts agents to approved actions within a session. Goal-hijack detection blocks deviation from the original task.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="container">
-    <p>
-      <strong>SecureAgentNet v2.0.0</strong> &mdash;
-      <a href="https://github.com/secure-agent-net/secure-agent-net">GitHub</a> ·
-      <a href="docs/">Documentation</a> ·
-      <a href="https://github.com/secure-agent-net/secure-agent-net/blob/main/SECURITY.md">Security</a> ·
-      <a href="https://github.com/secure-agent-net/secure-agent-net/blob/main/CONTRIBUTING.md">Contributing</a>
-    </p>
-    <p style="margin-top:8px">MIT License · Built with Python, Docker, HashiCorp Vault, Ollama, Microsoft Presidio</p>
-  </div>
-</footer>
-
-</body>
-</html>
+<!DOCTYPE html><html class="dark" lang="en" data-astro-cid-j7pv25f6><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>SAN | Zero-Trust AI Security</title><script src="/assets/03ba5d9f9e95fc3599acebcbe7e5fb9a.js"></script><link href="/assets/b844f50bd55d628909073218a3051661.css" rel="stylesheet"><link href="/assets/a39f5c6fcbb87b419667ec984d2e579a.css" rel="stylesheet"><script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-container": "#00311f",
+                      "inverse-primary": "#00687a",
+                      "on-error": "#690005",
+                      "tertiary": "#ffb3ad",
+                      "primary-fixed-dim": "#4cd7f6",
+                      "surface-dim": "#0f131d",
+                      "inverse-on-surface": "#2c303b",
+                      "error-container": "#93000a",
+                      "on-error-container": "#ffdad6",
+                      "secondary-fixed-dim": "#4edea3",
+                      "on-primary": "#003640",
+                      "primary-fixed": "#acedff",
+                      "primary-container": "#06b6d4",
+                      "on-primary-container": "#00424f",
+                      "tertiary-fixed-dim": "#ffb3ad",
+                      "on-tertiary-fixed": "#410004",
+                      "secondary-fixed": "#6ffbbe",
+                      "on-background": "#dfe2f1",
+                      "background": "#0f131d",
+                      "surface-container-high": "#262a35",
+                      "surface-bright": "#353944",
+                      "outline-variant": "#3d494c",
+                      "secondary": "#4edea3",
+                      "on-tertiary-fixed-variant": "#930013",
+                      "surface": "#0f131d",
+                      "surface-variant": "#313540",
+                      "tertiary-container": "#ff817a",
+                      "surface-container-low": "#171b26",
+                      "surface-container-highest": "#313540",
+                      "on-secondary-fixed": "#002113",
+                      "primary": "#4cd7f6",
+                      "on-primary-fixed": "#001f26",
+                      "secondary-container": "#00a572",
+                      "on-secondary": "#003824",
+                      "surface-container": "#1c1f2a",
+                      "error": "#ffb4ab",
+                      "surface-tint": "#4cd7f6",
+                      "on-primary-fixed-variant": "#004e5c",
+                      "outline": "#869397",
+                      "on-tertiary-container": "#7e000f",
+                      "inverse-surface": "#dfe2f1",
+                      "on-tertiary": "#68000a",
+                      "on-surface-variant": "#bcc9cd",
+                      "tertiary-fixed": "#ffdad7",
+                      "surface-container-lowest": "#0a0e18",
+                      "on-surface": "#dfe2f1",
+                      "on-secondary-fixed-variant": "#005236"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "gutter": "24px",
+                      "container-max": "1440px",
+                      "margin-mobile": "16px",
+                      "margin-desktop": "48px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Space Grotesk"],
+                      "headline-lg": ["Space Grotesk"],
+                      "label-caps": ["JetBrains Mono"],
+                      "headline-lg-mobile": ["Space Grotesk"],
+                      "code-md": ["JetBrains Mono"],
+                      "body-sm": ["Inter"],
+                      "display": ["Space Grotesk"],
+                      "body-lg": ["Inter"],
+                      "body-md": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "500"}],
+                      "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "label-caps": ["12px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                      "code-md": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "display": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script><style>body{background-color:#0f131d;background-image:radial-gradient(circle at 50% 0%,rgba(6,182,212,.1) 0%,transparent 50%),linear-gradient(rgba(6,182,212,.01) 1px,transparent 1px),linear-gradient(90deg,rgba(6,182,212,.01) 1px,transparent 1px);background-size:100% 1000px,48px 48px,48px 48px;color:#dfe2f1}.glass-panel[data-astro-cid-j7pv25f6]{background:#1c1f2a99;backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.05)}@keyframes pulse-logo{0%,to{opacity:.5;filter:drop-shadow(0 0 2px #4cd7f6)}50%{opacity:1;filter:drop-shadow(0 0 8px #4cd7f6)}}.logo-breathe[data-astro-cid-j7pv25f6]{animation:pulse-logo 3s ease-in-out infinite}@keyframes flow-path{0%{stroke-dashoffset:400;opacity:.1}50%{opacity:.8}to{stroke-dashoffset:0;opacity:.1}}.path-pulse[data-astro-cid-j7pv25f6]{stroke-dasharray:600;stroke-dashoffset:600;animation:flow-path 4s linear infinite}@keyframes card-fade-in{0%{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}.animate-on-scroll[data-astro-cid-j7pv25f6]{opacity:0;animation:card-fade-in .8s ease-out forwards}.delay-1[data-astro-cid-j7pv25f6]{animation-delay:.1s}.delay-2[data-astro-cid-j7pv25f6]{animation-delay:.2s}.delay-3[data-astro-cid-j7pv25f6]{animation-delay:.3s}.delay-4[data-astro-cid-j7pv25f6]{animation-delay:.4s}.svg-branch[data-astro-cid-j7pv25f6]{position:absolute;top:0;left:50%;transform:translate(-50%);z-index:0}
+</style></head> <body class="font-body-md text-body-md overflow-x-hidden bg-background selection:bg-primary/30" data-astro-cid-j7pv25f6> <!-- TopNavBar --> <nav class="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-white/5" data-astro-cid-j7pv25f6> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop h-16 flex justify-between items-center" data-astro-cid-j7pv25f6> <div class="flex items-center gap-4 md:gap-10" data-astro-cid-j7pv25f6> <div class="flex items-center gap-2 md:gap-3" data-astro-cid-j7pv25f6> <div class="w-8 h-8 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center logo-breathe" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-primary text-[20px]" data-astro-cid-j7pv25f6>shield</span> </div> <span class="font-headline-md text-headline-md font-bold text-white tracking-tight" data-astro-cid-j7pv25f6>SAN</span> </div> <div class="hidden md:flex gap-6 lg:gap-8" data-astro-cid-j7pv25f6><a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium" href="/features" data-astro-cid-j7pv25f6>Platform</a><a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium" href="/architecture" data-astro-cid-j7pv25f6>Security</a><a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium" href="/docs" data-astro-cid-j7pv25f6>Docs</a><a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium" href="/blog" data-astro-cid-j7pv25f6>Blog</a></div> </div> <div class="flex items-center gap-2 md:gap-4" data-astro-cid-j7pv25f6> <a class="bg-white text-black font-bold px-4 py-2 md:px-5 rounded-lg hover:bg-white/90 transition-all text-xs md:text-sm flex items-center justify-center" href="/install" data-astro-cid-j7pv25f6>
+Get Started
+</a> <button class="md:hidden text-white p-2" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')" aria-label="Menu" data-astro-cid-j7pv25f6> <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-astro-cid-j7pv25f6><path d="M3 6h18M3 12h18M3 18h18" data-astro-cid-j7pv25f6></path></svg> </button> </div> </div> <div id="mobile-menu" class="hidden md:hidden border-t border-white/5 bg-background/95 backdrop-blur-md" data-astro-cid-j7pv25f6> <div class="max-w-container-max mx-auto px-margin-mobile py-4 flex flex-col gap-3" data-astro-cid-j7pv25f6> <a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium py-1" href="/features" data-astro-cid-j7pv25f6>Platform</a> <a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium py-1" href="/architecture" data-astro-cid-j7pv25f6>Security</a> <a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium py-1" href="/docs" data-astro-cid-j7pv25f6>Docs</a> <a class="text-on-surface-variant hover:text-white transition-colors text-sm font-medium py-1" href="/blog" data-astro-cid-j7pv25f6>Blog</a> </div> </div> </nav> <main class="pt-24 md:pt-32" data-astro-cid-j7pv25f6> <!-- Hero Section --> <section class="max-w-4xl mx-auto px-margin-mobile text-center mb-12 md:mb-24 relative" data-astro-cid-j7pv25f6> <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-8" data-astro-cid-j7pv25f6> <span class="w-2 h-2 rounded-full bg-primary animate-pulse" data-astro-cid-j7pv25f6></span> </div> <h1 class="font-display text-4xl md:text-7xl text-white mb-6 md:mb-8 tracking-tight leading-[1.1]" data-astro-cid-j7pv25f6>
+Zero-Trust Security for Autonomous AI Agents
+</h1> <p class="text-on-surface-variant text-base md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed" data-astro-cid-j7pv25f6>
+Protect your production AI workflows with the SAN ITCD pipeline. Real-time interception, reasoning analysis, and sandboxed execution.
+</p> <div class="flex flex-col sm:flex-row gap-4 justify-center items-center" data-astro-cid-j7pv25f6> <button class="bg-primary text-on-primary font-bold px-8 py-4 rounded-xl hover:scale-105 transition-all w-full sm:w-auto" onclick="window.location.href='/install'" data-astro-cid-j7pv25f6>
+Start Securing Agents
+</button> <button class="bg-white/5 border border-white/10 text-white font-bold px-8 py-4 rounded-xl hover:bg-white/10 transition-all w-full sm:w-auto flex items-center justify-center gap-2" onclick="window.location.href='/docs'" data-astro-cid-j7pv25f6>
+Watch Demo <span class="material-symbols-outlined text-sm" data-astro-cid-j7pv25f6>play_circle</span> </button> </div> <!-- Visualization ITCD --> <div class="mt-20 relative flex flex-col items-center" data-astro-cid-j7pv25f6> <svg class="absolute top-0 left-0 w-full h-full hidden sm:block pointer-events-none" fill="none" viewBox="0 0 600 240" preserveAspectRatio="none" data-astro-cid-j7pv25f6> <path d="M300 0C300 100 75 80 75 180" stroke="rgba(76, 215, 246, 0.1)" stroke-width="1.5" data-astro-cid-j7pv25f6></path> <path class="path-pulse" d="M300 0C300 100 75 80 75 180" stroke="#4cd7f6" stroke-width="2" style="animation-delay: 0s" data-astro-cid-j7pv25f6></path> <path d="M300 0C300 100 225 80 225 180" stroke="rgba(76, 215, 246, 0.1)" stroke-width="1.5" data-astro-cid-j7pv25f6></path> <path class="path-pulse" d="M300 0C300 100 225 80 225 180" stroke="#4cd7f6" stroke-width="2" style="animation-delay: 0.5s" data-astro-cid-j7pv25f6></path> <path d="M300 0C300 100 375 80 375 180" stroke="rgba(76, 215, 246, 0.1)" stroke-width="1.5" data-astro-cid-j7pv25f6></path> <path class="path-pulse" d="M300 0C300 100 375 80 375 180" stroke="#4cd7f6" stroke-width="2" style="animation-delay: 1s" data-astro-cid-j7pv25f6></path> <path d="M300 0C300 100 525 80 525 180" stroke="rgba(76, 215, 246, 0.1)" stroke-width="1.5" data-astro-cid-j7pv25f6></path> <path class="path-pulse" d="M300 0C300 100 525 80 525 180" stroke="#4cd7f6" stroke-width="2" style="animation-delay: 1.5s" data-astro-cid-j7pv25f6></path> </svg> <div class="grid grid-cols-2 md:grid-cols-4 w-full max-w-5xl gap-3 md:gap-4 mt-[180px] sm:mt-[220px] relative z-10" data-astro-cid-j7pv25f6> <div class="glass-panel p-4 rounded-xl text-left border-t-2 border-primary animate-on-scroll delay-1" style="opacity: 1;" data-astro-cid-j7pv25f6> <span class="text-[10px] font-label-caps text-primary/60 block mb-2" data-astro-cid-j7pv25f6>01 IDENTIFY</span> <div class="h-1 bg-primary/20 w-full rounded mb-3" data-astro-cid-j7pv25f6></div> <div class="text-white text-sm font-medium" data-astro-cid-j7pv25f6>Verify Identity</div> </div> <div class="glass-panel p-4 rounded-xl text-left border-t-2 border-secondary animate-on-scroll delay-2" style="opacity: 1;" data-astro-cid-j7pv25f6> <span class="text-[10px] font-label-caps text-secondary/60 block mb-2" data-astro-cid-j7pv25f6>02 TRACK</span> <div class="h-1 bg-secondary/20 w-full rounded mb-3" data-astro-cid-j7pv25f6></div> <div class="text-white text-sm font-medium" data-astro-cid-j7pv25f6>Audit Reasoning</div> </div> <div class="glass-panel p-4 rounded-xl text-left border-t-2 border-error animate-on-scroll delay-3" style="opacity: 1;" data-astro-cid-j7pv25f6> <span class="text-[10px] font-label-caps text-error/60 block mb-2" data-astro-cid-j7pv25f6>03 CONTAIN</span> <div class="h-1 bg-error/20 w-full rounded mb-3" data-astro-cid-j7pv25f6></div> <div class="text-white text-sm font-medium" data-astro-cid-j7pv25f6>Safe Execution</div> </div> <div class="glass-panel p-4 rounded-xl text-left border-t-2 border-tertiary-container animate-on-scroll delay-4" style="opacity: 1;" data-astro-cid-j7pv25f6> <span class="text-[10px] font-label-caps text-tertiary-container/60 block mb-2" data-astro-cid-j7pv25f6>04 DECIDE</span> <div class="h-1 bg-tertiary-container/20 w-full rounded mb-3" data-astro-cid-j7pv25f6></div> <div class="text-white text-sm font-medium" data-astro-cid-j7pv25f6>Evaluate Intent</div> </div> </div> </div> </section> <!-- Product Pillars (ITCD Reordered) --> <section class="py-16 md:py-32 space-y-32 md:space-y-48" data-astro-cid-j7pv25f6> <!-- Pillar 1: IDENTIFY (Isolation/Identity) --> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-20 items-center" data-astro-cid-j7pv25f6> <div class="animate-on-scroll" style="opacity: 1;" data-astro-cid-j7pv25f6> <div class="inline-flex p-3 rounded-lg bg-primary/10 text-primary mb-6" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined" data-astro-cid-j7pv25f6>fingerprint</span> </div> <h2 class="font-headline-lg text-3xl md:text-4xl text-white mb-4 md:mb-6" data-astro-cid-j7pv25f6>01 Identify: Secure Authentication</h2> <p class="text-on-surface-variant text-base md:text-lg leading-relaxed mb-6 md:mb-8" data-astro-cid-j7pv25f6>
+Every agent operation begins with rigorous identification. We verify cryptographically signed agent identities before any interaction occurs with sensitive systems.
+</p> <ul class="space-y-4" data-astro-cid-j7pv25f6> <li class="flex items-center gap-3 text-white/80" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-primary text-sm" data-astro-cid-j7pv25f6>check_circle</span> <span class="" data-astro-cid-j7pv25f6>mTLS Identity Verification</span> </li> <li class="flex items-center gap-3 text-white/80" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-primary text-sm" data-astro-cid-j7pv25f6>check_circle</span> <span class="" data-astro-cid-j7pv25f6>Token-based session management</span> </li> </ul> </div> <div class="glass-panel rounded-2xl p-6 border border-white/10 shadow-2xl relative group overflow-hidden" data-astro-cid-j7pv25f6> <div class="bg-surface-container-highest/50 rounded-lg p-6 font-code-md text-sm text-on-surface-variant" data-astro-cid-j7pv25f6> <div class="flex gap-2 mb-4" data-astro-cid-j7pv25f6> <div class="w-2 h-2 rounded-full bg-error/40" data-astro-cid-j7pv25f6></div> <div class="w-2 h-2 rounded-full bg-secondary/40" data-astro-cid-j7pv25f6></div> <div class="w-2 h-2 rounded-full bg-primary/40" data-astro-cid-j7pv25f6></div> </div> <div class="text-primary-fixed-dim" data-astro-cid-j7pv25f6>$ san identity --verify agent_77b</div> <div class="mt-2" data-astro-cid-j7pv25f6>[INFO] Verifying cryptographic signature...</div> <div class="mt-1 text-secondary font-bold" data-astro-cid-j7pv25f6>SUCCESS :: Identity 77b Authenticated</div> </div> </div> </div> <!-- Pillar 2: TRACK (Audit/Reasoning) --> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-20 items-center" data-astro-cid-j7pv25f6> <div class="order-2 lg:order-1 glass-panel rounded-2xl p-8 border border-white/10 bg-gradient-to-br from-surface-container-high/50 to-black/50" data-astro-cid-j7pv25f6> <div class="space-y-4" data-astro-cid-j7pv25f6> <div class="flex justify-between items-center pb-4 border-b border-white/5" data-astro-cid-j7pv25f6> <span class="text-white font-medium" data-astro-cid-j7pv25f6>Audit Trail</span> <span class="text-[10px] font-label-caps text-secondary" data-astro-cid-j7pv25f6>LIVE_TRACKING</span> </div> <div class="space-y-3" data-astro-cid-j7pv25f6> <div class="flex gap-4" data-astro-cid-j7pv25f6> <div class="w-1 bg-secondary/40 rounded" data-astro-cid-j7pv25f6></div> <div class="py-1" data-astro-cid-j7pv25f6> <div class="text-xs text-on-surface-variant mb-1" data-astro-cid-j7pv25f6>Reasoning Intercepted</div> <div class="text-sm text-white" data-astro-cid-j7pv25f6>"Analyzing payroll data for discrepancies..."</div> </div> </div> <div class="flex gap-4" data-astro-cid-j7pv25f6> <div class="w-1 bg-primary/40 rounded" data-astro-cid-j7pv25f6></div> <div class="py-1" data-astro-cid-j7pv25f6> <div class="text-xs text-on-surface-variant mb-1" data-astro-cid-j7pv25f6>State Update</div> <div class="text-sm text-white" data-astro-cid-j7pv25f6>Action: READ_OBJECT from SecureStorage</div> </div> </div> </div> </div> </div> <div class="order-1 lg:order-2 animate-on-scroll" style="opacity: 1;" data-astro-cid-j7pv25f6> <div class="inline-flex p-3 rounded-lg bg-secondary/10 text-secondary mb-6" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined" data-astro-cid-j7pv25f6>analytics</span> </div> <h2 class="font-headline-lg text-3xl md:text-4xl text-white mb-4 md:mb-6" data-astro-cid-j7pv25f6>02 Track: Real-time Reasoning Audit</h2> <p class="text-on-surface-variant text-base md:text-lg leading-relaxed mb-6 md:mb-8" data-astro-cid-j7pv25f6>
+Continuous monitoring of the "Chain of Thought". SAN intercepts reasoning traces in real-time, detecting misalignment or prompt injection attempts before they manifest as actions.
+</p> <div class="flex items-center gap-8 border-t border-white/5 pt-8" data-astro-cid-j7pv25f6> <div data-astro-cid-j7pv25f6> <div class="text-2xl font-bold text-white" data-astro-cid-j7pv25f6>100%</div> <div class="text-xs text-on-surface-variant uppercase tracking-widest mt-1" data-astro-cid-j7pv25f6>Token Coverage</div> </div> <div data-astro-cid-j7pv25f6> <div class="text-2xl font-bold text-white" data-astro-cid-j7pv25f6>&lt;2ms</div> <div class="text-xs text-on-surface-variant uppercase tracking-widest mt-1" data-astro-cid-j7pv25f6>Interception Delay</div> </div> </div> </div> </div> <!-- Pillar 3: CONTAIN (Isolation) --> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-20 items-center" data-astro-cid-j7pv25f6> <div class="animate-on-scroll" style="opacity: 1;" data-astro-cid-j7pv25f6> <div class="inline-flex p-3 rounded-lg bg-error/10 text-error mb-6" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined" data-astro-cid-j7pv25f6>grid_view</span> </div> <h2 class="font-headline-lg text-3xl md:text-4xl text-white mb-4 md:mb-6" data-astro-cid-j7pv25f6>03 Contain: Kernel-Hardened Sandboxing</h2> <p class="text-on-surface-variant text-base md:text-lg leading-relaxed mb-6 md:mb-8" data-astro-cid-j7pv25f6>
+Execution occurs within hardened, ephemeral containers. Using seccomp-bpf and namespace isolation, we ensure that if an agent is compromised, the blast radius is zero.
+</p> <ul class="space-y-4" data-astro-cid-j7pv25f6> <li class="flex items-center gap-3 text-white/80" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-error text-sm" data-astro-cid-j7pv25f6>verified_user</span> <span class="" data-astro-cid-j7pv25f6>Restricted System Call Interface</span> </li> <li class="flex items-center gap-3 text-white/80" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-error text-sm" data-astro-cid-j7pv25f6>verified_user</span> <span class="" data-astro-cid-j7pv25f6>Zero-persistence file system</span> </li> </ul> </div> <div class="glass-panel rounded-2xl p-6 border border-white/10 shadow-2xl relative overflow-hidden" data-astro-cid-j7pv25f6> <div class="bg-surface-container-highest/50 rounded-lg p-6 font-code-md text-sm text-on-surface-variant" data-astro-cid-j7pv25f6> <div class="text-primary-fixed-dim" data-astro-cid-j7pv25f6>$ san contain --sandbox 921</div> <div class="mt-2" data-astro-cid-j7pv25f6>[INFO] Spawning ephemeral sandbox...</div> <div class="mt-1" data-astro-cid-j7pv25f6>[INFO] Applying Seccomp profile: STRICT_LLM</div> <div class="mt-4 text-error font-bold" data-astro-cid-j7pv25f6>LOCKED :: Secure Sandbox Active</div> </div> </div> </div> <!-- Pillar 4: DECIDE (PII/Policy) --> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-20 items-center" data-astro-cid-j7pv25f6> <div class="order-2 lg:order-1 glass-panel rounded-2xl p-6 border border-white/10 shadow-2xl relative overflow-hidden h-[300px] flex items-center justify-center" data-astro-cid-j7pv25f6> <div class="text-center" data-astro-cid-j7pv25f6> <div class="flex items-center gap-2 mb-4 justify-center" data-astro-cid-j7pv25f6> <div class="px-3 py-1 bg-error/20 border border-error/30 rounded text-error text-[10px] font-bold" data-astro-cid-j7pv25f6>REDACTED</div> <div class="px-3 py-1 bg-primary/20 border border-primary/30 rounded text-primary text-[10px] font-bold" data-astro-cid-j7pv25f6>APPROVED</div> </div> <p class="font-code-md text-sm opacity-60" data-astro-cid-j7pv25f6>"User [REDACTED] requested access to card ****9912"</p> </div> </div> <div class="order-1 lg:order-2 animate-on-scroll" style="opacity: 1;" data-astro-cid-j7pv25f6> <div class="inline-flex p-3 rounded-lg bg-tertiary-container/10 text-tertiary-container mb-6" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined" data-astro-cid-j7pv25f6>rule</span> </div> <h2 class="font-headline-lg text-3xl md:text-4xl text-white mb-4 md:mb-6" data-astro-cid-j7pv25f6>04 Decide: Intelligent Policy Enforcement</h2> <p class="text-on-surface-variant text-base md:text-lg leading-relaxed mb-6 md:mb-8" data-astro-cid-j7pv25f6>
+Final arbitration of agent intent. Before any external API call or database write, SAN enforces complex security policies and redacts PII dynamically.
+</p> <button class="text-primary font-bold flex items-center gap-2 group" data-astro-cid-j7pv25f6>
+View Policy Engine <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform" data-astro-cid-j7pv25f6>arrow_forward</span> </button> </div> </div> </section> <!-- Framework Support Section --> <section class="py-16 md:py-32 bg-white/5 relative overflow-hidden" data-astro-cid-j7pv25f6> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop text-center mb-12 md:mb-20 relative z-10" data-astro-cid-j7pv25f6> <h2 class="font-display text-3xl md:text-4xl text-white mb-6" data-astro-cid-j7pv25f6>Build with SAN-certified frameworks</h2> <p class="text-on-surface-variant max-w-2xl mx-auto" data-astro-cid-j7pv25f6>One line of code to wrap your existing agentic libraries with SAN security.</p> </div> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10" data-astro-cid-j7pv25f6> <div class="glass-panel p-8 rounded-2xl border border-white/10 hover:border-primary/50 transition-colors group animate-on-scroll delay-1" style="opacity: 1;" data-astro-cid-j7pv25f6> <div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center mb-6 group-hover:bg-primary/20 transition-colors" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-primary" data-astro-cid-j7pv25f6>link</span> </div> <h3 class="text-white text-xl font-bold mb-3" data-astro-cid-j7pv25f6>LangChain</h3> <p class="text-on-surface-variant text-sm leading-relaxed mb-6" data-astro-cid-j7pv25f6>Immediate ITCD pipeline integration for all LangChain AgentExecutors.</p> <a class="text-primary text-sm font-bold flex items-center gap-2" href="/docs" data-astro-cid-j7pv25f6>Docs <span class="material-symbols-outlined text-[16px]" data-astro-cid-j7pv25f6>arrow_outward</span></a> </div> <div class="glass-panel p-8 rounded-2xl border border-white/10 hover:border-secondary/50 transition-colors group animate-on-scroll delay-2" style="opacity: 1;" data-astro-cid-j7pv25f6> <div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center mb-6 group-hover:bg-secondary/20 transition-colors" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-secondary" data-astro-cid-j7pv25f6>groups</span> </div> <h3 class="text-white text-xl font-bold mb-3" data-astro-cid-j7pv25f6>CrewAI</h3> <p class="text-on-surface-variant text-sm leading-relaxed mb-6" data-astro-cid-j7pv25f6>Monitor multi-agent swarm collaboration and prevent lateral data leaks.</p> <a class="text-secondary text-sm font-bold flex items-center gap-2" href="/docs" data-astro-cid-j7pv25f6>Docs <span class="material-symbols-outlined text-[16px]" data-astro-cid-j7pv25f6>arrow_outward</span></a> </div> <div class="glass-panel p-8 rounded-2xl border border-white/10 hover:border-tertiary/50 transition-colors group animate-on-scroll delay-3" style="opacity: 1;" data-astro-cid-j7pv25f6> <div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center mb-6 group-hover:bg-tertiary/20 transition-colors" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-tertiary" data-astro-cid-j7pv25f6>smart_toy</span> </div> <h3 class="text-white text-xl font-bold mb-3" data-astro-cid-j7pv25f6>AutoGPT</h3> <p class="text-on-surface-variant text-sm leading-relaxed mb-6" data-astro-cid-j7pv25f6>Inject a hard SAN sandbox for autonomous file system and web access.</p> <a class="text-tertiary text-sm font-bold flex items-center gap-2" href="/docs" data-astro-cid-j7pv25f6>Docs <span class="material-symbols-outlined text-[16px]" data-astro-cid-j7pv25f6>arrow_outward</span></a> </div> </div> </section> <!-- Final CTA --> <section class="py-16 md:py-32 px-margin-mobile md:px-margin-desktop" data-astro-cid-j7pv25f6> <div class="max-w-container-max mx-auto glass-panel p-8 md:p-20 rounded-[2rem] md:rounded-[3rem] text-center bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 relative overflow-hidden" data-astro-cid-j7pv25f6> <div class="absolute top-0 right-0 w-48 md:w-96 h-48 md:h-96 bg-primary/10 rounded-full blur-[100px] -mr-24 md:-mr-48 -mt-24 md:-mt-48" data-astro-cid-j7pv25f6></div> <h2 class="font-display text-3xl md:text-5xl text-white mb-6 md:mb-8 relative z-10" data-astro-cid-j7pv25f6>Start securing your agents today</h2> <p class="text-on-surface-variant text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-12 relative z-10" data-astro-cid-j7pv25f6>Mission-critical security for the agentic era with SAN.</p> <div class="flex justify-center relative z-10" data-astro-cid-j7pv25f6> <button class="bg-primary text-black font-bold px-12 py-5 rounded-2xl text-lg hover:scale-105 transition-transform shadow-2xl shadow-primary/20" onclick="window.location.href='/install'" data-astro-cid-j7pv25f6>
+Get Started Now
+</button> </div> </div> </section> </main> <footer class="bg-surface-container-lowest border-t border-white/5 py-12 md:py-24" data-astro-cid-j7pv25f6> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-12" data-astro-cid-j7pv25f6> <div class="col-span-1 md:col-span-2" data-astro-cid-j7pv25f6> <div class="flex items-center gap-3 mb-6" data-astro-cid-j7pv25f6> <div class="w-6 h-6 rounded bg-primary/20 border border-primary/40 flex items-center justify-center" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-primary text-[14px]" data-astro-cid-j7pv25f6>shield</span> </div> <span class="font-display text-2xl text-white" data-astro-cid-j7pv25f6>SAN</span> </div> <p class="text-on-surface-variant max-w-sm mb-8 leading-relaxed" data-astro-cid-j7pv25f6>
+Mission-critical security for autonomous agents. Build with confidence, execute with containment using SAN.
+</p> <div class="flex gap-4" data-astro-cid-j7pv25f6> <button class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white/10 transition-colors" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-sm" data-astro-cid-j7pv25f6>public</span> </button> <button class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white/10 transition-colors" data-astro-cid-j7pv25f6> <span class="material-symbols-outlined text-sm" data-astro-cid-j7pv25f6>terminal</span> </button> </div> </div> <div data-astro-cid-j7pv25f6> <h4 class="text-white font-bold mb-6 text-sm uppercase tracking-widest" data-astro-cid-j7pv25f6>Platform</h4> <ul class="space-y-4 text-sm text-on-surface-variant" data-astro-cid-j7pv25f6><li class="" data-astro-cid-j7pv25f6><a class="hover:text-primary transition-colors" href="/architecture" data-astro-cid-j7pv25f6>ITCD Pipeline</a></li><li class="" data-astro-cid-j7pv25f6><a class="hover:text-primary transition-colors" href="/features" data-astro-cid-j7pv25f6>Hardened Sandboxing</a></li><li class="" data-astro-cid-j7pv25f6><a class="hover:text-primary transition-colors" href="/features" data-astro-cid-j7pv25f6>PII Redaction</a></li><li class="" data-astro-cid-j7pv25f6><a class="hover:text-primary transition-colors" href="/features" data-astro-cid-j7pv25f6>Audit Engine</a></li></ul> </div> <div data-astro-cid-j7pv25f6> <h4 class="text-white font-bold mb-6 text-sm uppercase tracking-widest" data-astro-cid-j7pv25f6>Company</h4> <ul class="space-y-4 text-sm text-on-surface-variant" data-astro-cid-j7pv25f6><li class="" data-astro-cid-j7pv25f6><a class="hover:text-primary transition-colors" href="/docs" data-astro-cid-j7pv25f6>Documentation</a></li><li class="" data-astro-cid-j7pv25f6><a class="hover:text-primary transition-colors" href="/blog" data-astro-cid-j7pv25f6>Security Blog</a></li><li class="" data-astro-cid-j7pv25f6><a class="hover:text-primary transition-colors" href="#" data-astro-cid-j7pv25f6>Privacy Policy</a></li></ul> </div> </div> <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop mt-12 md:mt-20 pt-6 md:pt-8 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-on-surface-variant/60" data-astro-cid-j7pv25f6> <span class="" data-astro-cid-j7pv25f6>© 2026 SAN. All rights reserved.</span> <div class="flex gap-8" data-astro-cid-j7pv25f6> <span class="" data-astro-cid-j7pv25f6>SOC2 TYPE II COMPLIANT</span> <span class="" data-astro-cid-j7pv25f6>GDPR READY</span> </div> </div> </footer> <script type="module">const s={threshold:.1},t=new IntersectionObserver(e=>{e.forEach(o=>{o.isIntersecting&&(o.target.style.opacity="1",o.target.classList.add("animate-on-scroll"))})},s);document.querySelectorAll(".animate-on-scroll").forEach(e=>{t.observe(e)});</script> </body></html>

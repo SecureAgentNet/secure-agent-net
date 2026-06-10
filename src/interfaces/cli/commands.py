@@ -417,7 +417,7 @@ def run(agent_id: str, command_str: str, action: str, resource: str, intent: str
     )
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
-        progress.add_task(description="[bold cyan]ITCD Pipeline:[/] Identify → Track → Decide → Contain", total=None)
+        progress.add_task(description="[bold cyan]ITCD Pipeline:[/] Identify → Track → Contain → Decide", total=None)
         result = asyncio.run(pipeline.execute_agent_action(agent_id, request, command_str))
 
     if json_output:

@@ -29,6 +29,27 @@ logger = logging.getLogger("SecureAgentNet.Contain")
 APPARMOR_PROFILE_NAME = "securenet-agent"
 
 
+from dataclasses import dataclass, field
+
+
+@dataclass
+class SandboxHandle:
+    """Handle to a provisioned-but-not-yet-executed sandbox.
+
+    In ITCD order the container is created and fully isolated during the
+    CONTAIN phase (before DECIDE). DECIDE then either approves execution
+    (``execute_in_sandbox``) or denies it, in which case the container is
+    destroyed without ever running the workload (``teardown_sandbox``).
+    """
+    sandbox_id: str
+    container: object
+    agent_id: str
+    config: SandboxConfig
+    secret_injector: object
+    start_time: float = field(default_factory=time.time)
+    started: bool = False
+
+
 class ContainerProvisioner:
     def __init__(self):
         self.client = None
@@ -169,44 +190,17 @@ class ContainerProvisioner:
             logger.debug("Failed to collect metrics for %s: %s", sandbox_id, e)
             return {}
 
-    def run_in_sandbox(
-        self, request: ExecutionRequest, config: Optional[SandboxConfig] = None,
-    ) -> ExecutionResult:
-        if not self.client:
-            raise RuntimeError("Docker client is not initialized.")
-
-        if config is None:
-            config = SandboxConfig()
-
-        sandbox_id = f"sandbox-{uuid.uuid4().hex[:8]}"
-        start_time = time.time()
-        was_killed = False
-        oom_killed = False
-        agent_id = request.environment_vars.get("AGENT_ID", "")
-
-        self._check_container_limits(agent_id, config)
-
-        # --- Dynamic Secrets Injection ---
-        secret_injector = get_secret_injector()
-        injected_env = secret_injector.inject_into_environment(
-            agent_id=agent_id,
-            existing_env=request.environment_vars,
-        )
-        request.environment_vars = injected_env
-
-        # --- Network Whitelisting ---
-        net_whitelist = create_domain_whitelist_for_agent(agent_id)
-
+    def _build_run_kwargs(
+        self, request: ExecutionRequest, config: SandboxConfig,
+        sandbox_id: str, agent_id: str,
+    ) -> dict:
+        """Assemble the fully-isolated Docker kwargs (seccomp, AppArmor, network,
+        gVisor, tmpfs, resource limits, command). Shared by provisioning."""
         try:
             self.client.images.get(config.image)
         except ImageNotFound:
             logger.info("Pulling image %s...", config.image)
             self.client.images.pull(config.image)
-
-        ContainerResourceManager.register_container(
-            sandbox_id, agent_id,
-            ResourceQuota(cpu_limit=1.0, memory_limit_mb=int(config.mem_limit.rstrip("m"))),
-        )
 
         security_opt = []
 
@@ -242,68 +236,138 @@ class ContainerProvisioner:
                 security_opt.append(f"apparmor={self.apparmor_profile}")
 
         network_mode = None
-        network_name = None
         if config.network_disabled:
             network_mode = "none"
         else:
-            iso_config = get_network_isolation_profile(config.network_isolation_level)
+            get_network_isolation_profile(config.network_isolation_level)
             network_name = create_isolated_network()
             if network_name:
                 network_mode = network_name
 
+        # --- Network Whitelisting ---
+        net_whitelist = create_domain_whitelist_for_agent(agent_id)
+
+        run_kwargs = dict(
+            image=config.image,
+            name=sandbox_id,
+            mem_limit=config.mem_limit,
+            cpu_quota=config.cpu_quota,
+            read_only=config.read_only,
+            cap_drop=config.drop_capabilities,
+            security_opt=security_opt,
+            working_dir=config.work_dir,
+            environment=request.environment_vars,
+            user="1000:1000",
+            pids_limit=50,
+        )
+
+        # --- gVisor Micro-VM Sandboxing ---
+        microvm = create_microvm_config(agent_id)
+        if microvm.get("runtime"):
+            run_kwargs["runtime"] = microvm["runtime"]
+            logger.info("Sandbox %s running with gVisor (runsc) micro-VM isolation", sandbox_id)
+        if microvm.get("labels"):
+            run_kwargs.setdefault("labels", {}).update(microvm["labels"])
+
+        if network_mode:
+            run_kwargs["network"] = network_mode
+
+        whitelist_config = net_whitelist.to_docker_config()
+        if whitelist_config.get("dns"):
+            run_kwargs["dns"] = whitelist_config["dns"]
+        if whitelist_config.get("dns_search"):
+            run_kwargs["dns_search"] = whitelist_config["dns_search"]
+
+        if config.read_only:
+            size = config.tmpfs_size
+            run_kwargs["tmpfs"] = {
+                "/tmp": f"size={size},noexec,nosuid,nodev",
+                config.work_dir: f"size={size},noexec,nosuid,nodev",
+            }
+
+        if request.args:
+            run_kwargs["command"] = request.args
+        elif request.command and isinstance(request.command, list):
+            run_kwargs["command"] = request.command
+        else:
+            run_kwargs["command"] = ["/bin/sh", "-c", str(request.command)]
+
+        return run_kwargs
+
+    def provision_sandbox(
+        self, request: ExecutionRequest, config: Optional[SandboxConfig] = None,
+    ) -> SandboxHandle:
+        """CONTAIN phase: create the fully-isolated sandbox container *without*
+        running the workload. The container exists with all security profiles,
+        resource limits, network isolation, injected secrets and files applied,
+        but its command has not yet executed — execution waits on DECIDE.
+        """
+        if not self.client:
+            raise RuntimeError("Docker client is not initialized.")
+
+        if config is None:
+            config = SandboxConfig()
+
+        sandbox_id = f"sandbox-{uuid.uuid4().hex[:8]}"
+        agent_id = request.environment_vars.get("AGENT_ID", "")
+
+        self._check_container_limits(agent_id, config)
+
+        # --- Dynamic Secrets Injection ---
+        secret_injector = get_secret_injector()
+        injected_env = secret_injector.inject_into_environment(
+            agent_id=agent_id,
+            existing_env=request.environment_vars,
+        )
+        request.environment_vars = injected_env
+
+        run_kwargs = self._build_run_kwargs(request, config, sandbox_id, agent_id)
+
+        ContainerResourceManager.register_container(
+            sandbox_id, agent_id,
+            ResourceQuota(cpu_limit=1.0, memory_limit_mb=int(config.mem_limit.rstrip("m"))),
+        )
+
         try:
-            logger.info("Starting sandbox %s (image=%s, timeout=%ds)", sandbox_id, config.image, config.timeout_seconds)
+            container = self.client.containers.create(**run_kwargs)
+        except (APIError, RuntimeError) as e:
+            logger.error("Container provisioning error: %s", e)
+            ContainerResourceManager.remove_container(sandbox_id)
+            secret_injector.revoke_secrets(agent_id, sandbox_id)
+            raise
 
-            run_kwargs = dict(
-                image=config.image,
-                name=sandbox_id,
-                detach=True,
-                mem_limit=config.mem_limit,
-                cpu_quota=config.cpu_quota,
-                read_only=config.read_only,
-                cap_drop=config.drop_capabilities,
-                security_opt=security_opt,
-                working_dir=config.work_dir,
-                environment=request.environment_vars,
-                user="1000:1000",
-                pids_limit=50,
+        ContainerResourceManager.update_status(sandbox_id, "provisioned")
+        self._inject_files(sandbox_id, request.files)
+        logger.info(
+            "Provisioned sandbox %s (image=%s) — contained, awaiting DECIDE",
+            sandbox_id, config.image,
+        )
+
+        return SandboxHandle(
+            sandbox_id=sandbox_id,
+            container=container,
+            agent_id=agent_id,
+            config=config,
+            secret_injector=secret_injector,
+        )
+
+    def execute_in_sandbox(self, handle: SandboxHandle) -> ExecutionResult:
+        """DECIDE-approved execution: start the already-contained sandbox,
+        run the workload to completion (or timeout) and collect results."""
+        container = handle.container
+        config = handle.config
+        sandbox_id = handle.sandbox_id
+        was_killed = False
+        oom_killed = False
+        metrics = {}
+
+        try:
+            logger.info(
+                "Executing in sandbox %s (timeout=%ds)", sandbox_id, config.timeout_seconds
             )
-
-            # --- gVisor Micro-VM Sandboxing ---
-            microvm = create_microvm_config(agent_id)
-            if microvm.get("runtime"):
-                run_kwargs["runtime"] = microvm["runtime"]
-                logger.info("Sandbox %s running with gVisor (runsc) micro-VM isolation", sandbox_id)
-            if microvm.get("labels"):
-                run_kwargs.setdefault("labels", {}).update(microvm["labels"])
-
-            if network_mode:
-                run_kwargs["network"] = network_mode
-
-            whitelist_config = net_whitelist.to_docker_config()
-            if whitelist_config.get("dns"):
-                run_kwargs["dns"] = whitelist_config["dns"]
-            if whitelist_config.get("dns_search"):
-                run_kwargs["dns_search"] = whitelist_config["dns_search"]
-
-            if config.read_only:
-                size = config.tmpfs_size
-                run_kwargs["tmpfs"] = {
-                    "/tmp": f"size={size},noexec,nosuid,nodev",
-                    config.work_dir: f"size={size},noexec,nosuid,nodev",
-                }
-
-            if request.args:
-                run_kwargs["command"] = request.args
-            elif request.command and isinstance(request.command, list):
-                run_kwargs["command"] = request.command
-            else:
-                run_kwargs["command"] = ["/bin/sh", "-c", str(request.command)]
-
-            container = self.client.containers.run(**run_kwargs)
+            container.start()
+            handle.started = True
             ContainerResourceManager.update_status(sandbox_id, "running")
-
-            self._inject_files(sandbox_id, request.files)
 
             try:
                 result = container.wait(timeout=config.timeout_seconds)
@@ -318,6 +382,7 @@ class ContainerProvisioner:
 
             stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
             stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
+            metrics = self._collect_metrics(sandbox_id)
 
         except APIError as e:
             logger.error("Docker API Error: %s", e)
@@ -326,24 +391,8 @@ class ContainerProvisioner:
             stderr = str(e)
             was_killed = True
             ContainerResourceManager.update_status(sandbox_id, "failed")
-        except RuntimeError as e:
-            logger.error("Container provisioning error: %s", e)
-            raise
-        finally:
-            try:
-                c = self.client.containers.get(sandbox_id)
-                metrics = self._collect_metrics(sandbox_id)
-                c.remove(force=True)
-                ContainerResourceManager.remove_container(sandbox_id)
-                logger.info("Destroyed sandbox %s", sandbox_id)
-            except Exception:
-                metrics = {}
-                ContainerResourceManager.remove_container(sandbox_id)
 
-            # Revoke any injected secrets for this run
-            secret_injector.revoke_secrets(agent_id, sandbox_id)
-
-        execution_time = int((time.time() - start_time) * 1000)
+        execution_time = int((time.time() - handle.start_time) * 1000)
 
         return ExecutionResult(
             sandbox_id=sandbox_id,
@@ -355,6 +404,41 @@ class ContainerProvisioner:
             oom_killed=oom_killed,
             resource_usage=metrics,
         )
+
+    def teardown_sandbox(self, handle: SandboxHandle, executed: bool = True):
+        """Destroy a provisioned sandbox and revoke its secrets. Called after a
+        successful run, or on DECIDE denial to kill the container un-executed."""
+        sandbox_id = handle.sandbox_id
+        try:
+            c = self.client.containers.get(sandbox_id)
+            c.remove(force=True)
+            logger.info("Destroyed sandbox %s", sandbox_id)
+        except Exception:
+            pass
+        finally:
+            ContainerResourceManager.remove_container(sandbox_id)
+            handle.secret_injector.revoke_secrets(handle.agent_id, sandbox_id)
+
+        if not executed:
+            logger.info(
+                "Sandbox %s torn down without execution (action denied by DECIDE)",
+                sandbox_id,
+            )
+
+    def run_in_sandbox(
+        self, request: ExecutionRequest, config: Optional[SandboxConfig] = None,
+    ) -> ExecutionResult:
+        """Convenience composition: provision → execute → teardown in one call.
+
+        Retained for callers/tests that don't need the CONTAIN/DECIDE split. The
+        ITCD pipeline drives the three phases separately so DECIDE runs between
+        provisioning and execution.
+        """
+        handle = self.provision_sandbox(request, config)
+        try:
+            return self.execute_in_sandbox(handle)
+        finally:
+            self.teardown_sandbox(handle)
 
     def cleanup(self):
         self._unload_apparmor_profile()

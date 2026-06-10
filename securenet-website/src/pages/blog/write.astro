@@ -432,7 +432,7 @@
                 case 'h3':
                     return `\n### ${children.trim()}\n`;
                 case 'p':
-                    return `\n${children.trim()}\n`;
+                    return `\n\n${children.trim()}\n\n`;
                 case 'ul':
                     return `\n${children}\n`;
                 case 'ol':
@@ -447,9 +447,9 @@
                     const alt = node.getAttribute('alt') || 'Image';
                     return `\n![${alt}](${src})\n`;
                 case 'br':
-                    return '\n';
+                    return '\n\n';
                 case 'div':
-                    return `\n${children.trim()}\n`;
+                    return `\n\n${children.trim()}\n\n`;
                 default:
                     return children;
             }
@@ -458,7 +458,7 @@
         let result = convertNode(tempDiv);
         return result
             .replace(/\n{3,}/g, '\n\n')
-            .replace(/[ \t]+/g, ' ')
+            .replace(/^( +)/gm, '')
             .trim();
     }
 
@@ -473,6 +473,9 @@
     const API_BASE = getApiBaseUrl();
     const API_POSTS = `${API_BASE}/api/v1/blog/posts`;
     const API_UPLOAD = `${API_BASE}/api/v1/blog/upload`;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const editSlug = urlParams.get('slug');
 
     document.addEventListener('DOMContentLoaded', () => {
         // UI elements
@@ -816,6 +819,27 @@
         const initEditor = () => {
             updateWordCount();
             
+            // If editing an existing post, load it
+            if (editSlug) {
+                publishBtn.innerText = "Update Post";
+                fetch(`${API_POSTS}/${editSlug}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then(post => {
+                        if (!post) return;
+                        postTitle.value = post.title || '';
+                        postSlug.value = post.slug || '';
+                        postAuthor.value = post.author || '';
+                        postReadTime.value = post.read_time || '5 MIN';
+                        postTags.value = (post.tags || []).join(', ');
+                        postSummary.value = post.summary || '';
+                        const bodyContent = post.content || '';
+                        visualPane.innerHTML = marked.parse(bodyContent);
+                        updateWordCount();
+                    })
+                    .catch(() => {});
+                return;
+            }
+
             // Check for existing drafts
             const draftStr = localStorage.getItem('san_blog_draft');
             if (draftStr) {
@@ -851,7 +875,7 @@
             draftAlert.classList.add('hidden');
         });
 
-        // Publish Post to Mesh – via PHP API
+        // Publish Post to Mesh
         publishBtn.addEventListener('click', async () => {
             const title = postTitle.value.trim();
             const slug = postSlug.value.trim();
@@ -869,38 +893,38 @@
             }
 
             publishBtn.disabled = true;
-            publishBtn.innerText = "Synchronizing...";
-
-            const token = localStorage.getItem('san_bearer_token');
+            publishBtn.innerText = editSlug ? "Updating..." : "Synchronizing...";
 
             try {
-                // Publish via PHP API
-                const res = await fetch(API_POSTS, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        title,
-                        slug,
-                        author: author || 'SAN Operator',
-                        read_time: readTime || '5 MIN',
-                        tags,
-                        summary,
-                        content: bodyContent,
-                    })
+                const payload = {
+                    title,
+                    slug,
+                    author: author || 'SAN Operator',
+                    read_time: readTime || '5 MIN',
+                    tags,
+                    summary,
+                    content: bodyContent,
+                };
+
+                const isEdit = !!editSlug;
+                const url = isEdit ? `${API_POSTS}/${editSlug}` : API_POSTS;
+                const method = isEdit ? 'PUT' : 'POST';
+
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
 
                 if (!res.ok) {
                     const data = await res.json();
-                    throw new Error(data.error || "Failed to publish logs");
+                    throw new Error(data.detail || "Failed to publish logs");
                 }
 
                 // Successful publish
-                localStorage.removeItem('san_blog_draft'); // clear draft
+                localStorage.removeItem('san_blog_draft');
                 publishToast.classList.remove('hidden');
 
-                // Redirect to post page
                 setTimeout(() => {
                     window.location.href = `/blog/post?slug=${slug}`;
                 }, 2000);
@@ -908,7 +932,7 @@
             } catch (err) {
                 alert("Publish failed: " + err.message);
                 publishBtn.disabled = false;
-                publishBtn.innerText = "Publish Post";
+                publishBtn.innerText = editSlug ? "Update Post" : "Publish Post";
             }
         });
 

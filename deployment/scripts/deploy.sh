@@ -51,7 +51,9 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
+set -a
 source "$ENV_FILE"
+set +a
 
 IMAGE_NAME="${REGISTRY:+$REGISTRY/}secureagentnet/app:${IMAGE_TAG}"
 

@@ -12,7 +12,7 @@
 SecureAgentNet implements a **zero-trust security model** through a 4-phase pipeline:
 
 ```
-IDENTIFY → TRACK → DECIDE → CONTAIN
+IDENTIFY → TRACK → CONTAIN → DECIDE
 ```
 
 Every agent action passes through all four phases before execution. No phase trusts the output of any other phase — each independently validates and re-checks.
@@ -21,8 +21,8 @@ Every agent action passes through all four phases before execution. No phase tru
 |----------|--------|
 | IDENTIFY | Identity registration, capability authorization, rogue detection, circuit breaker, kill-switch |
 | TRACK    | Intent capture to Vault (Transit HMAC-signed) before execution |
-| DECIDE   | 3-tier evaluation: RuleFilter → PiiRedactor (Presidio) → SemanticEvaluator (LLM) |
 | CONTAIN  | Docker sandbox with seccomp, AppArmor, read-only rootfs, dropped capabilities, network isolation |
+| DECIDE   | 3-tier evaluation: RuleFilter → PiiRedactor (Presidio) → SemanticEvaluator (LLM) |
 
 ## Security Features
 

@@ -36,6 +36,7 @@ def mock_docker_client(monkeypatch):
     mock_container.logs.side_effect = [b"Hello from sandbox\n", b""]
 
     mock_client.containers.run.return_value = mock_container
+    mock_client.containers.create.return_value = mock_container
     mock_client.containers.get.return_value = mock_container
     mock_client.api.inspect_container.return_value = {
         "State": {"OOMKilled": False}
@@ -65,13 +66,14 @@ def test_run_in_sandbox_success(mock_docker_client):
     assert result.execution_time_ms >= 0
     assert result.resource_usage.get("cpu_usage_percent") is not None
 
-    run_kwargs = mock_client.containers.run.call_args[1]
+    run_kwargs = mock_client.containers.create.call_args[1]
     assert run_kwargs["image"] == "python:3.11-slim"
     assert run_kwargs["mem_limit"] == "128m"
     assert run_kwargs["network"] == "none"
     assert run_kwargs["read_only"] is True
     assert run_kwargs["cap_drop"] == ["ALL"]
     assert any("seccomp" in opt for opt in run_kwargs["security_opt"])
+    mock_container.start.assert_called_once()
     mock_container.remove.assert_called_with(force=True)
 
 
@@ -118,7 +120,7 @@ def test_run_in_sandbox_with_args_exec_form(mock_docker_client):
     )
     result = provisioner.run_in_sandbox(request)
     assert result.exit_code == 0
-    run_kwargs = mock_client.containers.run.call_args[1]
+    run_kwargs = mock_client.containers.create.call_args[1]
     assert run_kwargs["command"] == ["python", "-c", "print(1)"]
 
 
