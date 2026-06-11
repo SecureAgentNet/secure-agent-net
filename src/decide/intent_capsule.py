@@ -198,11 +198,16 @@ class MandateRegistry:
             f"Operate as a {agent.get('type', 'Custom')} agent strictly within its "
             f"granted capabilities ({', '.join(approved)})."
         )
+        # The auto-provisioned default is a permissive placeholder until an operator
+        # explicitly commissions the agent. Static deny-list/path safety still applies
+        # at DECIDE (RuleFilter); an explicit `commission` is where operator-defined
+        # forbidden actions are set. Keeping the default forbidden list empty avoids
+        # duplicating RuleFilter at IDENTIFY and keeps the layers cleanly separated.
         capsule = cls.commission(
             agent_id=agent["agent_id"],
             original_goal=goal,
             approved_actions=approved,
-            forbidden_actions=list(DEFAULT_FORBIDDEN_ACTIONS),
+            forbidden_actions=[],
             user_id=agent.get("created_by", "system"),
             expires_in_minutes=DEFAULT_MANDATE_EXPIRY_MINUTES,
         )
