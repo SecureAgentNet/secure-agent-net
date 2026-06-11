@@ -5,7 +5,8 @@ PyYAML>=6.0.1
 python-dotenv>=1.0.0
 
 # Database
-psycopg2-binary>=2.9.9
+psycopg2-binary>=2.9.9          # PostgreSQL driver
+PyMySQL>=1.1.0                   # MariaDB/MySQL driver (mysql+pymysql://)
 SQLAlchemy>=2.0.21
 
 # APIs and Gateway

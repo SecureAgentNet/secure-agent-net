@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 class EvaluationRequest(BaseModel):
@@ -9,6 +9,11 @@ class EvaluationRequest(BaseModel):
     target_resource: str
     intent_summary: str
     payload: Dict[str, Any]
+    commissioned_goal: Optional[str] = Field(
+        default=None,
+        description="The agent's sanctioned mandate goal. The evaluator scores "
+                    "whether the action serves this goal (goal-hijacking detection).",
+    )
 
 
 class EvaluationResult(BaseModel):

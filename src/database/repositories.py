@@ -156,19 +156,15 @@ class AuditLogRepository:
     def append(cls, entry: dict):
         try:
             with get_db_session() as session:
-                agent_id = entry.get("agent_id")
-                if agent_id and isinstance(agent_id, str):
-                    agent_id = uuid.UUID(agent_id)
-                correlation_id = entry.get("correlation_id")
-                if correlation_id and isinstance(correlation_id, str):
-                    correlation_id = uuid.UUID(correlation_id)
+                # The Uuid column coerces UUID strings (and stores a non-UUID
+                # correlation id such as "corr-…" as NULL) on every backend.
                 log = models.AuditLogEntry(
-                    agent_id=agent_id,
+                    agent_id=entry.get("agent_id"),
                     event_type=entry.get("event_type", "unknown"),
                     phase=entry.get("phase"),
                     severity=entry.get("severity", "INFO"),
-                    summary=entry.get("summary"),
-                    correlation_id=correlation_id,
+                    summary=entry.get("summary") or entry.get("event_type"),
+                    correlation_id=entry.get("correlation_id"),
                     vault_path=entry.get("vault_path"),
                 )
                 session.add(log)
@@ -337,6 +333,105 @@ class ContainerRepository:
                     )
         except Exception:
             JsonStore.save("resource_manager", containers)
+
+
+class MandateRepository:
+    """DB-backed repository for agent mandates (the ``intent_capsules`` table).
+
+    A mandate is an agent's commissioned goal plus the set of actions it is
+    sanctioned to take. It is the anchor the DECIDE phase checks an action
+    against to detect goal hijacking.
+    """
+
+    @classmethod
+    def _row_to_dict(cls, r) -> dict:
+        return {
+            "session_id": str(r.session_id),
+            "agent_id": str(r.agent_id) if r.agent_id else None,
+            "user_id": r.user_id,
+            "original_goal": r.original_goal,
+            "approved_actions": r.approved_actions or [],
+            "forbidden_actions": r.forbidden_actions or [],
+            "created_at": r.created_at,
+            "expires_at": r.expires_at,
+            "active": bool(r.active),
+        }
+
+    @classmethod
+    def get_active_for_agent(cls, agent_id: str) -> Optional[dict]:
+        """Return the most recent active, unexpired mandate for an agent."""
+        try:
+            with get_db_session() as session:
+                rows = session.execute(
+                    select(models.IntentCapsule)
+                    .where(models.IntentCapsule.agent_id == uuid.UUID(agent_id))
+                    .where(models.IntentCapsule.active.is_(True))
+                ).scalars().all()
+                dicts = [cls._row_to_dict(r) for r in rows]
+        except Exception:
+            return None
+        now = datetime.now(timezone.utc)
+        live = [d for d in dicts if cls._aware(d["expires_at"]) > now]
+        if not live:
+            return None
+        live.sort(key=lambda d: cls._aware(d["created_at"]), reverse=True)
+        return live[0]
+
+    @classmethod
+    def save(cls, mandate: dict):
+        """Insert or update a mandate row keyed by session_id."""
+        try:
+            with get_db_session() as session:
+                sid = uuid.UUID(str(mandate["session_id"]))
+                row = session.get(models.IntentCapsule, sid)
+                agent_id = mandate.get("agent_id")
+                agent_uuid = uuid.UUID(agent_id) if agent_id else None
+                if row is None:
+                    session.add(models.IntentCapsule(
+                        session_id=sid,
+                        agent_id=agent_uuid,
+                        user_id=mandate.get("user_id", "system"),
+                        original_goal=mandate["original_goal"],
+                        approved_actions=mandate.get("approved_actions", []),
+                        forbidden_actions=mandate.get("forbidden_actions", []),
+                        created_at=cls._aware(mandate.get("created_at")) or datetime.now(timezone.utc),
+                        expires_at=cls._aware(mandate["expires_at"]),
+                        active=mandate.get("active", True),
+                    ))
+                else:
+                    row.agent_id = agent_uuid
+                    row.user_id = mandate.get("user_id", row.user_id)
+                    row.original_goal = mandate["original_goal"]
+                    row.approved_actions = mandate.get("approved_actions", [])
+                    row.forbidden_actions = mandate.get("forbidden_actions", [])
+                    row.expires_at = cls._aware(mandate["expires_at"])
+                    row.active = mandate.get("active", True)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Failed to persist mandate: %s", e)
+
+    @classmethod
+    def deactivate_for_agent(cls, agent_id: str):
+        """Retire all active mandates for an agent (used when re-commissioning)."""
+        try:
+            with get_db_session() as session:
+                rows = session.execute(
+                    select(models.IntentCapsule)
+                    .where(models.IntentCapsule.agent_id == uuid.UUID(agent_id))
+                    .where(models.IntentCapsule.active.is_(True))
+                ).scalars().all()
+                for r in rows:
+                    r.active = False
+        except Exception:
+            pass
+
+    @staticmethod
+    def _aware(val) -> Optional[datetime]:
+        """Coerce a value to a timezone-aware datetime (DB may return naive)."""
+        dt = _parse_dt(val)
+        if dt is not None and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
 
 
 def _parse_dt(val) -> Optional[datetime]:

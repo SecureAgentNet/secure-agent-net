@@ -9,7 +9,7 @@ from rich.text import Text
 from src.interfaces.cli.commands import (
     agent, run, forensics, security, contain,
     server, doctor, audit, config_cmd, metrics,
-    version, init, evaluate,
+    version, init, evaluate, mcp,
 )
 
 console = Console()
@@ -113,6 +113,7 @@ cli.add_command(audit)
 cli.add_command(config_cmd)
 cli.add_command(metrics)
 cli.add_command(version)
+cli.add_command(mcp)
 
 
 if __name__ == "__main__":

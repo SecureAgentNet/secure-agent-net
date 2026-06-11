@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.identify.models import (
     ChallengeRequest, ChallengeResponse, LoginRequest,
-    TokenResponse, ExecuteRequest,
+    TokenResponse, ExecuteRequest, VetRequest,
 )
 from src.identify.authentication import AuthenticationService
 from src.identify.identity_registry import IdentityRegistry
@@ -108,8 +108,49 @@ async def list_tools(agent: dict = Depends(get_current_agent)):
     }
 
 
+@mcp_router.post("/vet")
+async def vet_server(request: VetRequest, agent: dict = Depends(get_current_agent)):
+    """Vet an external MCP server's tool catalog for tool-poisoning before trust.
+
+    Scans every tool description (and schema field descriptions) for injected
+    instructions, exfiltration cues, hidden unicode and rug-pulls, pinning a
+    content hash per tool.
+    """
+    from src.identify.mcp_vetting import McpServerRegistry
+    verdicts = McpServerRegistry.register_and_vet(request.server_id, request.tools)
+    return {
+        "server_id": request.server_id,
+        "vetted": len(verdicts),
+        "malicious": sum(1 for v in verdicts if v.is_malicious),
+        "tools": [v.to_dict() for v in verdicts],
+    }
+
+
+@mcp_router.get("/servers")
+async def list_vetted_servers(agent: dict = Depends(get_current_agent)):
+    """List vetted MCP servers, hiding tools flagged malicious from the agent."""
+    from src.identify.mcp_vetting import McpServerRegistry, MALICIOUS
+    servers = McpServerRegistry.all_servers()
+    safe_view = {
+        sid: [t for t in tools.values() if t.get("verdict") != MALICIOUS]
+        for sid, tools in servers.items()
+    }
+    return {"servers": safe_view, "count": len(safe_view)}
+
+
 @mcp_router.post("/execute")
 async def execute_tool(request: ExecuteRequest, agent: dict = Depends(get_current_agent)):
+    # External MCP tools must clear vetting (no tool poisoning) AND fall within the
+    # agent's commissioned mandate before they ever reach the pipeline.
+    if request.server_id:
+        from src.identify.mcp_vetting import McpServerRegistry
+        allowed, reason = McpServerRegistry.is_tool_authorized(
+            agent, request.server_id, request.action_name
+        )
+        if not allowed:
+            return {"status": "blocked", "reason": reason,
+                    "evaluated_by": "McpToolVetter", "phase": "IDENTIFY"}
+
     from src.core.pipeline import ITCDPipeline
     pipeline = ITCDPipeline()
     command_str = request.payload.get("command", "")

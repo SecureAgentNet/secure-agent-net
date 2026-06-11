@@ -9,14 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Any
 
-# Silence noisy loggers in CLI mode
-logging.getLogger("SecureAgentNet").setLevel(logging.WARNING)
-logging.getLogger("SecureAgentNet.Track.Indexer").setLevel(logging.WARNING)
-logging.getLogger("SecureAgentNet.Track").setLevel(logging.WARNING)
-logging.getLogger("SecureAgentNet.Identify.Registry").setLevel(logging.WARNING)
-logging.getLogger("SecureAgentNet.Identify.Discovery").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-
 import click
 from rich.console import Console
 from rich.table import Table
@@ -36,6 +28,20 @@ from src.decide.circuit_breaker import CircuitBreaker
 from src.contain.resource_manager import ContainerResourceManager
 from src.core.config import get_settings
 from src.utils.platform import detect_platform, Platform, docker_available, ollama_available, apparmor_available, redis_available
+
+# Silence noisy loggers in CLI mode. This must run AFTER the imports above:
+# src.track.structured_logger raises "SecureAgentNet.Track" to INFO and attaches
+# its own handler at import time, which would otherwise undo this suppression.
+# The rich panels are the CLI's output channel, so keep the audit trail quiet.
+for _noisy in (
+    "SecureAgentNet",
+    "SecureAgentNet.Track",
+    "SecureAgentNet.Track.Indexer",
+    "SecureAgentNet.Identify.Registry",
+    "SecureAgentNet.Identify.Discovery",
+):
+    logging.getLogger(_noisy).setLevel(logging.ERROR)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 console = Console()
 
@@ -118,7 +124,7 @@ def init(seed: bool, mode: Optional[str]):
         "[bold green]SecureAgentNet initialized successfully[/]\n\n"
         f"[dim]Agents:[/] {IdentityRegistry.get_total_count()} registered\n"
         f"[dim]Log system:[/] LogIndexer ready\n"
-        f"[dim]Pipeline:[/] ITCD (Identify → Track → Decide → Contain)",
+        f"[dim]Pipeline:[/] ITCD (Identify → Track → Contain → Decide)",
         title="[bold cyan]SecureAgentNet[/]",
         border_style="cyan"
     ))
@@ -166,11 +172,11 @@ def register(name: str, agent_type: str, description: str, public_key: str, capa
     console.print(f"  Type: {agent_type}  |  Trust Score: 50.0  |  Status: active")
 
 
-@agent.command()
+@agent.command(name="list")
 @click.option("--status", default=None, help="Filter by status (active/suspended/rogue)")
 @click.option("--type", "agent_type", default=None, help="Filter by type (LangChain/AutoGen/CrewAI)")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def list(status: Optional[str], agent_type: Optional[str], json_output: bool):
+def list_agents(status: Optional[str], agent_type: Optional[str], json_output: bool):
     """List registered agents"""
     agents = IdentityRegistry.list_agents(status=status, agent_type=agent_type)
     if json_output:
@@ -303,6 +309,80 @@ def capabilities(agent_id: str):
     for cap, enabled in caps.items():
         icon = "[green]✓[/]" if enabled else "[red]✗[/]"
         console.print(f"  {icon} {cap}")
+
+
+@agent.command()
+@click.argument("agent_id")
+@click.option("--goal", required=True, help="The commissioned goal (what this agent is tasked to do)")
+@click.option("--approve-actions", "approve", default="", help="Comma-separated sanctioned actions (default: * = any)")
+@click.option("--forbid-actions", "forbid", default="", help="Comma-separated explicitly forbidden actions")
+@click.option("--expires-minutes", "expires", default=10080, type=int, help="Mandate lifetime in minutes (default 7 days)")
+def commission(agent_id: str, goal: str, approve: str, forbid: str, expires: int):
+    """Commission an agent with a mandate (its sanctioned goal + allowed actions)
+
+    The mandate is the anchor the DECIDE phase checks every action against to
+    detect goal hijacking. Re-running replaces the agent's previous mandate.
+    """
+    agent = IdentityRegistry.get_agent(agent_id) or IdentityRegistry.get_agent_by_name(agent_id)
+    if not agent:
+        _print_error(f"Agent '{agent_id}' not found")
+        return
+
+    from src.decide.intent_capsule import MandateRegistry, DEFAULT_FORBIDDEN_ACTIONS
+    approved = [a.strip() for a in approve.split(",") if a.strip()] or ["*"]
+    forbidden = [a.strip() for a in forbid.split(",") if a.strip()] or list(DEFAULT_FORBIDDEN_ACTIONS)
+
+    capsule = MandateRegistry.commission(
+        agent_id=agent["agent_id"],
+        original_goal=goal,
+        approved_actions=approved,
+        forbidden_actions=forbidden,
+        user_id="cli",
+        expires_in_minutes=expires,
+    )
+    console.print(Panel.fit(
+        f"[bold green]Agent commissioned[/]\n\n"
+        f"[bold]Agent:[/] {agent['name']} ({agent['agent_id'][:8]}...)\n"
+        f"[bold]Goal:[/] {goal}\n"
+        f"[bold]Approved actions:[/] {', '.join(approved)}\n"
+        f"[bold]Forbidden actions:[/] {', '.join(forbidden) or 'none'}\n"
+        f"[bold]Mandate ID:[/] [dim]{capsule.session_id}[/]\n"
+        f"[bold]Expires:[/] {capsule.expires_at.isoformat()}",
+        title="[bold cyan]Mandate Commissioned[/]",
+        border_style="cyan"
+    ))
+
+
+@agent.command()
+@click.argument("agent_id")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def mandate(agent_id: str, json_output: bool):
+    """Show an agent's active commissioned mandate"""
+    agent = IdentityRegistry.get_agent(agent_id) or IdentityRegistry.get_agent_by_name(agent_id)
+    if not agent:
+        _print_error(f"Agent '{agent_id}' not found")
+        return
+
+    from src.decide.intent_capsule import MandateRegistry
+    capsule = MandateRegistry.get_active(agent["agent_id"])
+    if capsule is None:
+        _print_warning(f"Agent '{agent['name']}' has no active mandate (fail-closed: it cannot act)")
+        return
+
+    if json_output:
+        _print_json(capsule.to_dict())
+        return
+
+    console.print(Panel.fit(
+        f"[bold]Agent:[/] {agent['name']} ({agent['agent_id'][:8]}...)\n"
+        f"[bold]Goal:[/] {capsule.original_goal}\n"
+        f"[bold]Approved actions:[/] {', '.join(capsule.approved_actions) or 'none'}\n"
+        f"[bold]Forbidden actions:[/] {', '.join(capsule.forbidden_actions) or 'none'}\n"
+        f"[bold]Expires:[/] {capsule.expires_at.isoformat() if hasattr(capsule.expires_at, 'isoformat') else capsule.expires_at}\n"
+        f"[bold]Mandate ID:[/] [dim]{capsule.session_id}[/]",
+        title=f"[bold cyan]Mandate: {agent['name']}[/]",
+        border_style="cyan"
+    ))
 
 
 @agent.command()
@@ -440,15 +520,20 @@ def run(agent_id: str, command_str: str, action: str, resource: str, intent: str
 
     elif status == "success":
         data = result.get("data", {})
+        exit_code = data.get("exit_code")
+        executed_ok = exit_code == 0
+        headline = "ACTION ALLOWED & EXECUTED" if executed_ok else "ACTION ALLOWED — EXECUTION FAILED"
+        color = "green" if executed_ok else "yellow"
+        title = "[green]✅ Allowed[/]" if executed_ok else "[yellow]⚠ Allowed (execution failed)[/]"
         console.print(Panel.fit(
-            f"[bold green]ACTION ALLOWED & EXECUTED[/]\n\n"
+            f"[bold {color}]{headline}[/]\n\n"
             f"[bold]Sandbox:[/] {data.get('sandbox_id', 'N/A')}\n"
             f"[bold]Exit Code:[/] {data.get('exit_code', 'N/A')}\n"
             f"[bold]Execution Time:[/] {data.get('execution_time_ms', 'N/A')}ms\n"
             f"[bold]Vault Receipt:[/] [dim]{result.get('vault_receipt', 'N/A')}[/]\n"
             f"[bold]Correlation ID:[/] [dim]{result.get('correlation_id', 'N/A')}[/]",
-            title="[green]✅ Allowed[/]",
-            border_style="green"
+            title=title,
+            border_style=color
         ))
 
         stdout = data.get("stdout", "").strip()
@@ -486,13 +571,19 @@ def evaluate(action_name: str, agent_id: str, resource: str, intent: str, payloa
         _print_error("Invalid JSON payload")
         return
 
+    resolved = IdentityRegistry.get_agent(agent_id) or IdentityRegistry.get_agent_by_name(agent_id)
+    resolved_id = resolved["agent_id"] if resolved else agent_id
+    from src.decide.intent_capsule import MandateRegistry
+    mandate = MandateRegistry.get_active(resolved_id)
+
     from src.decide.models import EvaluationRequest
     req = EvaluationRequest(
-        agent_id=agent_id,
+        agent_id=resolved_id,
         action_name=action_name,
         target_resource=resource,
         intent_summary=intent,
         payload=payload_dict,
+        commissioned_goal=mandate.original_goal if mandate else None,
     )
 
     from src.decide import DecisionGateway
@@ -744,7 +835,7 @@ def active():
 @click.confirmation_option(prompt="Activate kill-switch? This halts ALL agent operations")
 def activate():
     """Activate the kill-switch (halts all agents)"""
-    pipeline.kill_switch.record_denial("cli-manual")
+    pipeline.kill_switch.activate("cli-manual")
     _print_error("Kill-switch ACTIVATED — all agent operations halted")
 
 
@@ -756,13 +847,13 @@ def deactivate():
     _print_success("Kill-switch deactivated — operations may resume")
 
 
-@security.group()
-def circuit_breaker():
+@security.group(name="circuit-breaker")
+def circuit_breaker_group():
     """View circuit breaker status"""
     pass
 
 
-@circuit_breaker.command()
+@circuit_breaker_group.command()
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def status(json_output: bool):
     """Show circuit breaker states"""
@@ -851,11 +942,12 @@ def provision(agent_id: str, image: str, cpu: float, memory: int):
     ))
 
 
-@contain.command()
+@contain.command(name="list")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def list(json_output: bool):
+def list_containers(json_output: bool):
     """List active containers"""
     from src.contain.resource_manager import ContainerResourceManager
+    ContainerResourceManager._ensure_loaded()
     containers = ContainerResourceManager._containers
 
     if json_output:
@@ -885,9 +977,93 @@ def list(json_output: bool):
 def stop(container_id: str):
     """Stop and remove a container"""
     from src.contain.resource_manager import ContainerResourceManager
+    ContainerResourceManager._ensure_loaded()
+    if container_id not in ContainerResourceManager._containers:
+        _print_error(f"Container '{container_id}' not found")
+        return
     ContainerResourceManager.update_status(container_id, "stopped")
     ContainerResourceManager.remove_container(container_id)
     _print_success(f"Container {container_id} stopped and removed")
+
+
+# ============================================================
+#  MCP VETTING COMMANDS
+# ============================================================
+
+@click.group()
+def mcp():
+    """Vet external MCP servers for tool poisoning"""
+    pass
+
+
+_VERDICT_STYLE = {"safe": "[green]safe[/]", "suspicious": "[yellow]suspicious[/]", "malicious": "[red]malicious[/]"}
+
+
+@mcp.command(name="vet")
+@click.argument("manifest", type=click.Path(exists=True))
+@click.option("--server-id", "server_id", default=None, help="Identifier for this MCP server (default: manifest filename)")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def mcp_vet(manifest: str, server_id: Optional[str], json_output: bool):
+    """Vet an MCP server's tool catalog (JSON manifest) for injected instructions
+
+    MANIFEST: a JSON file — either a list of tools or an object with a "tools" key.
+    Each tool is {"name", "description", "input_schema"}.
+    """
+    from src.identify.mcp_vetting import McpServerRegistry
+
+    raw = json.loads(Path(manifest).read_text())
+    tools = raw.get("tools", raw) if isinstance(raw, dict) else raw
+    if not isinstance(tools, list):
+        _print_error("Manifest must be a list of tools or an object with a 'tools' list")
+        return
+
+    sid = server_id or Path(manifest).stem
+    verdicts = McpServerRegistry.register_and_vet(sid, tools)
+
+    if json_output:
+        _print_json({"server_id": sid, "tools": [v.to_dict() for v in verdicts]})
+        return
+
+    rows = []
+    for v in verdicts:
+        rows.append([
+            v.tool_name,
+            _VERDICT_STYLE.get(v.verdict, v.verdict),
+            f"{v.risk_score:.2f}",
+            ("\n".join(v.signals))[:80] or "—",
+        ])
+    _print_table(f"MCP Vetting — server '{sid}'", ["Tool", "Verdict", "Risk", "Signals"], rows)
+
+    malicious = [v for v in verdicts if v.is_malicious]
+    if malicious:
+        _print_error(f"{len(malicious)} tool(s) flagged MALICIOUS — agents will be blocked from using them")
+        for v in malicious:
+            console.print(f"  [red]●[/] {v.tool_name}: {'; '.join(v.signals)}")
+    else:
+        _print_success("No malicious tools detected")
+
+
+@mcp.command(name="list")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def mcp_list(json_output: bool):
+    """List vetted MCP servers and their tool verdicts"""
+    from src.identify.mcp_vetting import McpServerRegistry
+    servers = McpServerRegistry.all_servers()
+
+    if json_output:
+        _print_json(servers)
+        return
+    if not servers:
+        _print_info("No MCP servers vetted yet — run [bold]san mcp vet <manifest.json>[/]")
+        return
+
+    for sid, tools in servers.items():
+        rows = [[
+            t["tool_name"], _VERDICT_STYLE.get(t["verdict"], t["verdict"]),
+            f"{t['risk_score']:.2f}", t.get("vetted_at", "")[:19],
+        ] for t in tools.values()]
+        _print_table(f"Server '{sid}'", ["Tool", "Verdict", "Risk", "Vetted"], rows,
+                     caption=f"{len(rows)} tool(s)")
 
 
 # ============================================================
@@ -1108,10 +1284,10 @@ def show():
     _print_table("Configuration", ["Key", "Value"], rows)
 
 
-@config_cmd.command()
+@config_cmd.command(name="set")
 @click.argument("key")
 @click.argument("value")
-def set(key: str, value: str):
+def set_config(key: str, value: str):
     """Set a configuration value (requires restart)"""
     _print_info(f"Configuration changes require editing .env or restarting the server")
     _print_info(f"Would set: {key} = {value}")

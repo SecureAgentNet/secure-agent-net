@@ -14,7 +14,7 @@ from src.decide import DecisionGateway
 from src.decide.models import EvaluationRequest
 from src.decide.circuit_breaker import CircuitBreaker
 from src.decide.kill_switch import KillSwitchController
-from src.decide.intent_capsule import IntentCapsule
+from src.decide.intent_capsule import IntentCapsule, MandateRegistry
 from src.contain.container_provisioner import ContainerProvisioner
 from src.contain.models import ExecutionRequest, SandboxConfig
 from src.contain.resource_manager import ContainerResourceManager
@@ -107,30 +107,41 @@ class ITCDPipeline:
             IdentityRegistry.update_trust_score(agent_id, -5)
             return {"status": "blocked", "reason": reason, "evaluated_by": "CapabilityProfiler", "phase": "IDENTIFY"}
 
-        if intent_capsule is not None:
-            if intent_capsule.is_expired():
-                raise IntentCapsuleExpiredError(
-                    f"Session {intent_capsule.session_id} has expired"
-                )
-            hijack = intent_capsule.detect_goal_hijack(
-                request.action_name, request.intent_summary
-            )
-            if hijack:
-                IdentityRegistry.update_trust_score(agent_id, -20)
-                self.rogue_detector.record_failure(agent_id)
-                self.kill_switch.record_denial(agent_id)
-                self._log_event(agent_id, "goal_hijack_detected", PipelinePhase.IDENTIFY,
-                                EventSeverity.CRITICAL, {"action": request.action_name}, correlation_id)
-                return {"status": "blocked",
-                        "reason": f"Goal hijacking detected: action '{request.action_name}' deviates from capsule intent",
-                        "evaluated_by": "IntentCapsule", "phase": "IDENTIFY"}
+        # === MANDATE CHECK ===
+        # An explicit per-call capsule wins; otherwise load the agent's durable,
+        # commissioned mandate. Policy is fail-closed: no mandate = no action.
+        mandate = intent_capsule or MandateRegistry.get_active(agent_id)
+        if mandate is None:
+            self.circuit_breaker.record_failure(agent_id)
+            self._log_event(agent_id, "no_mandate", PipelinePhase.IDENTIFY,
+                            EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
+            return {"status": "blocked",
+                    "reason": "Agent has no active mandate — it has not been commissioned for any task",
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
 
-            if not intent_capsule.is_action_allowed(request.action_name):
-                self._log_event(agent_id, "action_forbidden_by_capsule", PipelinePhase.IDENTIFY,
-                                EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
-                return {"status": "blocked",
-                        "reason": f"Action '{request.action_name}' is forbidden by session capsule",
-                        "evaluated_by": "IntentCapsule", "phase": "IDENTIFY"}
+        if mandate.is_expired():
+            self._log_event(agent_id, "mandate_expired", PipelinePhase.IDENTIFY,
+                            EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
+            return {"status": "blocked",
+                    "reason": f"Agent mandate {mandate.session_id} has expired — re-commission required",
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
+
+        if mandate.detect_goal_hijack(request.action_name, request.intent_summary):
+            IdentityRegistry.update_trust_score(agent_id, -20)
+            self.rogue_detector.record_failure(agent_id)
+            self.kill_switch.record_denial(agent_id)
+            self._log_event(agent_id, "goal_hijack_detected", PipelinePhase.IDENTIFY,
+                            EventSeverity.CRITICAL, {"action": request.action_name}, correlation_id)
+            return {"status": "blocked",
+                    "reason": f"Goal hijacking detected: action '{request.action_name}' deviates from commissioned mandate",
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
+
+        if not mandate.is_action_allowed(request.action_name):
+            self._log_event(agent_id, "action_outside_mandate", PipelinePhase.IDENTIFY,
+                            EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
+            return {"status": "blocked",
+                    "reason": f"Action '{request.action_name}' is outside the agent's commissioned mandate",
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
 
         IdentityRegistry.update_trust_score(agent_id, 1)
         self._log_event(agent_id, "identify_passed", PipelinePhase.IDENTIFY, correlation_id=correlation_id)
@@ -165,6 +176,7 @@ class ITCDPipeline:
                     target_resource=request.target_resource,
                     intent_summary=request.intent_summary,
                     payload=request.payload,
+                    commissioned_goal=mandate.original_goal,
                 )
                 decision = self.gateway.evaluate_request(eval_req)
             except Exception:

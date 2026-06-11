@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from src.identify.mcp_gateway import router as auth_router, mcp_router
 # Flask dashboard disabled (requires Docker/Redis) — use FastAPI + static site instead
 # from src.interfaces.web_dashboard.app import app as dashboard_app
-from src.interfaces.api import hitl_router, behavior_router, team_router, key_router, config_router, report_router, blog_router
+from src.interfaces.api import hitl_router, behavior_router, team_router, key_router, config_router, report_router, blog_router, dashboard_router
 from src.interfaces.api.metrics import refresh_metrics, generate_latest, init_metrics
 from prometheus_client import REGISTRY
 from src.identify.identity_registry import IdentityRegistry
@@ -120,6 +120,7 @@ app.include_router(key_router)
 app.include_router(config_router)
 app.include_router(report_router)
 app.include_router(blog_router)
+app.include_router(dashboard_router)
 
 # Flask dashboard disabled — requires Docker/Redis on host
 # app.mount("/dashboard", WSGIMiddleware(dashboard_app))
@@ -173,9 +174,10 @@ async def operator_login(username: str, password: str):
     from src.database.models import User
     from src.utils.crypto import create_access_token
     import hashlib
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     from fastapi import HTTPException
 
+    settings = get_settings()
     with get_db_session() as session:
         user = session.query(User).filter(User.username == username, User.active == True).first()
         if not user:
@@ -189,12 +191,14 @@ async def operator_login(username: str, password: str):
         session.commit()
 
         token = create_access_token(
-            data={
+            {
                 "sub": str(user.user_id),
                 "username": user.username,
                 "role": user.role,
             },
-            expires_delta_minutes=480,
+            settings.resolve_secret_key(),
+            settings.agent_jwt_algorithm,
+            expires_delta=timedelta(minutes=480),
         )
         return {
             "access_token": token,
@@ -231,6 +235,12 @@ uploads_path = Path(__file__).parent.parent / "uploads"
 uploads_path.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 logger.info("Mounted uploads directory from %s", uploads_path)
+
+# Operator console (must be mounted before the catch-all "/" website mount).
+console_path = Path(__file__).parent / "interfaces" / "console"
+if console_path.exists():
+    app.mount("/console", StaticFiles(directory=str(console_path), html=True), name="console")
+    logger.info("Mounted operator console from %s", console_path)
 
 website_path = Path(__file__).parent.parent / "website"
 if website_path.exists():

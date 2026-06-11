@@ -85,7 +85,7 @@ san = "src.interfaces.cli.terminal:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src", "src.*"]
+include = ["src", "src.*", "secureagentnet", "secureagentnet.*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.yaml", "*.yml", "*.ini"]

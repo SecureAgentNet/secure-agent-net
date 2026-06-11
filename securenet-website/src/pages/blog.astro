@@ -1,497 +1,84 @@
 ---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import { getCollection } from 'astro:content';
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+);
+const featured = posts.find((p) => p.data.featured) ?? posts[0];
+const rest = posts.filter((p) => p.id !== featured.id);
+
+const fmt = (d: Date) => d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 ---
 
-<html class="dark" lang="en"><head>
-<meta charset="utf-8" />
-<meta content="width=device-width, initial-scale=1.0" name="viewport" />
-<title>SAN | Security Research &amp; Intelligence Mesh</title>
-<script src="/assets/03ba5d9f9e95fc3599acebcbe7e5fb9a.js" is:inline="" />
-<link href="/assets/b844f50bd55d628909073218a3051661.css" rel="stylesheet" />
-<link href="/assets/a39f5c6fcbb87b419667ec984d2e579a.css" rel="stylesheet" />
-<link href="/assets/a39f5c6fcbb87b419667ec984d2e579a.css" rel="stylesheet" />
+<SiteLayout title="Blog | SAN">
+  <main class="pt-24 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full grid-bg">
+    <header class="mb-12">
+      <h1 class="font-display text-display text-white mb-3">The SAN Blog</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
+        Notes on securing autonomous AI agents — the threats, the architecture, and the case for
+        building the trust boundary before the ecosystem ossifies.
+      </p>
+    </header>
+
+    <!-- Featured -->
+    <a href={`/blog/${featured.id}/`} class="block mb-16 group">
+      <article class="relative overflow-hidden rounded-xl glass-card border border-primary/20 grid lg:grid-cols-2 gap-0">
+        <div class="relative h-[220px] lg:h-auto bg-gradient-to-br from-primary/15 via-surface-container to-secondary/10 flex items-center justify-center">
+          <span class="material-symbols-outlined text-primary/40 text-[160px]">shield</span>
+        </div>
+        <div class="p-8 lg:p-12 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-5">
+            <span class="px-3 py-1 bg-primary/10 border border-primary/30 text-primary font-label-caps text-label-caps rounded-full">FEATURED</span>
+            <span class="text-outline-variant font-code-md text-code-md">{featured.data.readTime} READ</span>
+          </div>
+          <h2 class="font-display text-2xl md:text-4xl mb-4 text-on-surface leading-tight group-hover:text-primary transition-colors">{featured.data.title}</h2>
+          <p class="font-body-md text-body-md text-on-surface-variant mb-6 max-w-xl">{featured.data.description}</p>
+          <div class="font-code-md text-code-md text-on-surface-variant/70">{featured.data.authors.join(', ')} · {fmt(featured.data.date)}</div>
+        </div>
+      </article>
+    </a>
+
+    <!-- Grid -->
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-gutter">
+      {rest.map((p) => (
+        <a href={`/blog/${p.id}/`} class="block group">
+          <article class="glass-card rounded-xl flex flex-col h-full overflow-hidden">
+            <div class="h-40 bg-gradient-to-br from-surface-container-high to-surface-container-lowest flex items-center justify-center relative">
+              <span class={`material-symbols-outlined text-[64px] opacity-40 ${p.data.accent}`}>article</span>
+              <div class="absolute bottom-3 left-3 flex gap-2">
+                {p.data.tags.map((t) => (
+                  <span class="bg-black/80 text-on-surface-variant text-[10px] font-code-md px-2 py-0.5 border border-white/10 rounded">{t}</span>
+                ))}
+              </div>
+            </div>
+            <div class="p-6 flex flex-col flex-grow">
+              <div class="flex justify-between items-center mb-4 font-code-md text-code-md">
+                <span class={p.data.accent}>{fmt(p.data.date)}</span>
+                <span class="text-outline-variant text-xs flex items-center gap-1"><span class="material-symbols-outlined text-sm">schedule</span> {p.data.readTime}</span>
+              </div>
+              <h3 class="font-headline-md text-[18px] mb-3 text-on-surface group-hover:text-primary transition-colors">{p.data.title}</h3>
+              <p class="text-on-surface-variant text-body-sm mb-6 flex-grow">{p.data.description}</p>
+              <div class="flex items-center justify-between pt-4 border-t border-white/5">
+                <span class="font-label-caps text-[10px] text-on-surface-variant">{p.data.authors.join(', ')}</span>
+                <span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</span>
+              </div>
+            </div>
+          </article>
+        </a>
+      ))}
+    </div>
+  </main>
+</SiteLayout>
+
 <style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        .grid-bg {
-            background-image: radial-gradient(rgba(76, 215, 246, 0.05) 1px, transparent 0);
-            background-size: 32px 32px;
-        }
-        .glass-card {
-            background: rgba(11, 15, 25, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .cyan-glow {
-            box-shadow: 0 0 20px rgba(76, 215, 246, 0.15);
-        }
-        @keyframes pulse-cyan {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .animate-pulse-cyan {
-            animation: pulse-cyan 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        .terminal-cursor {
-            display: inline-block;
-            width: 8px;
-            height: 18px;
-            background-color: #4cd7f6;
-            animation: blink 1s step-end infinite;
-            vertical-align: middle;
-        }
-        @keyframes blink {
-            50% { opacity: 0; }
-        }
-    </style>
-<script id="tailwind-config">
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            "colors": {
-                    "on-background": "#dfe2f1",
-                    "surface-bright": "#353944",
-                    "inverse-primary": "#00687a",
-                    "surface-container-lowest": "#0a0e18",
-                    "on-primary-fixed-variant": "#004e5c",
-                    "inverse-on-surface": "#2c303b",
-                    "surface-variant": "#313540",
-                    "tertiary": "#ffb3ad",
-                    "primary": "#4cd7f6",
-                    "on-surface-variant": "#bcc9cd",
-                    "inverse-surface": "#dfe2f1",
-                    "background": "#0f131d",
-                    "secondary-container": "#00a572",
-                    "secondary": "#4edea3",
-                    "tertiary-fixed": "#ffdad7",
-                    "on-tertiary-container": "#7e000f",
-                    "primary-fixed-dim": "#4cd7f6",
-                    "on-secondary": "#003824",
-                    "outline-variant": "#3d494c",
-                    "error-container": "#93000a",
-                    "surface-tint": "#4cd7f6",
-                    "surface-container": "#1c1f2a",
-                    "secondary-fixed-dim": "#4edea3",
-                    "on-secondary-fixed-variant": "#005236",
-                    "primary-fixed": "#acedff",
-                    "on-surface": "#dfe2f1",
-                    "error": "#ffb4ab",
-                    "tertiary-container": "#ff817a",
-                    "surface": "#0f131d",
-                    "tertiary-fixed-dim": "#ffb3ad",
-                    "on-primary-container": "#00424f",
-                    "on-error": "#690005",
-                    "on-secondary-container": "#00311f",
-                    "on-primary-fixed": "#001f26",
-                    "secondary-fixed": "#6ffbbe",
-                    "primary-container": "#06b6d4",
-                    "surface-container-highest": "#313540",
-                    "surface-container-high": "#262a35",
-                    "on-tertiary-fixed-variant": "#930013",
-                    "on-tertiary-fixed": "#410004",
-                    "surface-container-low": "#171b26",
-                    "on-error-container": "#ffdad6",
-                    "on-primary": "#003640",
-                    "outline": "#869397",
-                    "surface-dim": "#0f131d",
-                    "on-tertiary": "#68000a",
-                    "on-secondary-fixed": "#002113"
-            },
-            "borderRadius": {
-                    "DEFAULT": "0.125rem",
-                    "lg": "0.25rem",
-                    "xl": "0.5rem",
-                    "full": "0.75rem"
-            },
-            "spacing": {
-                    "unit": "4px",
-                    "margin-mobile": "16px",
-                    "margin-desktop": "48px",
-                    "gutter": "24px",
-                    "container-max": "1440px"
-            },
-            "fontFamily": {
-                    "code-md": ["JetBrains Mono"],
-                    "headline-md": ["Space Grotesk"],
-                    "body-lg": ["Inter"],
-                    "headline-lg-mobile": ["Space Grotesk"],
-                    "display": ["Space Grotesk"],
-                    "body-md": ["Inter"],
-                    "body-sm": ["Inter"],
-                    "label-caps": ["JetBrains Mono"],
-                    "headline-lg": ["Space Grotesk"]
-            },
-            "fontSize": {
-                    "code-md": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
-                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "500"}],
-                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
-                    "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
-                    "display": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
-                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
-                    "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
-                    "label-caps": ["12px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600"}],
-                    "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}]
-            }
-          }
-        }
-      }
-    </script>
-</head>
-<body class="bg-background text-on-background font-body-md selection:bg-primary/30 selection:text-primary grid-bg min-h-screen flex flex-col">
-<!-- Top Navigation -->
-<nav class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface/70 backdrop-blur-xl border-b border-white/10">
-<div class="flex items-center gap-12">
-<a href="/" class="font-headline-md text-headline-md tracking-tighter text-primary drop-shadow-[0_0_8px_rgba(76,215,246,0.4)]">SAN</a>
-<div class="hidden md:flex gap-8 items-center"><a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-300" href="/architecture/">ITCD Pipeline</a><a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-300" href="/features/">Threat Intel</a><a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-300" href="/features/">Assets</a><a class="text-primary border-b-2 border-primary font-bold pb-1" href="/blog/">Blog</a></div>
-</div>
-<div class="flex items-center gap-6">
-<div class="relative hidden lg:block">
-<input class="bg-surface-container-lowest border border-outline-variant px-4 py-1.5 rounded-lg text-body-sm focus:outline-none focus:border-primary transition-all w-64" placeholder="Search Intel..." type="text" />
-<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline-variant text-sm">search</span>
-</div>
-<div class="flex items-center gap-4">
-<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
-<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">settings</button>
-<img alt="Security Analyst Avatar" class="w-8 h-8 rounded-full border border-primary/30" src="/assets/96bef7c415f55fdac72a20fde1aa1297.png" />
-</div>
-</div>
-</nav>
-<main class="flex-grow pt-24 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full">
-<!-- Featured Hero -->
-<section class="relative group cursor-pointer mb-16 overflow-hidden rounded-xl glass-card border border-primary/20">
-<div class="grid lg:grid-cols-2 gap-0">
-<div class="relative h-[300px] lg:h-[500px] overflow-hidden">
-<img class="w-full h-full object-cover grayscale brightness-75 group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700" data-alt="A cinematic cybernetic visualization showing a glowing neural network structure of white light lines on a deep obsidian background. Semi-transparent iridescent cyan energy shields wrap around the vulnerable core nodes, suggesting advanced protection. The lighting is cold and technical, with a slight holographic depth and faint grid patterns visible in the atmosphere. The overall mood is high-stakes, futuristic, and hyper-reliable security." src="/assets/dfbe26bc93b1dff0eb8ef09cc7c5b0e6.png" />
-<div class="absolute inset-0 bg-gradient-to-r from-background to-transparent lg:hidden" />
-</div>
-<div class="p-8 lg:p-12 flex flex-col justify-center relative bg-gradient-to-l from-surface-container-lowest/90 to-transparent">
-<div class="flex items-center gap-3 mb-6">
-<span class="px-3 py-1 bg-primary/10 border border-primary/30 text-primary font-label-caps text-label-caps rounded-full">FEATURED RESEARCH</span>
-<span class="text-outline-variant font-code-md text-code-md">24 MIN READ</span>
-</div>
-<h1 class="font-display text-display mb-6 text-on-surface leading-tight">The State of Agentic Security 2024</h1>
-<p class="font-body-lg text-body-lg text-on-surface-variant mb-8 max-w-xl">
-                        An exhaustive audit of autonomous agent behaviors in adversary emulation and the defensive strategies required to secure decentralized intelligence swarms.
-                    </p>
-<div class="flex items-center gap-6">
-<button class="bg-primary text-on-primary px-8 py-3 font-headline-md text-headline-md rounded hover:bg-primary-container transition-all flex items-center gap-2 group/btn">
-                            Read Report
-                            <span class="material-symbols-outlined group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-</button>
-<div class="flex -space-x-2">
-<img alt="Author 1" class="w-8 h-8 rounded-full border-2 border-background" src="/assets/8ce27aa48d0da04d630a6fb26935fcd7.png" />
-<img alt="Author 2" class="w-8 h-8 rounded-full border-2 border-background" src="/assets/eb7db74f2226a740d003441299b98b0e.png" />
-<div class="w-8 h-8 rounded-full bg-surface-container-high border-2 border-background flex items-center justify-center text-[10px] font-bold">+2</div>
-</div>
-</div>
-</div>
-</div>
-<div class="absolute top-0 right-0 p-4 opacity-30 group-hover:opacity-100 transition-opacity">
-<div class="w-3 h-3 rounded-full bg-primary animate-pulse-cyan" />
-</div>
-</section>
-<!-- Categories & Filter -->
-<div class="flex flex-wrap items-center justify-between gap-6 mb-12 border-b border-white/5 pb-8">
-<div class="flex flex-wrap items-center gap-4">
-<button class="px-6 py-2 bg-primary text-on-primary font-label-caps text-label-caps rounded-lg">All Intel</button>
-<button class="px-6 py-2 bg-white/5 hover:bg-white/10 text-on-surface-variant font-label-caps text-label-caps rounded-lg transition-all">ITCD Research</button>
-<button class="px-6 py-2 bg-white/5 hover:bg-white/10 text-on-surface-variant font-label-caps text-label-caps rounded-lg transition-all">Threat Intelligence</button>
-<button class="px-6 py-2 bg-white/5 hover:bg-white/10 text-on-surface-variant font-label-caps text-label-caps rounded-lg transition-all">Engineering</button>
-<button class="px-6 py-2 bg-white/5 hover:bg-white/10 text-on-surface-variant font-label-caps text-label-caps rounded-lg transition-all">Compliance</button>
-</div>
-<div class="flex items-center gap-2 text-outline-variant hover:text-primary cursor-pointer transition-colors">
-<span class="material-symbols-outlined">filter_list</span>
-<span class="font-label-caps text-label-caps">Advanced Filter</span>
-</div>
-</div>
-<div class="grid lg:grid-cols-12 gap-gutter">
-<!-- Article Grid -->
-<div class="lg:col-span-8 grid md:grid-cols-2 gap-gutter" id="articleGrid">
-<!-- Card 1 -->
-<article class="glass-card flex flex-col group">
-<div class="h-48 overflow-hidden relative">
-<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60 group-hover:opacity-100" data-alt="A macro close-up of a sophisticated computer chip architecture with glowing cyan pathways. Small particles of light represent data packets moving through a high-tech processor. The background is a dark, matte obsidian with soft industrial reflections and a high-key focus on the intricate silver and gold circuitry. The mood is clinical, hyper-reliable, and technologically superior, adhering to a minimalist dark-mode aesthetic." src="/assets/fc82a71246f127fa2ecfe609cc2e55d7.png" />
-<div class="absolute bottom-3 left-3 flex gap-2">
-<span class="bg-black/80 text-secondary text-[10px] font-code-md px-2 py-0.5 border border-secondary/30">#ZeroTrust</span>
-<span class="bg-black/80 text-primary text-[10px] font-code-md px-2 py-0.5 border border-primary/30">#LLM-Audit</span>
-</div>
-</div>
-<div class="p-6 flex flex-col flex-grow">
-<div class="flex justify-between items-center mb-4">
-<span class="text-primary font-code-md text-code-md">04.NOV.2024</span>
-<span class="text-outline-variant text-xs flex items-center gap-1">
-<span class="material-symbols-outlined text-sm">schedule</span> 12 MIN
-                            </span>
-</div>
-<h3 class="font-headline-md text-headline-md mb-4 text-on-surface group-hover:text-primary transition-colors"><a href="/blog/prompt-injection/">Detecting Prompt Injection in Autonomous Swarms</a></h3>
-<p class="text-on-surface-variant text-body-sm mb-6 flex-grow">
-                            How we developed a heuristic-based detection layer to intercept adversarial instructions before they compromise the swarm collective.
-                        </p>
-<div class="flex items-center justify-between pt-6 border-t border-white/5">
-<div class="flex items-center gap-3">
-<img alt="Author" class="w-6 h-6 rounded-full grayscale" src="/assets/caca07c21c85be87588d81859d04d570.png" />
-<span class="font-label-caps text-[10px] text-on-surface">DR. ELIAS VANCE</span>
-</div>
-<a href="/blog/prompt-injection/" class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</a>
-</div>
-</div>
-</article>
-<!-- Card 2 -->
-<article class="glass-card flex flex-col group">
-<div class="h-48 overflow-hidden relative">
-<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60 group-hover:opacity-100" data-alt="An abstract visualization of a secure data vault within a digital grid. Geometric blocks in dark slate are interconnected by neon emerald and electric cyan fiber-optic lines. Subtle glowing particles suggest an active encryption process. The lighting is low-key, with strong atmospheric depth and a technical, mission-control aesthetic. Every element feels stable, fast, and impenetrable." src="/assets/4d53715b7935f2120191409baa601b2b.png" />
-<div class="absolute bottom-3 left-3 flex gap-2">
-<span class="bg-black/80 text-secondary text-[10px] font-code-md px-2 py-0.5 border border-secondary/30">#K8s</span>
-<span class="bg-black/80 text-primary text-[10px] font-code-md px-2 py-0.5 border border-primary/30">#CloudSec</span>
-</div>
-</div>
-<div class="p-6 flex flex-col flex-grow">
-<div class="flex justify-between items-center mb-4">
-<span class="text-primary font-code-md text-code-md">28.OCT.2024</span>
-<span class="text-outline-variant text-xs flex items-center gap-1">
-<span class="material-symbols-outlined text-sm">schedule</span> 15 MIN
-                            </span>
-</div>
-<h3 class="font-headline-md text-headline-md mb-4 text-on-surface group-hover:text-primary transition-colors"><a href="/blog/research-detail/">Hardening Kubernetes for AI Workloads</a></h3>
-<p class="text-on-surface-variant text-body-sm mb-6 flex-grow">
-                            Security configurations for orchestrating GPU-intensive LLM clusters while maintaining strict network isolation.
-                        </p>
-<div class="flex items-center justify-between pt-6 border-t border-white/5">
-<div class="flex items-center gap-3">
-<img alt="Author" class="w-6 h-6 rounded-full grayscale" src="/assets/3cc14dd3eb0c62ad42960c2e8cbca0e7.png" />
-<span class="font-label-caps text-[10px] text-on-surface">SARAH JENKINS</span>
-</div>
-<a href="/blog/research-detail/" class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</a>
-</div>
-</div>
-</article>
-<!-- Card 3 -->
-<article class="glass-card flex flex-col group md:col-span-2 lg:col-span-2">
-<div class="grid md:grid-cols-2">
-<div class="h-64 md:h-full overflow-hidden relative">
-<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-60 group-hover:opacity-100" data-alt="A technical visualization of data scrubbing and redaction. Holographic text layers and code snippets are being partially masked by clean, glowing cyan rectangular overlays. The aesthetic is clean, fast, and clinical, with a high concentration on data density. The palette consists of deep obsidian, charcoal slate, and vibrant electric cyan accents, creating a high-tech mission control feel." src="/assets/f7e5015775a8163094cb45c1f981f589.png" />
-</div>
-<div class="p-8">
-<div class="flex justify-between items-center mb-4">
-<span class="text-primary font-code-md text-code-md">22.OCT.2024</span>
-<span class="text-outline-variant text-xs flex items-center gap-1">
-<span class="material-symbols-outlined text-sm">schedule</span> 18 MIN
-                                </span>
-</div>
-<h3 class="font-display text-headline-lg mb-6 text-on-surface group-hover:text-primary transition-colors"><a href="/docs/">PII Redaction at the Edge: SAN's Real-time Approach</a></h3>
-<p class="text-on-surface-variant text-body-md mb-8">
-                                Deep dive into our proprietary edge inference model that sanitizes user data before it ever reaches central storage, ensuring GDPR compliance by design.
-                            </p>
-<div class="flex items-center justify-between">
-<div class="flex items-center gap-4">
-<img alt="Author" class="w-10 h-10 rounded-full border border-primary/20" src="/assets/7dd0a8f84078c81d7c61f93846c7adc7.png" />
-<div>
-<div class="font-headline-md text-on-surface text-sm">MARCUS CHEN</div>
-<div class="font-label-caps text-outline-variant text-[10px]">HEAD OF PRIVACY ENG</div>
-</div>
-</div>
-<a href="/docs/" class="border border-primary/40 text-primary px-6 py-2 rounded font-label-caps text-label-caps hover:bg-primary/10 transition-all">READ MORE</a>
-</div>
-</div>
-</div>
-</article>
-</div>
-<!-- Sidebar -->
-<aside class="lg:col-span-4 space-y-gutter">
-<!-- Newsletter Module -->
-<div class="glass-card p-8 border-l-4 border-l-primary cyan-glow">
-<h4 class="font-headline-md text-headline-md text-primary mb-2">Join the Intelligence Mesh</h4>
-<p class="text-on-surface-variant text-body-sm mb-8">Receive weekly technical deep-dives and emerging threat vectors directly to your terminal.</p>
-<div class="bg-black p-4 border border-outline-variant/30 rounded-lg font-code-md text-code-md relative mb-6">
-<div class="flex items-center gap-2 text-secondary mb-2">
-<span class="material-symbols-outlined text-xs">terminal</span>
-<span class="">root@san-research:~#</span>
-</div>
-<div class="flex">
-<span class="text-primary mr-2">&gt;</span>
-<input class="bg-transparent border-none p-0 focus:ring-0 text-on-background placeholder:text-outline-variant w-full caret-transparent" id="terminalInput" placeholder="enter_email_address" type="email" />
-<span class="terminal-cursor" />
-</div>
-</div>
-<button class="w-full py-3 bg-primary text-on-primary font-headline-md text-headline-md rounded hover:shadow-[0_0_15px_rgba(76,215,246,0.4)] transition-all">
-                        DEPLOY SUBSCRIPTION
-                    </button>
-<p class="mt-4 text-[10px] text-outline-variant text-center uppercase tracking-widest">Encrypted Transmission Secured</p>
-</div>
-<!-- Recent Research Links -->
-<div class="glass-card p-8">
-<h4 class="font-headline-md text-headline-md text-on-surface mb-6 border-b border-white/5 pb-4">Latest Advisories</h4>
-<ul class="space-y-6">
-<li class="group cursor-pointer">
-<span class="text-[10px] font-code-md text-outline-variant">SAN-2024-089</span>
-<h5 class="font-body-md text-on-surface group-hover:text-primary transition-colors">Vulnerability in Python Asyncio Swarms</h5>
-<div class="flex items-center gap-3 mt-2">
-<span class="bg-error-container/20 text-error text-[10px] font-label-caps px-2 py-0.5 rounded">CRITICAL</span>
-<span class="text-outline-variant text-[10px] font-code-md">OCT 14</span>
-</div>
-</li>
-<li class="group cursor-pointer">
-<span class="text-[10px] font-code-md text-outline-variant">SAN-2024-088</span>
-<h5 class="font-body-md text-on-surface group-hover:text-primary transition-colors">Exploiting LLM Context Window Leaks</h5>
-<div class="flex items-center gap-3 mt-2">
-<span class="bg-secondary-container/20 text-secondary text-[10px] font-label-caps px-2 py-0.5 rounded">MODERATE</span>
-<span class="text-outline-variant text-[10px] font-code-md">OCT 12</span>
-</div>
-</li>
-<li class="group cursor-pointer">
-<span class="text-[10px] font-code-md text-outline-variant">SAN-2024-087</span>
-<h5 class="font-body-md text-on-surface group-hover:text-primary transition-colors">Hardware Backdoors in GPU-Clusters</h5>
-<div class="flex items-center gap-3 mt-2">
-<span class="bg-error-container/20 text-error text-[10px] font-label-caps px-2 py-0.5 rounded">CRITICAL</span>
-<span class="text-outline-variant text-[10px] font-code-md">OCT 09</span>
-</div>
-</li>
-</ul>
-<button class="w-full mt-8 py-2 border border-outline-variant text-outline-variant hover:text-primary hover:border-primary transition-all font-label-caps text-label-caps rounded">VIEW FULL ARCHIVE</button>
-</div>
-<!-- Status Monitor -->
-<div class="glass-card p-6 bg-surface-container-low/50">
-<div class="flex items-center justify-between mb-4">
-<span class="font-label-caps text-label-caps text-outline-variant">SYSTEM STATUS</span>
-<div class="flex items-center gap-2">
-<div class="w-2 h-2 rounded-full bg-secondary animate-pulse" />
-<span class="text-secondary font-code-md text-xs">LIVE</span>
-</div>
-</div>
-<div class="space-y-3">
-<div class="flex justify-between text-xs font-code-md">
-<span class="text-on-surface-variant">Vulnerability Index:</span>
-<span class="text-primary">0.02%</span>
-</div>
-<div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-<div class="bg-primary h-full w-[2%]" />
-</div>
-<div class="flex justify-between text-xs font-code-md">
-<span class="text-on-surface-variant">Active Agents:</span>
-<span class="text-primary">1,204,992</span>
-</div>
-</div>
-</div>
-</aside>
-</div>
-</main>
-<!-- Footer -->
-<footer class="w-full py-8 px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-4 mt-auto border-t border-white/5 bg-background">
-<div class="flex items-center gap-4"><span class="font-headline-md text-primary">SAN</span><span class="font-code-md text-code-md text-outline text-xs">© 2026 SecureAgentNet. Encrypted Connection Active.</span></div>
-<div class="flex gap-8"><a class="text-outline font-body-sm text-body-sm hover:text-secondary transition-colors" href="/docs/">Documentation</a><a class="text-outline font-body-sm text-body-sm hover:text-secondary transition-colors" href="/docs/">API Reference</a><a class="text-outline font-body-sm text-body-sm hover:text-secondary transition-colors" href="#">Legal</a></div>
-</footer>
-    <script>
-        // Point to your PHP backend (update this URL to your Hetzner server)
-    const API_HOST = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:5000'
-            : 'https://san-blog-api.onrender.com';
-
-        const API_POSTS = `${API_HOST}/api/v1/blog/posts`;
-
-        async function fetchDynamicPosts() {
-            try {
-                const res = await fetch(API_POSTS);
-                if (!res.ok) return;
-                const result = await res.json();
-                const posts = result.data || result;
-                
-                const grid = document.getElementById('articleGrid');
-                if (!grid) return;
-                
-                posts.forEach(post => {
-                    // Extract first image if available
-                    const imgRegex = /!\[.*?\]\((.*?)\)/;
-                    const bodyContent = post.body || post.content || '';
-                    const match = bodyContent.match(imgRegex);
-                    let imgSrc = match ? match[1] : '/assets/4d53715b7935f2120191409baa601b2b.png';
-                    
-                    // Format date
-                    let formattedDate = 'OCT 2026';
-                    if (post.created_at) {
-                        try {
-                            const dateObj = new Date(post.created_at);
-                            const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-                            formattedDate = `${months[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
-                        } catch(e) {}
-                    }
-                    
-                    // Create tags markup
-                    const tagsMarkup = (post.tags || []).map(t => 
-                        `<span class="bg-black/80 text-primary text-[10px] font-code-md px-2 py-0.5 border border-primary/30">#${t}</span>`
-                    ).join(' ');
-
-                    const article = document.createElement('article');
-                    article.className = 'glass-card flex flex-col group';
-                    article.innerHTML = `
-                        <div class="h-48 overflow-hidden relative">
-                            <img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-60 group-hover:opacity-100" src="${imgSrc}" alt="${post.title}" />
-                            <div class="absolute bottom-3 left-3 flex gap-2">
-                                ${tagsMarkup || '<span class="bg-black/80 text-secondary text-[10px] font-code-md px-2 py-0.5 border border-secondary/30">#Research</span>'}
-                            </div>
-                        </div>
-                        <div class="p-6 flex flex-col flex-grow">
-                            <div class="flex justify-between items-center mb-4">
-                                <span class="text-primary font-code-md text-code-md">${formattedDate}</span>
-                                <span class="text-outline-variant text-xs flex items-center gap-1">
-                                    <span class="material-symbols-outlined text-sm">schedule</span> ${post.read_time || '5 MIN'}
-                                </span>
-                            </div>
-                            <h3 class="font-headline-md text-headline-md mb-4 text-on-surface group-hover:text-primary transition-colors">
-                                <a href="/blog/post?slug=${post.slug}">${post.title}</a>
-                            </h3>
-                            <p class="text-on-surface-variant text-body-sm mb-6 flex-grow">
-                                ${post.summary || ''}
-                            </p>
-                            <div class="flex items-center justify-between pt-6 border-t border-white/5">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-6 h-6 rounded-full bg-surface-container border border-secondary/40 flex items-center justify-center text-[10px] font-bold text-primary">${(post.author || 'O').charAt(0).toUpperCase()}</div>
-                                    <span class="font-label-caps text-[10px] text-on-surface">${post.author.toUpperCase()}</span>
-                                </div>
-                                <a href="/blog/post?slug=${post.slug}" class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</a>
-                            </div>
-                        </div>
-                    `;
-                    grid.appendChild(article);
-                });
-            } catch (err) {
-                console.error("Failed to fetch dynamic posts:", err);
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', fetchDynamicPosts);
-
-        // Micro-interaction for the terminal input
-        const terminalInput = document.getElementById('terminalInput');
-        terminalInput.addEventListener('input', (e) => {
-            if(e.target.value.length > 0) {
-                // Future: add typing sound or specific effects
-            }
-        });
-
-        // Sticky header glow logic
-        window.addEventListener('scroll', () => {
-            const nav = document.querySelector('nav');
-            if (window.scrollY > 20) {
-                nav.classList.add('shadow-[0_4px_30px_rgba(0,0,0,0.5)]');
-            } else {
-                nav.classList.remove('shadow-[0_4px_30px_rgba(0,0,0,0.5)]');
-            }
-        });
-
-        // Active filter toggle
-        const categoryButtons = document.querySelectorAll('button.font-label-caps');
-        categoryButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                categoryButtons.forEach(b => {
-                    b.classList.remove('bg-primary', 'text-on-primary');
-                    b.classList.add('bg-white/5', 'text-on-surface-variant');
-                });
-                btn.classList.add('bg-primary', 'text-on-primary');
-                btn.classList.remove('bg-white/5', 'text-on-surface-variant');
-            });
-        });
-    </script>
-
-
-</body></html>
+  .grid-bg {
+    background-image: radial-gradient(rgba(6, 182, 212, 0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .glass-card {
+    background: rgba(11, 15, 25, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+</style>

@@ -39,6 +39,25 @@ class VaultAuditClient:
             pass
         except Exception:
             pass
+
+        if self._create_transit_key():
+            return
+
+        # The transit secrets engine may not be mounted yet (common on a fresh
+        # dev Vault). Try to enable it, then create the key once more.
+        try:
+            self.client.sys.enable_secrets_engine(backend_type="transit")
+            logger.info("Enabled Vault transit secrets engine")
+        except hvac.exceptions.InvalidRequest:
+            # Path already in use — engine is mounted, fall through to retry.
+            pass
+        except Exception as e:
+            logger.debug("Could not enable Vault transit engine: %s", e)
+            return
+
+        self._create_transit_key()
+
+    def _create_transit_key(self) -> bool:
         try:
             self.client.secrets.transit.create_key(
                 name=TRANSIT_KEY_NAME,
@@ -46,8 +65,10 @@ class VaultAuditClient:
             )
             self._transit_ready = True
             logger.info("Created Transit key '%s'", TRANSIT_KEY_NAME)
+            return True
         except Exception as e:
-            logger.warning("Could not create Transit key '%s': %s", TRANSIT_KEY_NAME, e)
+            logger.debug("Could not create Transit key '%s': %s", TRANSIT_KEY_NAME, e)
+            return False
 
     def _canonical_json(self, data: dict) -> bytes:
         return json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")

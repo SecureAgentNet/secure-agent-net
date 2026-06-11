@@ -3,9 +3,29 @@ from datetime import datetime, timezone
 from sqlalchemy import (Column, String, Text, Integer, Float, Boolean,
                         DateTime, JSON, Enum, BigInteger, LargeBinary,
                         SmallInteger, ForeignKey, UniqueConstraint,
-                        CheckConstraint, Index, Uuid)
+                        CheckConstraint, Index, Uuid as _SAUuid)
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import relationship
 from src.database.connection import Base
+
+
+class Uuid(TypeDecorator):
+    """UUID column that transparently accepts a ``uuid.UUID`` *or* a string on
+    bind, so identical code persists on PostgreSQL (native uuid), MariaDB/MySQL
+    (CHAR(32)) and SQLite. Postgres coerced UUID strings silently; the non-native
+    backends do not, so we coerce here. A non-UUID string (e.g. a ``corr-…``
+    correlation id) is stored as NULL rather than crashing the whole insert.
+    """
+    impl = _SAUuid
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, str):
+            try:
+                return uuid.UUID(value)
+            except ValueError:
+                return None
+        return value
 
 
 class Agent(Base):

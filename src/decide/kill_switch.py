@@ -102,6 +102,13 @@ class KillSwitchController:
             f"All agent operations halted."
         )
 
+    def activate(self, triggered_by: str = "operator"):
+        """Manually engage the kill-switch (operator emergency stop)."""
+        with self._lock:
+            self._activate()
+            self._persist()
+            logger.critical("Kill-switch manually ACTIVATED by %s.", triggered_by)
+
     def deactivate(self, reset_by: str = "admin"):
         with self._lock:
             self._active = False

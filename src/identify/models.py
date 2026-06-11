@@ -32,3 +32,14 @@ class ExecuteRequest(BaseModel):
     target_resource: str = Field("shell", description="Target resource identifier")
     intent_summary: str = Field("", description="Agent's stated intent")
     payload: dict = Field(default_factory=dict, description="Action parameters")
+    server_id: Optional[str] = Field(
+        None,
+        description="If the tool comes from an external MCP server, its id. Triggers "
+                    "tool-poisoning vetting + per-tool mandate scoping before execution.",
+    )
+
+
+class VetRequest(BaseModel):
+    """Submit an external MCP server's tool catalog for vetting."""
+    server_id: str = Field(..., description="Identifier of the MCP server being vetted")
+    tools: list = Field(..., description="List of {name, description, input_schema} tool definitions")
