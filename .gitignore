@@ -1,5 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
 build/
 dist/
 .coverage
-__pycache__/
-*.egg-info/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment / secrets — never commit these
+.env
+.env.*
+!.env.example
+.deploy.env
+deployment/certs/
+*.key
+*.pem
+*.p12
+scripts/deploy_website.sh
+
+# Node / website build deps
+node_modules/
+
+# Local runtime data and scratch space
+uploads/
+scratch/
+backups/
+*.log
+
+# Local tool state
+.agent/
+.stitch-mcp/
+.claude/settings.local.json
+.idea/
+.vscode/
+.DS_Store

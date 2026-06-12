@@ -11,31 +11,26 @@ const rest = posts.filter((p) => p.id !== featured.id);
 const fmt = (d: Date) => d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 ---
 
-<SiteLayout title="Blog | SAN">
-  <main class="pt-24 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full grid-bg">
-    <header class="mb-12">
-      <h1 class="font-display text-display text-white mb-3">The SAN Blog</h1>
-      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
-        Notes on securing autonomous AI agents — the threats, the architecture, and the case for
+<SiteLayout title="Blog — SecureAgentNet">
+  <main class="pt-32 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full">
+    <header class="mb-12 max-w-2xl">
+      <h1 class="font-display text-display text-on-surface mb-3">Blog</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant">
+        Notes on securing autonomous AI agents: the threats, the architecture, and the case for
         building the trust boundary before the ecosystem ossifies.
       </p>
     </header>
 
     <!-- Featured -->
-    <a href={`/blog/${featured.id}/`} class="block mb-16 group">
-      <article class="relative overflow-hidden rounded-xl glass-card border border-primary/20 grid lg:grid-cols-2 gap-0">
-        <div class="relative h-[220px] lg:h-auto bg-gradient-to-br from-primary/15 via-surface-container to-secondary/10 flex items-center justify-center">
-          <span class="material-symbols-outlined text-primary/40 text-[160px]">shield</span>
+    <a href={`/blog/${featured.id}/`} class="block mb-14 group">
+      <article class="raised rounded-lg p-8 lg:p-12">
+        <div class="flex items-center gap-3 mb-5 text-xs font-semibold uppercase tracking-wide">
+          <span class="text-primary">Featured</span>
+          <span class="text-on-surface-variant font-normal normal-case">{featured.data.readTime} read</span>
         </div>
-        <div class="p-8 lg:p-12 flex flex-col justify-center">
-          <div class="flex items-center gap-3 mb-5">
-            <span class="px-3 py-1 bg-primary/10 border border-primary/30 text-primary font-label-caps text-label-caps rounded-full">FEATURED</span>
-            <span class="text-outline-variant font-code-md text-code-md">{featured.data.readTime} READ</span>
-          </div>
-          <h2 class="font-display text-2xl md:text-4xl mb-4 text-on-surface leading-tight group-hover:text-primary transition-colors">{featured.data.title}</h2>
-          <p class="font-body-md text-body-md text-on-surface-variant mb-6 max-w-xl">{featured.data.description}</p>
-          <div class="font-code-md text-code-md text-on-surface-variant/70">{featured.data.authors.join(', ')} · {fmt(featured.data.date)}</div>
-        </div>
+        <h2 class="font-display text-2xl md:text-4xl font-bold mb-4 text-on-surface leading-tight group-hover:text-primary transition-colors max-w-3xl">{featured.data.title}</h2>
+        <p class="font-body-md text-body-md text-on-surface-variant mb-6 max-w-2xl">{featured.data.description}</p>
+        <div class="text-sm text-on-surface-variant">{featured.data.authors.join(', ')} &mdash; {fmt(featured.data.date)}</div>
       </article>
     </a>
 
@@ -43,25 +38,19 @@ const fmt = (d: Date) => d.toLocaleDateString('en-US', { year: 'numeric', month:
     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-gutter">
       {rest.map((p) => (
         <a href={`/blog/${p.id}/`} class="block group">
-          <article class="glass-card rounded-xl flex flex-col h-full overflow-hidden">
-            <div class="h-40 bg-gradient-to-br from-surface-container-high to-surface-container-lowest flex items-center justify-center relative">
-              <span class={`material-symbols-outlined text-[64px] opacity-40 ${p.data.accent}`}>article</span>
-              <div class="absolute bottom-3 left-3 flex gap-2">
-                {p.data.tags.map((t) => (
-                  <span class="bg-black/80 text-on-surface-variant text-[10px] font-code-md px-2 py-0.5 border border-white/10 rounded">{t}</span>
-                ))}
-              </div>
+          <article class="raised rounded-lg flex flex-col h-full p-6">
+            <div class="flex justify-between items-center mb-4 text-xs text-on-surface-variant">
+              <span>{fmt(p.data.date)}</span>
+              <span>{p.data.readTime} read</span>
             </div>
-            <div class="p-6 flex flex-col flex-grow">
-              <div class="flex justify-between items-center mb-4 font-code-md text-code-md">
-                <span class={p.data.accent}>{fmt(p.data.date)}</span>
-                <span class="text-outline-variant text-xs flex items-center gap-1"><span class="material-symbols-outlined text-sm">schedule</span> {p.data.readTime}</span>
-              </div>
-              <h3 class="font-headline-md text-[18px] mb-3 text-on-surface group-hover:text-primary transition-colors">{p.data.title}</h3>
-              <p class="text-on-surface-variant text-body-sm mb-6 flex-grow">{p.data.description}</p>
-              <div class="flex items-center justify-between pt-4 border-t border-white/5">
-                <span class="font-label-caps text-[10px] text-on-surface-variant">{p.data.authors.join(', ')}</span>
-                <span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</span>
+            <h3 class="font-headline-md text-[18px] mb-3 text-on-surface group-hover:text-primary transition-colors">{p.data.title}</h3>
+            <p class="text-on-surface-variant text-body-sm mb-6 flex-grow">{p.data.description}</p>
+            <div class="flex items-center justify-between pt-4 border-t border-outline-variant">
+              <span class="text-xs text-on-surface-variant">{p.data.authors.join(', ')}</span>
+              <div class="flex gap-2">
+                {p.data.tags.slice(0, 2).map((t) => (
+                  <span class="bg-surface-container-high text-on-surface-variant text-[10px] font-code-md px-2 py-0.5 border border-outline-variant rounded">{t}</span>
+                ))}
               </div>
             </div>
           </article>
@@ -70,15 +59,3 @@ const fmt = (d: Date) => d.toLocaleDateString('en-US', { year: 'numeric', month:
     </div>
   </main>
 </SiteLayout>
-
-<style>
-  .grid-bg {
-    background-image: radial-gradient(rgba(6, 182, 212, 0.05) 1px, transparent 1px);
-    background-size: 32px 32px;
-  }
-  .glass-card {
-    background: rgba(11, 15, 25, 0.7);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-</style>
