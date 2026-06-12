@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     ollama_model: str = Field(default="llama3.2:7b", alias="OLLAMA_MODEL")
     ollama_timeout: int = Field(default=30, alias="OLLAMA_TIMEOUT")
     ollama_retry_count: int = Field(default=2, alias="OLLAMA_RETRY_COUNT")
+    # TTL (seconds) for cached Tier-3 verdicts; 0 disables caching.
+    semantic_cache_ttl: int = Field(default=300, alias="SEMANTIC_CACHE_TTL")
 
     secret_key: str = Field(default="", alias="SECRET_KEY")
     agent_jwt_algorithm: str = Field(default="HS256", alias="AGENT_JWT_ALGORITHM")
@@ -55,15 +57,10 @@ class Settings(BaseSettings):
         if self.secret_key:
             return self.secret_key
         if self.environment == "production":
-            import secrets
-            generated = secrets.token_hex(32)
-            import warnings
-            warnings.warn(
-                "SECRET_KEY not set — generated a temporary key. "
-                "Set SECRET_KEY in your environment or .env file for persistent sessions.",
-                stacklevel=2,
+            raise RuntimeError(
+                "SECRET_KEY is not set. Refusing to start in production with a "
+                "generated or default key — set SECRET_KEY in the environment or .env."
             )
-            return generated
         return "dev-secret-key-do-not-use-in-production"
 
     @classmethod

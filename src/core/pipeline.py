@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from typing import Dict, Any, Optional
@@ -178,7 +179,10 @@ class ITCDPipeline:
                     payload=request.payload,
                     commissioned_goal=mandate.original_goal,
                 )
-                decision = self.gateway.evaluate_request(eval_req)
+                # Tier 3 makes a blocking multi-second LLM call; run it in a
+                # worker thread so it doesn't stall the event loop for every
+                # other in-flight request.
+                decision = await asyncio.to_thread(self.gateway.evaluate_request, eval_req)
             except Exception:
                 # Any DECIDE failure — destroy the provisioned container unexecuted.
                 self.provisioner.teardown_sandbox(handle, executed=False)

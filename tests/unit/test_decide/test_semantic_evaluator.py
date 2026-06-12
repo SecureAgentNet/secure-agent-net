@@ -117,3 +117,103 @@ class TestSemanticEvaluator:
             mock_post.side_effect = requests.exceptions.Timeout("Request timed out")
             score, reason = evaluator.evaluate(sample_request, {})
             assert score == 1.0
+
+    # --- JSON verdict format ---
+
+    def test_parse_verdict_safe_confident(self, evaluator):
+        parsed = evaluator._parse_verdict(
+            '{"verdict": "SAFE", "confidence": 1.0, "reason": "Routine read."}')
+        assert parsed is not None
+        score, reason = parsed
+        assert score == 0.0
+        assert reason == "Routine read."
+
+    def test_parse_verdict_safe_unsure_stays_below_hitl(self, evaluator):
+        score, _ = evaluator._parse_verdict('{"verdict": "SAFE", "confidence": 0.0}')
+        assert score <= 0.2
+
+    def test_parse_verdict_suspicious_lands_in_hitl_band(self, evaluator):
+        score, _ = evaluator._parse_verdict(
+            '{"verdict": "suspicious", "confidence": 0.5, "reason": "Unusual."}')
+        assert 0.4 <= score <= 0.6
+
+    def test_parse_verdict_malicious_meets_block_threshold(self, evaluator):
+        score, reason = evaluator._parse_verdict(
+            '{"verdict": "MALICIOUS", "confidence": 0.0, "reason": "Exfiltration."}')
+        assert score >= 0.8  # always blocked even at zero confidence
+
+    def test_parse_verdict_invalid_returns_none(self, evaluator):
+        assert evaluator._parse_verdict("SCORE: 0.5\nREASON: legacy") is None
+        assert evaluator._parse_verdict('{"verdict": "BANANA"}') is None
+        assert evaluator._parse_verdict('["not", "a", "dict"]') is None
+        assert evaluator._parse_verdict("") is None
+
+    def test_evaluate_prefers_json_verdict(self, evaluator, sample_request):
+        with patch("requests.post") as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "response": '{"verdict": "MALICIOUS", "confidence": 1.0, "reason": "Attack."}'}
+            mock_post.return_value = mock_response
+            score, reason = evaluator.evaluate(sample_request, {"path": "/tmp/x"})
+            assert score == 1.0
+            assert reason == "Attack."
+
+    # --- verdict cache ---
+
+    @pytest.fixture
+    def caching_evaluator(self):
+        from src.decide.semantic_evaluator import SemanticEvaluator
+        with patch("src.decide.semantic_evaluator.get_settings") as mock_get_settings:
+            settings = MagicMock()
+            settings.ollama_api_url = "http://localhost:11434/api/generate"
+            settings.ollama_model = "llama2:test"
+            settings.ollama_timeout = 15
+            settings.ollama_retry_count = 0
+            settings.semantic_cache_ttl = 300
+            mock_get_settings.return_value = settings
+            SemanticEvaluator.clear_cache()
+            yield SemanticEvaluator()
+            SemanticEvaluator.clear_cache()
+
+    def test_identical_requests_hit_cache(self, caching_evaluator, sample_request):
+        with patch("requests.post") as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "response": '{"verdict": "SAFE", "confidence": 1.0, "reason": "ok"}'}
+            mock_post.return_value = mock_response
+
+            first = caching_evaluator.evaluate(sample_request, {"path": "/tmp/data.txt"})
+            second = caching_evaluator.evaluate(sample_request, {"path": "/tmp/data.txt"})
+            assert first == second
+            assert mock_post.call_count == 1
+
+    def test_different_payloads_miss_cache(self, caching_evaluator, sample_request):
+        with patch("requests.post") as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "response": '{"verdict": "SAFE", "confidence": 1.0, "reason": "ok"}'}
+            mock_post.return_value = mock_response
+
+            caching_evaluator.evaluate(sample_request, {"path": "/tmp/a"})
+            caching_evaluator.evaluate(sample_request, {"path": "/tmp/b"})
+            assert mock_post.call_count == 2
+
+    def test_fail_closed_result_is_not_cached(self, caching_evaluator, sample_request):
+        import requests
+        with patch("requests.post") as mock_post:
+            mock_post.side_effect = requests.exceptions.ConnectionError("down")
+            score, _ = caching_evaluator.evaluate(sample_request, {"path": "/tmp/data.txt"})
+            assert score == 1.0
+
+        with patch("requests.post") as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "response": '{"verdict": "SAFE", "confidence": 1.0, "reason": "ok"}'}
+            mock_post.return_value = mock_response
+            score, _ = caching_evaluator.evaluate(sample_request, {"path": "/tmp/data.txt"})
+            assert score == 0.0  # recovered — the transient deny was not cached
+            assert mock_post.call_count == 1

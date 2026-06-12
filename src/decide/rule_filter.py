@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Tuple, Set
 
 from src.decide.models import EvaluationRequest
@@ -74,13 +75,27 @@ class RuleFilter:
             if isinstance(value, str):
                 all_text_inputs.append(value)
 
+        # Keywords are matched on two normalised views of the text so trivial
+        # obfuscation (extra/odd whitespace, i-g-n-o-r-e style punctuation
+        # padding) doesn't walk past the filter:
+        #   collapsed — lowercase, all whitespace runs collapsed to one space
+        #   squashed  — lowercase, everything but [a-z0-9] removed
         for text in all_text_inputs:
             if not text:
                 continue
-            lower_text = text.lower()
+            collapsed = re.sub(r"\s+", " ", text.lower())
+            squashed = re.sub(r"[^a-z0-9]", "", collapsed)
             for kw in _PROMPT_INJECTION_KEYWORDS:
-                if kw in lower_text:
+                kw_collapsed = re.sub(r"\s+", " ", kw.lower())
+                if kw_collapsed in collapsed:
                     return True, 0.95, f"Prompt injection pattern detected: '{kw}'"
+                # Squashed matching only for plain word phrases — squashing a
+                # special token like <|im_start|> down to "imstart" would match
+                # inside innocent words ("claim started").
+                if re.fullmatch(r"[a-z0-9 ]+", kw_collapsed):
+                    kw_squashed = kw_collapsed.replace(" ", "")
+                    if kw_squashed in squashed:
+                        return True, 0.95, f"Prompt injection pattern detected: '{kw}'"
 
         if request.action_name in cls.DENY_ACTIONS:
             return True, 1.0, f"Action '{request.action_name}' is explicitly denied."
