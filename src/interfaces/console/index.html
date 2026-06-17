@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAN · Operator Console</title>
+  <style>
+    :root {
+      --bg: #0f131d; --panel: rgba(28,31,42,.6); --line: rgba(255,255,255,.08);
+      --primary: #4cd7f6; --secondary: #4edea3; --error: #ff5449; --warn: #ffb4ab;
+      --text: #dfe2f1; --muted: #bcc9cd; --mono: 'JetBrains Mono', ui-monospace, monospace;
+      --sans: 'Inter', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+      background-image: radial-gradient(circle at 50% 0%, rgba(6,182,212,.08) 0%, transparent 55%);
+      min-height: 100vh;
+    }
+    .glass { background: var(--panel); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 14px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px; border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; background: rgba(15,19,29,.8); backdrop-filter: blur(10px); z-index: 5;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .04em; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--secondary); box-shadow: 0 0 10px var(--secondary); }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 12px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat { padding: 18px 20px; }
+    .stat .n { font-size: 30px; font-weight: 700; }
+    .stat .l { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-top: 4px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; padding: 3px 10px; border-radius: 999px; }
+    .badge.ok { color: var(--secondary); background: rgba(78,222,163,.12); }
+    .badge.bad { color: var(--error); background: rgba(255,84,73,.15); }
+    button {
+      font-family: var(--sans); font-weight: 600; border: 0; border-radius: 9px; padding: 9px 16px;
+      cursor: pointer; font-size: 13px; transition: transform .1s, filter .1s;
+    }
+    button:hover { filter: brightness(1.08); } button:active { transform: scale(.97); }
+    .btn-primary { background: var(--primary); color: #00313b; }
+    .btn-ok { background: var(--secondary); color: #00271a; }
+    .btn-danger { background: var(--error); color: #fff; }
+    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); }
+    .row { display: flex; align-items: center; gap: 10px; }
+    .panel { padding: 20px; margin-bottom: 24px; }
+    .hitl-card { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; margin-top: 10px; }
+    .hitl-card .meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .risk { font-family: var(--mono); font-weight: 700; }
+    .empty { color: var(--muted); font-size: 14px; padding: 18px; text-align: center; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+    td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,.04); font-family: var(--mono); font-size: 13px; }
+    .st { padding: 2px 8px; border-radius: 6px; font-size: 11px; }
+    .st.active { color: var(--secondary); background: rgba(78,222,163,.1); }
+    .st.revoked, .st.rogue, .st.suspended { color: var(--warn); background: rgba(255,180,171,.1); }
+    /* login */
+    #login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 50; }
+    #login .box { width: 340px; padding: 32px; }
+    #login input { width: 100%; padding: 11px 14px; margin-top: 10px; border-radius: 9px; border: 1px solid var(--line); background: #0a0e18; color: var(--text); font-family: var(--mono); }
+    #login .err { color: var(--error); font-size: 13px; min-height: 18px; margin-top: 8px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .hide { display: none !important; }
+  </style>
+</head>
+<body>
+  <!-- Login -->
+  <div id="login">
+    <div class="box glass">
+      <div class="brand" style="font-size:20px;margin-bottom:6px"><span class="dot"></span> SAN</div>
+      <div class="muted" style="margin-bottom:18px">Operator Console</div>
+      <input id="u" placeholder="username" autocomplete="username" />
+      <input id="p" type="password" placeholder="password" autocomplete="current-password" />
+      <div class="err" id="loginErr"></div>
+      <button class="btn-primary" style="width:100%;margin-top:6px" onclick="doLogin()">Sign in</button>
+      <div class="muted" style="margin-top:14px">Dev default: <code>admin / admin123</code></div>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app" class="hide">
+    <header>
+      <div class="brand"><span class="dot"></span> SAN · Operator Console</div>
+      <div class="row">
+        <span class="muted" id="who"></span>
+        <button class="btn-ghost" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div class="stats">
+        <div class="stat glass"><div class="n" id="agActive">–</div><div class="l">Agents active</div></div>
+        <div class="stat glass"><div class="n" id="agTotal">–</div><div class="l">Agents total</div></div>
+        <div class="stat glass"><div class="n" id="events">–</div><div class="l">Events indexed</div></div>
+        <div class="stat glass">
+          <div class="row" style="justify-content:space-between">
+            <div><div class="l" style="margin:0 0 8px">Kill-switch</div><span id="ksBadge" class="badge ok">…</span></div>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn-danger" id="ksActivate" onclick="killSwitch('activate')">Activate</button>
+            <button class="btn-ok" id="ksDeactivate" onclick="killSwitch('deactivate')">Deactivate</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel glass">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">Human-in-the-loop queue <span id="hitlCount" class="badge ok">0</span></h2>
+          <span class="muted" id="lastPoll"></span>
+        </div>
+        <div id="hitlList"></div>
+      </div>
+
+      <div class="panel glass">
+        <h2>Agents</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Trust</th></tr></thead>
+          <tbody id="agentRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const TOKEN_KEY = 'san_token';
+    let pollTimer = null;
+
+    function tok() { return localStorage.getItem(TOKEN_KEY); }
+    function authHeaders() { const t = tok(); return t ? { 'Authorization': 'Bearer ' + t } : {}; }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, { ...opts, headers: { ...authHeaders(), ...(opts.headers || {}) } });
+      if (res.status === 401) { logout(); throw new Error('unauthorized'); }
+      return res;
+    }
+
+    async function doLogin() {
+      const u = document.getElementById('u').value.trim();
+      const p = document.getElementById('p').value;
+      const err = document.getElementById('loginErr');
+      err.textContent = '';
+      try {
+        const res = await fetch(`/api/v1/auth/operator-login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`, { method: 'POST' });
+        if (!res.ok) { err.textContent = 'Invalid credentials'; return; }
+        const data = await res.json();
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        document.getElementById('who').textContent = u;
+        showApp();
+      } catch (e) { err.textContent = 'Login failed'; }
+    }
+
+    function logout() {
+      localStorage.removeItem(TOKEN_KEY);
+      if (pollTimer) clearInterval(pollTimer);
+      document.getElementById('app').classList.add('hide');
+      document.getElementById('login').classList.remove('hide');
+    }
+
+    function showApp() {
+      document.getElementById('login').classList.add('hide');
+      document.getElementById('app').classList.remove('hide');
+      refresh();
+      pollTimer = setInterval(refresh, 4000);
+    }
+
+    async function refresh() {
+      await Promise.all([loadStatus(), loadHitl(), loadAgents()]);
+      document.getElementById('lastPoll').textContent = 'updated ' + new Date().toLocaleTimeString();
+    }
+
+    async function loadStatus() {
+      const res = await api('/api/v1/security/status');
+      const d = await res.json();
+      document.getElementById('agActive').textContent = d.agents_active ?? '–';
+      document.getElementById('agTotal').textContent = d.agents_total ?? '–';
+      document.getElementById('events').textContent = d.events_indexed ?? '–';
+      const ks = d.kill_switch || {};
+      const badge = document.getElementById('ksBadge');
+      if (ks.active) { badge.className = 'badge bad'; badge.textContent = '● HALTED'; }
+      else { badge.className = 'badge ok'; badge.textContent = (ks.armed ? '● ARMED' : '○ DISARMED'); }
+      document.getElementById('ksActivate').classList.toggle('hide', !!ks.active);
+      document.getElementById('ksDeactivate').classList.toggle('hide', !ks.active);
+    }
+
+    async function loadHitl() {
+      const res = await api('/api/v1/hitl/pending');
+      const d = await res.json();
+      document.getElementById('hitlCount').textContent = d.total || 0;
+      document.getElementById('hitlCount').className = 'badge ' + (d.total ? 'bad' : 'ok');
+      const list = document.getElementById('hitlList');
+      if (!d.requests || !d.requests.length) { list.innerHTML = '<div class="empty">No actions awaiting approval.</div>'; return; }
+      list.innerHTML = d.requests.map(r => `
+        <div class="hitl-card">
+          <div>
+            <div><strong>${esc(r.action_name)}</strong> → <span class="meta">${esc(r.target_resource || '')}</span></div>
+            <div class="meta">agent ${esc(short(r.agent_id))} · risk <span class="risk" style="color:${riskColor(r.risk_score)}">${(r.risk_score ?? 0).toFixed(2)}</span></div>
+            <div class="meta">${esc(r.reason || '')}</div>
+          </div>
+          <div class="row">
+            <button class="btn-ok" onclick="decide('approve','${r.request_id}')">Approve</button>
+            <button class="btn-danger" onclick="decide('deny','${r.request_id}')">Deny</button>
+          </div>
+        </div>`).join('');
+    }
+
+    async function loadAgents() {
+      const res = await api('/api/v1/agents');
+      const d = await res.json();
+      const rows = (d.agents || []).map(a => `
+        <tr>
+          <td style="color:#fff">${esc(a.name || '')}</td>
+          <td>${esc(a.type || '')}</td>
+          <td><span class="st ${esc(a.status)}">${esc(a.status || '')}</span></td>
+          <td>${a.trust_score ?? '–'}</td>
+        </tr>`).join('');
+      document.getElementById('agentRows').innerHTML = rows || '<tr><td colspan="4" class="empty">No agents.</td></tr>';
+    }
+
+    async function decide(action, id) {
+      await api(`/api/v1/hitl/${action}/${id}`, { method: 'POST' });
+      loadHitl();
+    }
+
+    async function killSwitch(action) {
+      if (action === 'activate' && !confirm('Engage the kill-switch? This halts ALL agent operations.')) return;
+      await api(`/api/v1/security/kill-switch/${action}`, { method: 'POST' });
+      loadStatus();
+    }
+
+    function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    function short(id) { return String(id ?? '').slice(0, 8); }
+    function riskColor(r) { return r >= 0.7 ? '#ff5449' : r >= 0.4 ? '#ffb4ab' : '#4edea3'; }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Enter' && !document.getElementById('login').classList.contains('hide')) doLogin(); });
+
+    // Auto-enter if a token already exists.
+    if (tok()) showApp();
+  </script>
+</body>
+</html>
