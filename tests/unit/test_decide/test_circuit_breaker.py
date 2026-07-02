@@ -1,6 +1,6 @@
 import pytest
 import time
-from src.decide.circuit_breaker import CircuitBreaker
+from secureagentnet.decide.circuit_breaker import CircuitBreaker
 
 def test_circuit_breaker_flow():
     # Setup a fast-tripping breaker for tests

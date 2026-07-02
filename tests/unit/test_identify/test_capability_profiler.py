@@ -1,5 +1,5 @@
 import pytest
-from src.identify.capability_profiler import CapabilityProfiler
+from secureagentnet.identify.capability_profiler import CapabilityProfiler
 
 def test_capability_profiler_authorized():
     # 'agent-007' has 'read_file' in the mock DB

@@ -1,9 +1,9 @@
 import pytest
 import json
 from unittest.mock import MagicMock
-from src.track.models import AgentActionRequest, CapturedLog
-from src.track.structured_logger import AgentAuditor
-from src.track.vault_client import VaultAuditClient
+from secureagentnet.track.models import AgentActionRequest, CapturedLog
+from secureagentnet.track.structured_logger import AgentAuditor
+from secureagentnet.track.vault_client import VaultAuditClient
 
 def test_agent_auditor_capture(monkeypatch):
     # Mock the Vault Client so we don't actually hit a Vault server during unit tests
@@ -11,7 +11,7 @@ def test_agent_auditor_capture(monkeypatch):
     mock_vault.secure_log.return_value = "vault-audit/agents/123/456-v1"
 
     # Patch the VaultAuditClient instantiation inside AgentAuditor
-    monkeypatch.setattr("src.track.structured_logger.VaultAuditClient", lambda: mock_vault)
+    monkeypatch.setattr("secureagentnet.track.structured_logger.VaultAuditClient", lambda: mock_vault)
 
     auditor = AgentAuditor()
 

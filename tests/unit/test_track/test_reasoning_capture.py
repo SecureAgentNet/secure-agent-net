@@ -1,7 +1,7 @@
 import pytest
-from src.track.models import AgentActionRequest
-from src.track.reasoning_capture import ReasoningCaptureMiddleware
-from src.core.exceptions import PipelineBlockedError
+from secureagentnet.track.models import AgentActionRequest
+from secureagentnet.track.reasoning_capture import ReasoningCaptureMiddleware
+from secureagentnet.core.exceptions import PipelineBlockedError
 
 
 @pytest.mark.asyncio
@@ -11,7 +11,7 @@ async def test_capture_and_evaluate_success(monkeypatch):
             log_event.vault_receipt_id = "mock-receipt-123"
             return log_event
 
-    monkeypatch.setattr("src.track.reasoning_capture.auditor", MockAuditor())
+    monkeypatch.setattr("secureagentnet.track.reasoning_capture.auditor", MockAuditor())
 
     async def mock_execute():
         return {"file_contents": "secret data"}
@@ -41,7 +41,7 @@ async def test_capture_and_evaluate_failure(monkeypatch):
             log_event.vault_receipt_id = "mock-receipt-456"
             return log_event
 
-    monkeypatch.setattr("src.track.reasoning_capture.auditor", MockAuditor())
+    monkeypatch.setattr("secureagentnet.track.reasoning_capture.auditor", MockAuditor())
 
     async def mock_execute_fail():
         raise PermissionError("Agent does not have access to this resource.")
@@ -71,7 +71,7 @@ async def test_capture_and_evaluate_blocked(monkeypatch):
             log_event.vault_receipt_id = "mock-receipt-789"
             return log_event
 
-    monkeypatch.setattr("src.track.reasoning_capture.auditor", MockAuditor())
+    monkeypatch.setattr("secureagentnet.track.reasoning_capture.auditor", MockAuditor())
 
     async def mock_execute_blocked():
         raise PipelineBlockedError(

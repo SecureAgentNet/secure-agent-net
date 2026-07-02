@@ -1,7 +1,7 @@
 import json
 import pytest
 from unittest.mock import patch, MagicMock, mock_open
-from src.contain.security_profiles import (
+from secureagentnet.contain.security_profiles import (
     SeccompProfileManager,
     AppArmorProfileManager,
     SECCOMP_DEFAULT,

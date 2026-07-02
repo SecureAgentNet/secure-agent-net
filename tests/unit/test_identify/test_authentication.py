@@ -3,9 +3,9 @@ from fastapi import HTTPException
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 
-from src.identify.models import ChallengeRequest, LoginRequest
+from secureagentnet.identify.models import ChallengeRequest, LoginRequest
 # noinspection PyProtectedMember
-from src.identify.authentication import AuthenticationService, _in_memory_challenges
+from secureagentnet.identify.authentication import AuthenticationService, _in_memory_challenges
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def mock_agent_db(monkeypatch, rsa_key_pair):
             }
         return None
         
-    monkeypatch.setattr("src.identify.authentication.get_agent_by_public_key", mock_get_agent)
+    monkeypatch.setattr("secureagentnet.identify.authentication.get_agent_by_public_key", mock_get_agent)
     return mock_get_agent
 
 
@@ -77,7 +77,7 @@ def test_verify_and_login_success(mock_agent_db, rsa_key_pair, monkeypatch):
         def resolve_secret_key(self):
             return self.secret_key
         
-    monkeypatch.setattr("src.identify.authentication.get_settings", MockSettings)
+    monkeypatch.setattr("secureagentnet.identify.authentication.get_settings", MockSettings)
 
     private_key, public_pem = rsa_key_pair
     

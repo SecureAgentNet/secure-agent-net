@@ -5,18 +5,18 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.core.config import Settings, get_settings
-from src.identify.identity_registry import IdentityRegistry
-from src.core.constants import AgentStatus
-from src.track.models import AgentActionRequest
-from src.core.pipeline import ITCDPipeline
-from src.decide import DecisionGateway
-from src.contain.container_provisioner import ContainerProvisioner
-from src.decide.circuit_breaker import CircuitBreaker
-from src.decide.kill_switch import KillSwitchController
-from src.identify.rogue_detector import RogueDetector
-from src.track.structured_logger import AgentAuditor, StructuredLogger
-from src.decide.semantic_evaluator import SemanticEvaluator
+from secureagentnet.core.config import Settings, get_settings
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.core.constants import AgentStatus
+from secureagentnet.track.models import AgentActionRequest
+from secureagentnet.core.pipeline import ITCDPipeline
+from secureagentnet.decide import DecisionGateway
+from secureagentnet.contain.container_provisioner import ContainerProvisioner
+from secureagentnet.decide.circuit_breaker import CircuitBreaker
+from secureagentnet.decide.kill_switch import KillSwitchController
+from secureagentnet.identify.rogue_detector import RogueDetector
+from secureagentnet.track.structured_logger import AgentAuditor, StructuredLogger
+from secureagentnet.decide.semantic_evaluator import SemanticEvaluator
 
 
 @pytest.fixture(autouse=True)
@@ -38,15 +38,15 @@ def isolate_test_environment(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def mock_redis(monkeypatch):
-    monkeypatch.setattr("src.utils.redis_client.is_available", lambda: False)
-    monkeypatch.setattr("src.utils.redis_client.get_limiter_storage_uri", lambda: "memory://")
-    monkeypatch.setattr("src.identify.authentication.is_available", lambda: False)
+    monkeypatch.setattr("secureagentnet.utils.redis_client.is_available", lambda: False)
+    monkeypatch.setattr("secureagentnet.utils.redis_client.get_limiter_storage_uri", lambda: "memory://")
+    monkeypatch.setattr("secureagentnet.identify.authentication.is_available", lambda: False)
 
 
 @pytest.fixture(autouse=True)
 def disable_limiter():
     try:
-        from src.interfaces.web_dashboard.app import limiter
+        from secureagentnet.interfaces.web_dashboard.app import limiter
         limiter.enabled = False
     except ImportError:
         pass
@@ -62,7 +62,7 @@ def mock_settings(monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL", "llama2:test")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-testing")
     monkeypatch.setenv("AGENT_JWT_ALGORITHM", "HS256")
-    from src.database.connection import dispose_engine
+    from secureagentnet.database.connection import dispose_engine
     dispose_engine()
     get_settings.cache_clear()
     settings = get_settings()
@@ -71,9 +71,9 @@ def mock_settings(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def reset_identity_registry():
-    from src.database.repositories import AgentRepository
-    from src.database.connection import dispose_engine, init_database
-    from src.utils.persistence import PersistenceStore
+    from secureagentnet.database.repositories import AgentRepository
+    from secureagentnet.database.connection import dispose_engine, init_database
+    from secureagentnet.utils.persistence import PersistenceStore
     PersistenceStore.delete("identity_registry")
     dispose_engine()
     init_database()
@@ -85,11 +85,11 @@ def reset_identity_registry():
 
 @pytest.fixture(autouse=True)
 def reset_log_indexer():
-    from src.track.log_indexer import LogIndexer
-    from src.database import models
-    from src.database.connection import get_db_session, dispose_engine, init_database
+    from secureagentnet.track.log_indexer import LogIndexer
+    from secureagentnet.database import models
+    from secureagentnet.database.connection import get_db_session, dispose_engine, init_database
     from sqlalchemy import delete as sa_delete
-    from src.utils.persistence import PersistenceStore
+    from secureagentnet.utils.persistence import PersistenceStore
     PersistenceStore.delete("log_indexer")
     dispose_engine()
     init_database()
@@ -104,7 +104,7 @@ def reset_log_indexer():
 
 @pytest.fixture(autouse=True)
 def reset_capability_profiler():
-    from src.identify.capability_profiler import CapabilityProfiler, _SEED_CAPABILITIES
+    from secureagentnet.identify.capability_profiler import CapabilityProfiler, _SEED_CAPABILITIES
     _SEED_CAPABILITIES.clear()
     _SEED_CAPABILITIES.update({
         "agent-007": ["read_file", "execute_sql", "search_web"],
@@ -114,8 +114,8 @@ def reset_capability_profiler():
 
 @pytest.fixture(autouse=True)
 def reset_persistence():
-    from src.utils.persistence import PersistenceStore
-    from src.database.repositories import (
+    from secureagentnet.utils.persistence import PersistenceStore
+    from secureagentnet.database.repositories import (
         CircuitBreakerRepository, KillSwitchRepository, ContainerRepository
     )
     for key in ("rogue_detector", "kill_switch"):
@@ -133,7 +133,7 @@ def reset_persistence():
 
     # Reset in-memory state of any cached global pipelines
     import sys
-    for module_name in ("src.interfaces.web_dashboard.app", "src.interfaces.cli.commands"):
+    for module_name in ("secureagentnet.interfaces.web_dashboard.app", "secureagentnet.interfaces.cli.commands"):
         if module_name in sys.modules:
             try:
                 mod = sys.modules[module_name]
@@ -169,7 +169,7 @@ def mock_docker_client(monkeypatch):
     mock_client.containers.run.return_value = mock_container
     mock_client.images.get.return_value = MagicMock()
     monkeypatch.setattr("docker.from_env", lambda: mock_client)
-    monkeypatch.setattr("src.contain.container_provisioner.docker.from_env", lambda: mock_client)
+    monkeypatch.setattr("secureagentnet.contain.container_provisioner.docker.from_env", lambda: mock_client)
     return mock_client
 
 

@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timezone
-from src.track.log_indexer import LogIndexer
-from src.core.constants import PipelinePhase, EventSeverity
+from secureagentnet.track.log_indexer import LogIndexer
+from secureagentnet.core.constants import PipelinePhase, EventSeverity
 
 
 class TestLogIndexer:

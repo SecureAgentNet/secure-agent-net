@@ -1,6 +1,6 @@
 import pytest
-from src.decide.kill_switch import KillSwitchController
-from src.core.exceptions import KillSwitchActiveError
+from secureagentnet.decide.kill_switch import KillSwitchController
+from secureagentnet.core.exceptions import KillSwitchActiveError
 
 
 class TestKillSwitchController:

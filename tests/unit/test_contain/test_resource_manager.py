@@ -1,5 +1,5 @@
 import pytest
-from src.contain.resource_manager import (
+from secureagentnet.contain.resource_manager import (
     ResourceQuota,
     ContainerResourceManager,
     get_default_quota,

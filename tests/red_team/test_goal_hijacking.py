@@ -1,8 +1,8 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from src.decide.intent_capsule import IntentCapsule, IntentCapsuleManager
-from src.core.exceptions import IntentCapsuleExpiredError, GoalHijackingDetectedError
+from secureagentnet.decide.intent_capsule import IntentCapsule, IntentCapsuleManager
+from secureagentnet.core.exceptions import IntentCapsuleExpiredError, GoalHijackingDetectedError
 
 pytestmark = pytest.mark.redteam
 

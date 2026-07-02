@@ -1,7 +1,7 @@
 import jwt
 import pytest
 from datetime import timedelta, datetime, timezone
-from src.utils.crypto import generate_nonce, generate_session_id, create_access_token, decode_access_token
+from secureagentnet.utils.crypto import generate_nonce, generate_session_id, create_access_token, decode_access_token
 
 
 class TestCrypto:

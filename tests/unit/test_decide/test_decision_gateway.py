@@ -1,6 +1,6 @@
 import pytest
-from src.decide import DecisionGateway
-from src.decide.models import EvaluationRequest
+from secureagentnet.decide import DecisionGateway
+from secureagentnet.decide.models import EvaluationRequest
 
 @pytest.fixture
 def gateway(monkeypatch):
@@ -42,8 +42,9 @@ def test_tier2_and_3_success(gateway):
     
     # It should pass Tier 1, have PII redacted in Tier 2, and pass our mocked Tier 3
     assert result.is_allowed is True
-    assert result.evaluated_by == "SemanticEvaluator"
+    assert "SemanticEvaluator" in result.evaluated_by
     assert result.risk_score == 0.1
+    assert "cloud_scan" in result.metadata
 
 
 def test_tier3_llm_block(gateway, monkeypatch):
@@ -64,14 +65,15 @@ def test_tier3_llm_block(gateway, monkeypatch):
     result = gateway.evaluate_request(request)
     
     assert result.is_allowed is False
-    assert result.evaluated_by == "SemanticEvaluator"
+    assert "SemanticEvaluator" in result.evaluated_by
     assert result.risk_score == 0.95
+    assert "cloud_scan" in result.metadata
 
 
 
 def test_block_threshold_from_config(monkeypatch):
-    import src.decide
-    monkeypatch.setattr(src.decide, "get_settings", lambda: type("S", (), {"block_threshold": 0.5, "presidio_score_threshold": 0.4})())
+    import secureagentnet.decide
+    monkeypatch.setattr(secureagentnet.decide, "get_settings", lambda: type("S", (), {"block_threshold": 0.5, "presidio_score_threshold": 0.4})())
 
     gw2 = DecisionGateway()
     assert gw2.block_threshold == 0.5
@@ -89,8 +91,8 @@ def test_block_threshold_from_config(monkeypatch):
 
 
 def test_tier2_pii_redactor_fail_closed(gateway, monkeypatch):
-    from src.core.exceptions import PIIRedactionError
-    from src.decide import PiiRedactor
+    from secureagentnet.core.exceptions import PIIRedactionError
+    from secureagentnet.decide import PiiRedactor
 
     def mock_redact(payload):
         raise PIIRedactionError("Presidio engine crashed")

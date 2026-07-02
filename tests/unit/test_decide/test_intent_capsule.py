@@ -1,8 +1,8 @@
 import time
 import pytest
 from datetime import datetime, timedelta, timezone
-from src.decide.intent_capsule import IntentCapsule, IntentCapsuleManager
-from src.core.exceptions import IntentCapsuleExpiredError
+from secureagentnet.decide.intent_capsule import IntentCapsule, IntentCapsuleManager
+from secureagentnet.core.exceptions import IntentCapsuleExpiredError
 
 
 class TestIntentCapsule:

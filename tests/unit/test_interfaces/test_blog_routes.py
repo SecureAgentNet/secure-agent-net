@@ -10,12 +10,12 @@ os.environ["ENVIRONMENT"] = "development"
 def client(mock_settings, reset_identity_registry, reset_log_indexer, reset_persistence, tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
-    from src.database.connection import dispose_engine, init_database
-    from src.core.config import get_settings
+    from secureagentnet.database.connection import dispose_engine, init_database
+    from secureagentnet.core.config import get_settings
     dispose_engine()
     get_settings.cache_clear()
     init_database()
-    from src.main import app
+    from secureagentnet.main import app
     from fastapi.testclient import TestClient
     with TestClient(app) as c:
         yield c

@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
-from src.main import app
-from src.utils.crypto import create_access_token
-from src.core.config import get_settings
+from secureagentnet.main import app
+from secureagentnet.utils.crypto import create_access_token
+from secureagentnet.core.config import get_settings
 
 
 client = TestClient(app)
@@ -72,7 +72,7 @@ class TestMCPGateway:
         assert resp.status_code == 404
 
     def test_list_tools_valid_token_with_agent(self, monkeypatch):
-        from src.identify.identity_registry import IdentityRegistry
+        from secureagentnet.identify.identity_registry import IdentityRegistry
         IdentityRegistry.initialize()
         agent = IdentityRegistry.register_agent({
             "name": "mcp-test-agent",
@@ -100,7 +100,7 @@ class TestMCPGateway:
         assert data["count"] > 0
 
     def test_get_agent_info(self, monkeypatch):
-        from src.identify.identity_registry import IdentityRegistry
+        from secureagentnet.identify.identity_registry import IdentityRegistry
         IdentityRegistry.initialize()
         agent = IdentityRegistry.register_agent({
             "name": "info-test-agent",
@@ -132,7 +132,7 @@ class TestMCPGateway:
         assert resp.status_code == 401
 
     def test_execute_tool_with_auth(self, monkeypatch):
-        from src.identify.identity_registry import IdentityRegistry
+        from secureagentnet.identify.identity_registry import IdentityRegistry
         IdentityRegistry.initialize()
         agent = IdentityRegistry.register_agent({
             "name": "exec-test-agent",
@@ -162,7 +162,7 @@ class TestMCPGateway:
         assert resp.status_code == 200
 
     def test_heartbeat(self, monkeypatch):
-        from src.identify.identity_registry import IdentityRegistry
+        from secureagentnet.identify.identity_registry import IdentityRegistry
         IdentityRegistry.initialize()
         agent = IdentityRegistry.register_agent({
             "name": "hb-test-agent",
@@ -194,7 +194,7 @@ class TestMCPGateway:
         assert resp.status_code == 401
 
     def test_capabilities(self, monkeypatch):
-        from src.identify.identity_registry import IdentityRegistry
+        from secureagentnet.identify.identity_registry import IdentityRegistry
         IdentityRegistry.initialize()
         agent = IdentityRegistry.register_agent({
             "name": "cap-test-agent",
@@ -227,7 +227,7 @@ class TestMCPGateway:
         assert resp.status_code == 401
 
     def test_auth_refresh_valid_token(self, monkeypatch):
-        from src.identify.identity_registry import IdentityRegistry
+        from secureagentnet.identify.identity_registry import IdentityRegistry
         IdentityRegistry.initialize()
         agent = IdentityRegistry.register_agent({
             "name": "refresh-test-agent",

@@ -1,5 +1,5 @@
 import pytest
-from src.contain.network_isolation import (
+from secureagentnet.contain.network_isolation import (
     NetworkIsolationConfig,
     get_network_isolation_profile,
     create_isolated_network,
@@ -91,7 +91,7 @@ class TestNetworkIsolation:
         mock_client = mocker.MagicMock()
         mock_network = mocker.MagicMock()
         mock_client.networks.get.return_value = mock_network
-        mock_docker_from_env = mocker.patch("src.contain.network_isolation.docker.from_env")
+        mock_docker_from_env = mocker.patch("secureagentnet.contain.network_isolation.docker.from_env")
         mock_docker_from_env.return_value = mock_client
         return mock_client
 
@@ -119,6 +119,6 @@ class TestNetworkIsolation:
         assert result == "securenet_isolated"
 
     def test_create_isolated_network_docker_unavailable(self, mocker):
-        mocker.patch("src.contain.network_isolation.docker.from_env", side_effect=Exception("no docker"))
+        mocker.patch("secureagentnet.contain.network_isolation.docker.from_env", side_effect=Exception("no docker"))
         result = create_isolated_network()
         assert result is None

@@ -1,29 +1,29 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from src.contain.models import ExecutionRequest, SandboxConfig
-from src.contain.container_provisioner import ContainerProvisioner
+from secureagentnet.contain.models import ExecutionRequest, SandboxConfig
+from secureagentnet.contain.container_provisioner import ContainerProvisioner
 
 
 @pytest.fixture(autouse=True)
 def mock_resource_manager(monkeypatch):
     monkeypatch.setattr(
-        "src.contain.container_provisioner.ContainerResourceManager.register_container",
+        "secureagentnet.contain.container_provisioner.ContainerResourceManager.register_container",
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(
-        "src.contain.container_provisioner.ContainerResourceManager.update_status",
+        "secureagentnet.contain.container_provisioner.ContainerResourceManager.update_status",
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(
-        "src.contain.container_provisioner.ContainerResourceManager.remove_container",
+        "secureagentnet.contain.container_provisioner.ContainerResourceManager.remove_container",
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(
-        "src.contain.container_provisioner.ContainerResourceManager.get_running_count",
+        "secureagentnet.contain.container_provisioner.ContainerResourceManager.get_running_count",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "src.contain.container_provisioner.ContainerResourceManager.get_agent_containers",
+        "secureagentnet.contain.container_provisioner.ContainerResourceManager.get_agent_containers",
         lambda aid: [],
     )
 
@@ -47,8 +47,8 @@ def mock_docker_client(monkeypatch):
         "networks": {"eth0": {"rx_bytes": 500, "tx_bytes": 200}},
     }
 
-    monkeypatch.setattr("src.contain.container_provisioner.docker.from_env", lambda: mock_client)
-    monkeypatch.setattr("src.contain.container_provisioner.create_isolated_network", lambda name="securenet_isolated": "securenet_isolated")
+    monkeypatch.setattr("secureagentnet.contain.container_provisioner.docker.from_env", lambda: mock_client)
+    monkeypatch.setattr("secureagentnet.contain.container_provisioner.create_isolated_network", lambda name="securenet_isolated": "securenet_isolated")
     return mock_client, mock_container
 
 
@@ -96,7 +96,7 @@ def test_run_in_sandbox_timeout(mock_docker_client):
 def test_run_in_sandbox_with_files(mock_docker_client):
     mock_client, mock_container = mock_docker_client
     import base64
-    from src.contain.models import InjectedFile
+    from secureagentnet.contain.models import InjectedFile
 
     provisioner = ContainerProvisioner()
     request = ExecutionRequest(

@@ -1,13 +1,13 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from src.decide.semantic_evaluator import SemanticEvaluator
-from src.decide.models import EvaluationRequest
+from secureagentnet.decide.semantic_evaluator import SemanticEvaluator
+from secureagentnet.decide.models import EvaluationRequest
 
 
 class TestSemanticEvaluator:
     @pytest.fixture
     def evaluator(self):
-        with patch("src.decide.semantic_evaluator.get_settings") as mock_get_settings:
+        with patch("secureagentnet.decide.semantic_evaluator.get_settings") as mock_get_settings:
             settings = MagicMock()
             settings.ollama_api_url = "http://localhost:11434/api/generate"
             settings.ollama_model = "llama2:test"
@@ -163,8 +163,8 @@ class TestSemanticEvaluator:
 
     @pytest.fixture
     def caching_evaluator(self):
-        from src.decide.semantic_evaluator import SemanticEvaluator
-        with patch("src.decide.semantic_evaluator.get_settings") as mock_get_settings:
+        from secureagentnet.decide.semantic_evaluator import SemanticEvaluator
+        with patch("secureagentnet.decide.semantic_evaluator.get_settings") as mock_get_settings:
             settings = MagicMock()
             settings.ollama_api_url = "http://localhost:11434/api/generate"
             settings.ollama_model = "llama2:test"

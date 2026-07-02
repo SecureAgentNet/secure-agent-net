@@ -8,9 +8,9 @@ prompt, and that mandate lookup is fail-closed for an unknown agent.
 import pytest
 from unittest.mock import MagicMock, patch
 
-from src.decide.intent_capsule import IntentCapsule, MandateRegistry
-from src.decide.models import EvaluationRequest
-from src.decide.semantic_evaluator import SemanticEvaluator
+from secureagentnet.decide.intent_capsule import IntentCapsule, MandateRegistry
+from secureagentnet.decide.models import EvaluationRequest
+from secureagentnet.decide.semantic_evaluator import SemanticEvaluator
 
 
 def _mandate(approved=None, forbidden=None, goal="Pay employees their salaries"):
@@ -70,7 +70,7 @@ class TestEvaluationRequestCarriesGoal:
 class TestSemanticEvaluatorAnchorsToGoal:
     @pytest.fixture
     def evaluator(self):
-        with patch("src.decide.semantic_evaluator.get_settings") as mock_get_settings:
+        with patch("secureagentnet.decide.semantic_evaluator.get_settings") as mock_get_settings:
             settings = MagicMock()
             settings.ollama_api_url = "http://localhost:11434/api/generate"
             settings.ollama_model = "llama2:test"
@@ -89,7 +89,7 @@ class TestSemanticEvaluatorAnchorsToGoal:
             resp.json = lambda: {"response": "SCORE: 0.1\nREASON: ok"}
             return resp
 
-        with patch("src.decide.semantic_evaluator.requests.post", side_effect=fake_post):
+        with patch("secureagentnet.decide.semantic_evaluator.requests.post", side_effect=fake_post):
             evaluator.evaluate(request, request.payload)
         return captured["prompt"]
 
@@ -115,17 +115,17 @@ class TestSemanticEvaluatorAnchorsToGoal:
 class TestMandateRegistryFailClosed:
     def test_unknown_agent_returns_none(self):
         """No DB mandate and no registry record → None, so the pipeline blocks (fail-closed)."""
-        with patch("src.database.repositories.MandateRepository.get_active_for_agent", return_value=None), \
-             patch("src.identify.identity_registry.IdentityRegistry.get_agent", return_value=None):
+        with patch("secureagentnet.database.repositories.MandateRepository.get_active_for_agent", return_value=None), \
+             patch("secureagentnet.identify.identity_registry.IdentityRegistry.get_agent", return_value=None):
             assert MandateRegistry.get_active("ghost-agent") is None
 
     def test_known_agent_without_mandate_is_auto_provisioned(self):
         agent = {"agent_id": "agent-1", "type": "Custom", "description": "test bot",
                  "capabilities": {"pay_salary": True}, "created_by": "system"}
-        with patch("src.database.repositories.MandateRepository.get_active_for_agent", return_value=None), \
-             patch("src.database.repositories.MandateRepository.deactivate_for_agent"), \
-             patch("src.database.repositories.MandateRepository.save") as save, \
-             patch("src.identify.identity_registry.IdentityRegistry.get_agent", return_value=agent):
+        with patch("secureagentnet.database.repositories.MandateRepository.get_active_for_agent", return_value=None), \
+             patch("secureagentnet.database.repositories.MandateRepository.deactivate_for_agent"), \
+             patch("secureagentnet.database.repositories.MandateRepository.save") as save, \
+             patch("secureagentnet.identify.identity_registry.IdentityRegistry.get_agent", return_value=agent):
             capsule = MandateRegistry.get_active("agent-1")
         assert capsule is not None
         assert capsule.is_action_allowed("pay_salary")

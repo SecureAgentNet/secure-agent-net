@@ -9,10 +9,10 @@ import logging
 import json
 from typing import Dict, List, Tuple
 
-from src.core.pipeline import ITCDPipeline
-from src.track.models import AgentActionRequest
-from src.identify.identity_registry import IdentityRegistry
-from src.decide.kill_switch import KillSwitchController
+from secureagentnet.core.pipeline import ITCDPipeline
+from secureagentnet.track.models import AgentActionRequest
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.decide.kill_switch import KillSwitchController
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("SecureAgentNet.RedTeam")

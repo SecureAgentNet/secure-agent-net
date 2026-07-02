@@ -7,8 +7,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import logging
 
-from src.identify.identity_registry import IdentityRegistry
-from src.identify.capability_profiler import CapabilityProfiler
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.identify.capability_profiler import CapabilityProfiler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SecureAgentNet.SeedData")

@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import patch
 
-from src.identify.mcp_vetting import (
+from secureagentnet.identify.mcp_vetting import (
     McpToolVetter, McpServerRegistry, ToolVerdict, SAFE, SUSPICIOUS, MALICIOUS,
 )
 
@@ -56,8 +56,8 @@ class TestVetter:
 def memory_store():
     """Back McpServerRegistry with an in-memory store instead of disk."""
     store = {}
-    with patch("src.utils.persistence.PersistenceStore.load", side_effect=lambda k, d=None: store.get(k, d)), \
-         patch("src.utils.persistence.PersistenceStore.save", side_effect=lambda k, v: store.__setitem__(k, v)):
+    with patch("secureagentnet.utils.persistence.PersistenceStore.load", side_effect=lambda k, d=None: store.get(k, d)), \
+         patch("secureagentnet.utils.persistence.PersistenceStore.save", side_effect=lambda k, v: store.__setitem__(k, v)):
         yield store
 
 
@@ -98,7 +98,7 @@ class TestPerToolAuthorization:
             def is_action_allowed(self, action):
                 return action == "list_files"
 
-        with patch("src.decide.intent_capsule.MandateRegistry.get_active", return_value=FakeMandate()):
+        with patch("secureagentnet.decide.intent_capsule.MandateRegistry.get_active", return_value=FakeMandate()):
             ok, _ = McpServerRegistry.is_tool_authorized(self._agent(), "srv", "list_files")
             assert ok
 
@@ -109,12 +109,12 @@ class TestPerToolAuthorization:
             def is_action_allowed(self, action):
                 return False
 
-        with patch("src.decide.intent_capsule.MandateRegistry.get_active", return_value=DenyMandate()):
+        with patch("secureagentnet.decide.intent_capsule.MandateRegistry.get_active", return_value=DenyMandate()):
             allowed, reason = McpServerRegistry.is_tool_authorized(self._agent(), "srv", "wire_funds")
             assert not allowed and "mandate" in reason
 
     def test_no_mandate_blocked(self, memory_store):
         McpServerRegistry.register_and_vet("srv", [{"name": "read", "description": "reads data"}])
-        with patch("src.decide.intent_capsule.MandateRegistry.get_active", return_value=None):
+        with patch("secureagentnet.decide.intent_capsule.MandateRegistry.get_active", return_value=None):
             allowed, reason = McpServerRegistry.is_tool_authorized(self._agent(), "srv", "read")
             assert not allowed and "mandate" in reason

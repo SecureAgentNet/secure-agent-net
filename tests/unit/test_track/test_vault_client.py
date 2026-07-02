@@ -1,7 +1,7 @@
 import hvac
 import pytest
 from unittest.mock import MagicMock, patch
-from src.track.vault_client import VaultAuditClient
+from secureagentnet.track.vault_client import VaultAuditClient
 
 
 class TestVaultAuditClient:
@@ -17,7 +17,7 @@ class TestVaultAuditClient:
             "data": {"version": 3}
         }
         monkeypatch.setattr("hvac.Client", lambda url=None, token=None: mock_client)
-        monkeypatch.setattr("src.track.vault_client.hvac.Client", lambda url=None, token=None: mock_client)
+        monkeypatch.setattr("secureagentnet.track.vault_client.hvac.Client", lambda url=None, token=None: mock_client)
         return mock_client
 
     @pytest.fixture
@@ -52,7 +52,7 @@ class TestVaultAuditClient:
         assert call_kwargs[1]["secret"]["_hmac"] == "hmac:sha256:abc123def456"
 
     def test_secure_log_no_client(self):
-        with patch("src.track.vault_client.VaultAuditClient.__init__", return_value=None):
+        with patch("secureagentnet.track.vault_client.VaultAuditClient.__init__", return_value=None):
             client = VaultAuditClient.__new__(VaultAuditClient)
             client.client = None
             client.settings = MagicMock()
@@ -60,7 +60,7 @@ class TestVaultAuditClient:
             result = client.secure_log(log_data)
             assert result is None
 
-    @patch("src.track.vault_client.hvac.Client")
+    @patch("secureagentnet.track.vault_client.hvac.Client")
     def test_secure_log_client_init_failure(self, mock_hvac_class):
         mock_hvac_class.side_effect = Exception("Connection refused")
         client = VaultAuditClient()
@@ -168,7 +168,7 @@ class TestVaultAuditClient:
         mock_client.is_authenticated.return_value = True
         mock_client.secrets.transit.read_key.side_effect = hvac.exceptions.InvalidPath("not found")
         monkeypatch.setattr("hvac.Client", lambda url=None, token=None: mock_client)
-        monkeypatch.setattr("src.track.vault_client.hvac.Client", lambda url=None, token=None: mock_client)
+        monkeypatch.setattr("secureagentnet.track.vault_client.hvac.Client", lambda url=None, token=None: mock_client)
         c = VaultAuditClient()
         assert c._transit_ready is True
         mock_client.secrets.transit.create_key.assert_called_once_with(

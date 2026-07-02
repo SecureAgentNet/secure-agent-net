@@ -1,12 +1,12 @@
 import pytest
 from typing import Dict, Any, Tuple
 
-from src.decide.models import EvaluationRequest
-from src.decide.rule_filter import RuleFilter
-from src.decide.pii_redactor import PiiRedactor
-from src.decide.semantic_evaluator import SemanticEvaluator
-from src.identify.rogue_detector import RogueDetector
-from src.track.models import AgentActionRequest
+from secureagentnet.decide.models import EvaluationRequest
+from secureagentnet.decide.rule_filter import RuleFilter
+from secureagentnet.decide.pii_redactor import PiiRedactor
+from secureagentnet.decide.semantic_evaluator import SemanticEvaluator
+from secureagentnet.identify.rogue_detector import RogueDetector
+from secureagentnet.track.models import AgentActionRequest
 
 pytestmark = pytest.mark.redteam
 

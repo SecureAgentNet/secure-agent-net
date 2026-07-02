@@ -1,10 +1,10 @@
 import json
 import pytest
 from datetime import datetime, timezone
-from src.track.forensic_query import ForensicQueryEngine
-from src.track.log_indexer import LogIndexer
-from src.identify.identity_registry import IdentityRegistry
-from src.core.constants import PipelinePhase, EventSeverity
+from secureagentnet.track.forensic_query import ForensicQueryEngine
+from secureagentnet.track.log_indexer import LogIndexer
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.core.constants import PipelinePhase, EventSeverity
 
 
 class TestForensicQueryEngine:

@@ -1,6 +1,6 @@
 import time
 import pytest
-from src.identify.rogue_detector import RogueDetector
+from secureagentnet.identify.rogue_detector import RogueDetector
 
 
 class TestRogueDetector:

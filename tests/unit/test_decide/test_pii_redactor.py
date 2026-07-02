@@ -1,5 +1,5 @@
 import pytest
-from src.decide.pii_redactor import PiiRedactor
+from secureagentnet.decide.pii_redactor import PiiRedactor
 
 
 class TestPiiRedactor:
@@ -125,9 +125,9 @@ class TestPiiRedactor:
         assert result["host"] == "[REDACTED_IP_ADDRESS]"
 
     def test_presidio_init_failure_raises_error(self, monkeypatch):
-        from src.core.exceptions import PIIRedactionError
+        from secureagentnet.core.exceptions import PIIRedactionError
         monkeypatch.setattr(
-            "src.decide.pii_redactor._get_analyzer",
+            "secureagentnet.decide.pii_redactor._get_analyzer",
             lambda: (_ for _ in ()).throw(RuntimeError("Presidio unavailable")),
         )
         with pytest.raises(PIIRedactionError, match="Presidio unavailable"):

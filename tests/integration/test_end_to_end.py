@@ -3,15 +3,15 @@ import json
 import asyncio
 from unittest.mock import patch
 
-from src.identify.identity_registry import IdentityRegistry
-from src.identify.capability_profiler import CapabilityProfiler
-from src.track.log_indexer import LogIndexer
-from src.track.forensic_query import ForensicQueryEngine
-from src.contain.resource_manager import ContainerResourceManager
-from src.decide.intent_capsule import IntentCapsuleManager
-from src.decide.kill_switch import KillSwitchController
-from src.core.constants import AgentStatus
-from src.contain.models import ExecutionResult
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.identify.capability_profiler import CapabilityProfiler
+from secureagentnet.track.log_indexer import LogIndexer
+from secureagentnet.track.forensic_query import ForensicQueryEngine
+from secureagentnet.contain.resource_manager import ContainerResourceManager
+from secureagentnet.decide.intent_capsule import IntentCapsuleManager
+from secureagentnet.decide.kill_switch import KillSwitchController
+from secureagentnet.core.constants import AgentStatus
+from secureagentnet.contain.models import ExecutionResult
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +39,7 @@ def reset_state():
 
 @pytest.fixture
 def flask_client():
-    from src.interfaces.web_dashboard.app import app as flask_app
+    from secureagentnet.interfaces.web_dashboard.app import app as flask_app
     flask_app.config["TESTING"] = True
     flask_app.config["RATELIMIT_ENABLED"] = False
     with flask_app.test_client() as client:
@@ -48,14 +48,14 @@ def flask_client():
 
 @pytest.fixture(autouse=True)
 def reset_kill_switch():
-    from src.interfaces.web_dashboard.app import pipeline as dashboard_pipeline
+    from secureagentnet.interfaces.web_dashboard.app import pipeline as dashboard_pipeline
     dashboard_pipeline.kill_switch.deactivate("test-autoreset")
     yield
 
 
 @pytest.fixture
 def mock_sandbox(monkeypatch):
-    from src.core import pipeline as pipeline_module
+    from secureagentnet.core import pipeline as pipeline_module
 
     from types import SimpleNamespace
 
@@ -85,12 +85,12 @@ def mock_sandbox(monkeypatch):
         pipeline_module.ContainerProvisioner, "teardown_sandbox", fake_teardown
     )
 
-    from src.track import vault_client as vault_module
+    from secureagentnet.track import vault_client as vault_module
     monkeypatch.setattr(
         vault_module.VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-e2e-001"
     )
 
-    from src.decide import SemanticEvaluator
+    from secureagentnet.decide import SemanticEvaluator
     monkeypatch.setattr(
         SemanticEvaluator, "evaluate",
         lambda self, req, redacted: (0.1, "Benign e2e request")
@@ -403,7 +403,7 @@ class TestEndToEndWorkflow:
         assert reset_response.status_code == 200
         assert reset_response.get_json()["active"] is False
 
-        from src.interfaces.web_dashboard.app import pipeline as dashboard_pipeline
+        from secureagentnet.interfaces.web_dashboard.app import pipeline as dashboard_pipeline
         dashboard_pipeline.kill_switch.deactivate("test-cleanup")
         dashboard_pipeline.kill_switch.arm()
 

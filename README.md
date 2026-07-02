@@ -63,13 +63,46 @@ SecureAgentNet is designed to mitigate:
 * Secure MCP ecosystems
 * AI red-teaming and forensic analysis
 
-## Installation (Planned)
+## Getting Started
 
-```bash
-git clone https://github.com/yourusername/SecureAgentNet.git
-cd SecureAgentNet
-docker-compose up --build
-```
+### Prerequisites
+
+- Python 3.11+
+- Docker and Docker Compose
+- Git
+
+### Installation
+
+1.  **Clone the repository:**
+
+    ```bash
+    git clone https://github.com/SecureAgentNet/secure-agent-net.git
+    cd secure-agent-net
+    ```
+
+2.  **Install the package in editable mode:**
+
+    This will make the `secureagentnet` and `san` command-line tools available in your environment.
+
+    ```bash
+    pip install -e .
+    ```
+
+3.  **Verify the installation:**
+
+    Run the doctor command to check if everything is set up correctly.
+
+    ```bash
+    secureagentnet doctor
+    ```
+
+4.  **Start the services:**
+
+    This will start the SecureAgentNet server and other required services using Docker Compose.
+
+    ```bash
+    secureagentnet server start
+    ```
 
 ## Roadmap
 

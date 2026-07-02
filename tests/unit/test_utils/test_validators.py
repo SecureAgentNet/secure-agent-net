@@ -1,5 +1,5 @@
 import pytest
-from src.utils.validators import (
+from secureagentnet.utils.validators import (
     validate_agent_name,
     validate_uuid,
     validate_email,

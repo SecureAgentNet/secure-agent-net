@@ -1,10 +1,10 @@
 import pytest
 
-from src.decide.models import EvaluationRequest
-from src.decide.rule_filter import RuleFilter
-from src.decide.pii_redactor import PiiRedactor
-from src.utils.helpers import redact_sensitive_value
-from src.utils.validators import sanitize_command
+from secureagentnet.decide.models import EvaluationRequest
+from secureagentnet.decide.rule_filter import RuleFilter
+from secureagentnet.decide.pii_redactor import PiiRedactor
+from secureagentnet.utils.helpers import redact_sensitive_value
+from secureagentnet.utils.validators import sanitize_command
 
 pytestmark = pytest.mark.redteam
 

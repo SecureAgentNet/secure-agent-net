@@ -3,11 +3,11 @@ import json
 from fastapi.testclient import TestClient as FastAPITestClient
 from unittest.mock import patch, MagicMock
 
-from src.identify.identity_registry import IdentityRegistry
-from src.track.log_indexer import LogIndexer
-from src.identify.capability_profiler import CapabilityProfiler
-from src.contain.resource_manager import ContainerResourceManager
-from src.decide.intent_capsule import IntentCapsuleManager
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.track.log_indexer import LogIndexer
+from secureagentnet.identify.capability_profiler import CapabilityProfiler
+from secureagentnet.contain.resource_manager import ContainerResourceManager
+from secureagentnet.decide.intent_capsule import IntentCapsuleManager
 
 
 @pytest.fixture(autouse=True)
@@ -36,13 +36,13 @@ def reset_state():
 
 @pytest.fixture
 def fastapi_client():
-    from src.main import app
+    from secureagentnet.main import app
     return FastAPITestClient(app)
 
 
 @pytest.fixture
 def flask_client():
-    from src.interfaces.web_dashboard.app import app as flask_app
+    from secureagentnet.interfaces.web_dashboard.app import app as flask_app
     flask_app.config["TESTING"] = True
     flask_app.config["RATELIMIT_ENABLED"] = False
     with flask_app.test_client() as client:
@@ -215,8 +215,8 @@ class TestPipelineExecuteAPI:
         agent_id = agent["agent_id"]
         CapabilityProfiler.add_capability(agent_id, "read_file")
 
-        import src.core.pipeline as pipeline_module
-        from src.contain.models import ExecutionResult
+        import secureagentnet.core.pipeline as pipeline_module
+        from secureagentnet.contain.models import ExecutionResult
 
         from types import SimpleNamespace
 
@@ -246,12 +246,12 @@ class TestPipelineExecuteAPI:
             pipeline_module.ContainerProvisioner, "teardown_sandbox", mock_teardown
         )
 
-        import src.track.vault_client as vault_module
+        import secureagentnet.track.vault_client as vault_module
         monkeypatch.setattr(
             vault_module.VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-api-001"
         )
 
-        from src.decide import SemanticEvaluator
+        from secureagentnet.decide import SemanticEvaluator
         monkeypatch.setattr(
             SemanticEvaluator, "evaluate",
             lambda self, req, redacted: (0.1, "Benign API test")

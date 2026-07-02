@@ -1,7 +1,7 @@
 import pytest
-from src.identify.identity_registry import IdentityRegistry
-from src.core.constants import AgentStatus
-from src.core.exceptions import AgentNotFoundError, AgentSuspendedError
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.core.constants import AgentStatus
+from secureagentnet.core.exceptions import AgentNotFoundError, AgentSuspendedError
 
 
 class TestIdentityRegistry:

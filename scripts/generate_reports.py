@@ -9,8 +9,8 @@ import logging
 import json
 from datetime import datetime
 
-from src.track.forensic_query import ForensicQueryEngine
-from src.track.log_indexer import LogIndexer
+from secureagentnet.track.forensic_query import ForensicQueryEngine
+from secureagentnet.track.log_indexer import LogIndexer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SecureAgentNet.Reports")
@@ -62,7 +62,7 @@ def save_report(report: dict, filename: str):
 
 
 if __name__ == "__main__":
-    from src.identify.identity_registry import IdentityRegistry
+    from secureagentnet.identify.identity_registry import IdentityRegistry
     IdentityRegistry.initialize()
 
     perf_report = generate_performance_report()

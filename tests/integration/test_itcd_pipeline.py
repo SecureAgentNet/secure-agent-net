@@ -4,18 +4,18 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Dict, Any
 
-from src.core.pipeline import ITCDPipeline
-from src.track.models import AgentActionRequest
-from src.core.constants import AgentStatus, PipelinePhase, EventSeverity
-from src.core.exceptions import KillSwitchActiveError, AgentNotFoundError
-from src.identify.identity_registry import IdentityRegistry
-from src.identify.capability_profiler import CapabilityProfiler
-from src.track.log_indexer import LogIndexer
-from src.contain.resource_manager import ContainerResourceManager
-from src.decide.intent_capsule import IntentCapsuleManager, IntentCapsule
-from src.decide.circuit_breaker import CircuitBreaker
-from src.decide.kill_switch import KillSwitchController
-from src.contain.models import ExecutionResult
+from secureagentnet.core.pipeline import ITCDPipeline
+from secureagentnet.track.models import AgentActionRequest
+from secureagentnet.core.constants import AgentStatus, PipelinePhase, EventSeverity
+from secureagentnet.core.exceptions import KillSwitchActiveError, AgentNotFoundError
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.identify.capability_profiler import CapabilityProfiler
+from secureagentnet.track.log_indexer import LogIndexer
+from secureagentnet.contain.resource_manager import ContainerResourceManager
+from secureagentnet.decide.intent_capsule import IntentCapsuleManager, IntentCapsule
+from secureagentnet.decide.circuit_breaker import CircuitBreaker
+from secureagentnet.decide.kill_switch import KillSwitchController
+from secureagentnet.contain.models import ExecutionResult
 
 
 @pytest.fixture(autouse=True)
@@ -120,7 +120,7 @@ class TestITCDPipelineFullPipeline:
         agent_id = registered_agent["agent_id"]
 
         _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
-        from src.track.vault_client import VaultAuditClient
+        from secureagentnet.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-abc123"
         )
@@ -487,7 +487,7 @@ class TestLoggingIntegration:
         agent_id = registered_agent["agent_id"]
 
         _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
-        from src.track.vault_client import VaultAuditClient
+        from secureagentnet.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-xyz"
         )
@@ -543,7 +543,7 @@ class TestLoggingIntegration:
         agent_id = registered_agent["agent_id"]
 
         _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
-        from src.track.vault_client import VaultAuditClient
+        from secureagentnet.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-logs"
         )
@@ -578,7 +578,7 @@ class TestLoggingIntegration:
         agent_id = registered_agent["agent_id"]
 
         _patch_sandbox(monkeypatch, pipeline, _mock_container_success)
-        from src.track.vault_client import VaultAuditClient
+        from secureagentnet.track.vault_client import VaultAuditClient
         monkeypatch.setattr(
             VaultAuditClient, "secure_log", lambda self, x: "vault-receipt-iso"
         )

@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from src.core.pipeline import ITCDPipeline
-from src.track.models import AgentActionRequest
-from src.core.constants import AgentStatus
-from src.identify.identity_registry import IdentityRegistry
-from src.identify.capability_profiler import CapabilityProfiler
+from secureagentnet.core.pipeline import ITCDPipeline
+from secureagentnet.track.models import AgentActionRequest
+from secureagentnet.core.constants import AgentStatus
+from secureagentnet.identify.identity_registry import IdentityRegistry
+from secureagentnet.identify.capability_profiler import CapabilityProfiler
 
 
 @pytest.fixture(autouse=True)
@@ -21,8 +21,8 @@ def reset_state():
 @pytest.fixture
 def pipeline():
     with (
-        patch("src.decide.semantic_evaluator.requests.post") as mock_ollama,
-        patch("src.contain.container_provisioner.docker.from_env") as mock_docker,
+        patch("secureagentnet.decide.semantic_evaluator.requests.post") as mock_ollama,
+        patch("secureagentnet.contain.container_provisioner.docker.from_env") as mock_docker,
         patch("hvac.Client") as mock_vault,
     ):
         mock_ollama_response = MagicMock()
