@@ -1,0 +1,52 @@
+# =============================================================================
+# SAN Blog – Apache URL Rewriting (.htaccess)
+# =============================================================================
+#
+# Place this file in:  /blog/backend/.htaccess
+#
+# On Hetzner Managed Server, ensure mod_rewrite is enabled.
+# If Apache config overrides are restricted, coordinate with Hetzner support
+# or ask them to set AllowOverride All for the blog/backend directory.
+# =============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Redirect direct requests to PHP files to prevent exposure
+    # (optional – keep clean URLs only)
+
+    # API routing
+    RewriteRule ^api/posts/?$              api/posts.php [QSA,L]
+    RewriteRule ^api/posts/([a-zA-Z0-9_-]+)/?$  api/posts.php [QSA,L]
+    RewriteRule ^api/categories/?$         api/categories.php [QSA,L]
+    RewriteRule ^api/categories/([a-zA-Z0-9_-]+)/?$ api/categories.php [QSA,L]
+    RewriteRule ^api/tags/?$              api/tags.php [QSA,L]
+    RewriteRule ^api/tags/([a-zA-Z0-9_-]+)/?$ api/tags.php [QSA,L]
+    RewriteRule ^api/comments/?$           api/comments.php [QSA,L]
+    RewriteRule ^api/upload/?$            api/upload.php [QSA,L]
+
+    # Admin
+    RewriteRule ^admin/?$                  admin/index.php [QSA,L]
+    RewriteRule ^admin/dashboard/?$        admin/dashboard.php [QSA,L]
+    RewriteRule ^admin/edit/?$            admin/edit.php [QSA,L]
+    RewriteRule ^admin/logout/?$           admin/logout.php [QSA,L]
+</IfModule>
+
+# Deny direct access to config and internal files
+<FilesMatch "^(config\.php|database\.php|helpers\.php|auth\.php|error\.log)$">
+    Require all denied
+</FilesMatch>
+
+# Deny directory listing
+Options -Indexes
+
+# ---------------------------------------------------------------------------
+# Alternative: If mod_rewrite is NOT available on your Hetzner Managed Server,
+# you can use the .php files directly without rewriting:
+#
+#   /blog/backend/api/posts.php          = GET/POST /api/posts
+#   /blog/backend/api/posts.php/{slug}   = GET /api/posts/{slug}
+#   /blog/backend/admin/index.php        = Admin login
+#
+# In that case, update your frontend API_BASE_URL accordingly.
+# ---------------------------------------------------------------------------

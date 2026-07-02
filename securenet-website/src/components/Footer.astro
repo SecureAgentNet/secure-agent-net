@@ -1,0 +1,53 @@
+---
+const platform = [
+  { href: '/architecture', label: 'ITCD Pipeline' },
+  { href: '/features', label: 'Mandate Enforcement' },
+  { href: '/features', label: 'MCP Tool Vetting' },
+  { href: '/evaluation', label: 'Evaluation' },
+];
+const resources = [
+  { href: '/docs', label: 'Documentation' },
+  { href: '/install', label: 'Install' },
+  { href: '/blog', label: 'Blog' },
+  { href: 'https://github.com/SecureAgentNet/secure-agent-net', label: 'GitHub' },
+];
+const year = new Date().getFullYear();
+---
+
+<footer class="bg-surface-container-high border-t border-outline-variant py-12 md:py-20">
+  <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-12">
+    <div class="col-span-1 md:col-span-2">
+      <div class="flex items-center gap-2.5 mb-5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2.5 4 5.8v5.4c0 4.9 3.4 9.5 8 10.3 4.6-.8 8-5.4 8-10.3V5.8L12 2.5Z" stroke="#1c1917" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M8.6 11.9l2.3 2.4 4.5-4.6" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="font-display text-lg font-bold text-on-surface">SecureAgentNet</span>
+      </div>
+      <p class="text-on-surface-variant max-w-sm leading-relaxed text-sm">
+        Open-source, self-hosted runtime security for autonomous AI agents.
+        Every action is checked against the agent's commissioned goal before it executes.
+      </p>
+    </div>
+    <div>
+      <h4 class="text-on-surface font-semibold mb-5 text-sm">Platform</h4>
+      <ul class="space-y-3 text-sm text-on-surface-variant">
+        {platform.map((l) => (
+          <li><a class="hover:text-on-surface transition-colors" href={l.href}>{l.label}</a></li>
+        ))}
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-on-surface font-semibold mb-5 text-sm">Resources</h4>
+      <ul class="space-y-3 text-sm text-on-surface-variant">
+        {resources.map((l) => (
+          <li><a class="hover:text-on-surface transition-colors" href={l.href}>{l.label}</a></li>
+        ))}
+      </ul>
+    </div>
+  </div>
+  <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop mt-12 md:mt-16 pt-6 border-t border-outline-variant flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-on-surface-variant">
+    <span>&copy; {year} SecureAgentNet. Released under the MIT License.</span>
+    <span>Open source. Self-hosted. Zero trust.</span>
+  </div>
+</footer>

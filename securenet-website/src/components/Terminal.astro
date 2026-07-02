@@ -1,0 +1,21 @@
+---
+// Shared terminal panel — the site's signature visual.
+// Rule: only show output the real `san` CLI can produce.
+interface Props {
+  title?: string;
+  class?: string;
+}
+const { title = 'san — zsh', class: className = '' } = Astro.props;
+---
+
+<div class={`term ${className}`}>
+  <div class="term-bar">
+    <div class="term-dot"></div>
+    <div class="term-dot"></div>
+    <div class="term-dot"></div>
+    <span class="term-title">{title}</span>
+  </div>
+  <div class="term-body">
+    <slot />
+  </div>
+</div>

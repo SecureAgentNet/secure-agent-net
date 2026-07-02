@@ -1,0 +1,82 @@
+@startuml fig2_activity
+' Figure 2: SecureAgentNet Activity Diagram (complete operational flow)
+skinparam shadowing false
+
+start
+:Agent connects via MCP;
+
+if (Authentication valid?) then (no)
+  :Log rejection to Vault;
+  :Reject agent;
+  stop
+else (yes)
+endif
+
+if (Kill-switch tripped\nor circuit breaker open?) then (yes)
+  :Block request;
+  :Log event to Vault;
+  stop
+else (no)
+endif
+
+if (Active Intent Capsule\n(mandate) exists?) then (no)
+  :Deny action (fail-closed);
+  :Log denial to Vault;
+  stop
+else (yes)
+endif
+
+partition "TRACK" {
+  :Log action request;
+  :Capture reasoning chain;
+  :Write HMAC-signed entry to Vault;
+}
+
+partition "CONTAIN" {
+  :Provision hardened sandbox
+  (seccomp, AppArmor,
+  read-only rootfs, no network);
+}
+
+partition "DECIDE" {
+  if (Tier 1: rule filter pass?) then (no)
+    :Deny;
+  else (yes)
+    if (Tier 1.5: AST matches\ndeclared intent? (code only)) then (no)
+      :Deny;
+    else (yes)
+      :Tier 2: redact PII (fail-closed);
+      :Tier 3: semantic evaluation
+      against Intent Capsule;
+      if (Risk score?) then (>= block threshold)
+        :Deny;
+      elseif (escalation band) then
+        :Tier 3.5: escalate to
+        human operator;
+        if (Operator approves?) then (no)
+          :Deny;
+        else (yes)
+          :Permit;
+        endif
+      else (low risk)
+        :Permit;
+      endif
+    endif
+  endif
+}
+
+if (Final decision?) then (deny)
+  :Destroy sandbox unexecuted;
+  :Increment circuit breaker;
+  :Log denial to Vault;
+  :Alert operators;
+  stop
+else (permit)
+  :Execute workload inside
+  the existing sandbox;
+  :Capture outputs and receipts;
+  :Tear down sandbox;
+  :Log completion to Vault;
+  stop
+endif
+@enduml

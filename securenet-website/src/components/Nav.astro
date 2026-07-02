@@ -1,0 +1,54 @@
+---
+const links = [
+  { href: '/features', label: 'Platform' },
+  { href: '/architecture', label: 'Security' },
+  { href: '/evaluation', label: 'Evaluation' },
+  { href: '/docs', label: 'Docs' },
+  { href: '/blog', label: 'Blog' },
+];
+---
+
+<nav class="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-md border-b border-outline-variant">
+  <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop h-16 flex justify-between items-center">
+    <div class="flex items-center gap-4 md:gap-10">
+      <a href="/" class="flex items-center gap-2.5">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2.5 4 5.8v5.4c0 4.9 3.4 9.5 8 10.3 4.6-.8 8-5.4 8-10.3V5.8L12 2.5Z" stroke="#1c1917" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M8.6 11.9l2.3 2.4 4.5-4.6" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="font-display text-lg font-bold text-on-surface tracking-tight">SecureAgentNet</span>
+      </a>
+      <div class="hidden md:flex gap-6 lg:gap-8">
+        {links.map((l) => (
+          <a class="text-on-surface-variant hover:text-on-surface transition-colors text-sm font-medium" href={l.href}>{l.label}</a>
+        ))}
+      </div>
+    </div>
+    <div class="flex items-center gap-2 md:gap-4">
+      <a
+        class="hidden sm:inline-flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface transition-colors text-sm font-medium"
+        href="https://github.com/SecureAgentNet/secure-agent-net"
+        target="_blank"
+        rel="noopener"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <a class="btn-primary text-xs md:text-sm !py-2 !px-4" href="/install">Get started</a>
+      <button
+        class="md:hidden text-on-surface p-2"
+        onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
+        aria-label="Menu"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"></path></svg>
+      </button>
+    </div>
+  </div>
+  <div id="mobile-menu" class="hidden md:hidden border-t border-outline-variant bg-background/95 backdrop-blur-md">
+    <div class="max-w-container-max mx-auto px-margin-mobile py-4 flex flex-col gap-3">
+      {links.map((l) => (
+        <a class="text-on-surface-variant hover:text-on-surface transition-colors text-sm font-medium py-1" href={l.href}>{l.label}</a>
+      ))}
+    </div>
+  </div>
+</nav>

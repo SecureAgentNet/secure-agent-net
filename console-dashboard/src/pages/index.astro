@@ -1,0 +1,185 @@
+---
+import '../styles/global.css';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SecureAgentNet Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body class="font-body min-h-screen">
+    <!-- ── Login ── -->
+    <div id="login" class="hidden min-h-screen flex items-center justify-center px-4">
+      <form id="login-form" class="card p-8 w-full max-w-sm">
+        <div class="flex items-center gap-2.5 mb-6">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 4 5.8v5.4c0 4.9 3.4 9.5 8 10.3 4.6-.8 8-5.4 8-10.3V5.8L12 2.5Z" stroke="#1c1917" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.6 11.9l2.3 2.4 4.5-4.6" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="font-display text-lg font-bold">SecureAgentNet Console</span>
+        </div>
+        <label class="block text-sm font-medium mb-1">Email</label>
+        <input id="email" type="email" required class="w-full border border-line rounded-lg px-3 py-2 mb-4 text-sm" />
+        <label class="block text-sm font-medium mb-1">Password</label>
+        <input id="password" type="password" required class="w-full border border-line rounded-lg px-3 py-2 mb-5 text-sm" />
+        <button class="btn btn-dark w-full justify-center" type="submit">Sign in</button>
+        <p id="login-error" class="text-crit text-sm mt-3 hidden">Invalid credentials</p>
+      </form>
+    </div>
+
+    <!-- ── App ── -->
+    <div id="app" class="hidden">
+      <header class="border-b border-line bg-white sticky top-0 z-10">
+        <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 4 5.8v5.4c0 4.9 3.4 9.5 8 10.3 4.6-.8 8-5.4 8-10.3V5.8L12 2.5Z" stroke="#1c1917" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.6 11.9l2.3 2.4 4.5-4.6" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="font-display font-bold">SecureAgentNet Console</span>
+          </div>
+          <div class="flex items-center gap-4 text-sm">
+            <span id="who" class="text-muted"></span>
+            <button id="logout" class="btn btn-ghost !py-1.5 !px-3">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="max-w-6xl mx-auto px-6 py-6">
+        <!-- stats -->
+        <section class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="stats">
+          <div class="card p-4 tint-identify"><div class="phase-eyebrow ph-identify">IDENTIFY</div><div class="text-2xl font-display font-bold mt-1" id="s-total">–</div><div class="text-xs text-muted mt-0.5">Endpoints tracked</div></div>
+          <div class="card p-4 tint-track"><div class="phase-eyebrow ph-track">TRACK</div><div class="text-2xl font-display font-bold mt-1" id="s-events">–</div><div class="text-xs text-muted mt-0.5">Events logged (24h)</div></div>
+          <div class="card p-4 tint-contain"><div class="phase-eyebrow ph-contain">CONTAIN</div><div class="text-2xl font-display font-bold mt-1" id="s-online">–</div><div class="text-xs text-muted mt-0.5">Endpoints online</div></div>
+          <div class="card p-4 tint-decide"><div class="phase-eyebrow ph-decide">DECIDE</div><div class="text-2xl font-display font-bold mt-1 text-crit" id="s-crit">–</div><div class="text-xs text-muted mt-0.5">Critical (24h)</div></div>
+        </section>
+
+        <div class="grid lg:grid-cols-3 gap-6">
+          <!-- fleet -->
+          <section class="lg:col-span-2">
+            <h2 class="font-display font-semibold mb-3">Fleet</h2>
+            <div id="fleet" class="grid sm:grid-cols-2 gap-3"></div>
+            <p id="fleet-empty" class="text-sm text-muted hidden">No endpoints enrolled yet. Run <span class="font-mono">san cloud enroll</span> on a host.</p>
+          </section>
+
+          <!-- live events -->
+          <section>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="font-display font-semibold">Live activity</h2>
+              <span class="text-xs text-muted"><span class="dot" style="background:#15803d"></span> auto</span>
+            </div>
+            <input id="search" placeholder="Search reason / action / agent…" class="w-full border border-line rounded-lg px-3 py-2 mb-3 text-sm" />
+            <div id="events" class="space-y-2 max-h-[70vh] overflow-y-auto"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <!-- ── Detail modal ── -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/30 flex items-center justify-center px-4 z-20">
+      <div class="card w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6" id="modal-body"></div>
+    </div>
+
+    <!-- ── Toast ── -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 card px-4 py-3 text-sm shadow-lg z-30"></div>
+
+    <script is:inline>
+      // API base: same-origin in production; override for dev with ?api=URL (persisted).
+      const qp = new URLSearchParams(location.search);
+      if (qp.get('api')) localStorage.setItem('san_api', qp.get('api'));
+      const API = localStorage.getItem('san_api') || '';
+      let TOKEN = localStorage.getItem('san_token') || '';
+      let timer = null;
+
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) => (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+      const ago = (iso) => { if (!iso) return 'never'; const d=(Date.now()-new Date(iso))/1000; if(d<60)return Math.floor(d)+'s ago'; if(d<3600)return Math.floor(d/60)+'m ago'; if(d<86400)return Math.floor(d/3600)+'h ago'; return Math.floor(d/86400)+'d ago'; };
+      const dotColor = (st) => st==='online'?'#15803d':st==='suspended'?'#b91c1c':'#a8a29e';
+
+      async function api(path, opts={}) {
+        const r = await fetch(API + path, { ...opts, headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+TOKEN, ...(opts.headers||{}) } });
+        if (r.status === 401) { logout(); throw new Error('unauthorized'); }
+        return r;
+      }
+      function toast(msg) { const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), 2600); }
+
+      // ── auth ──
+      $('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const r = await fetch(API + '/api/v1/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email:$('email').value, password:$('password').value }) });
+        if (!r.ok) { $('login-error').classList.remove('hidden'); return; }
+        TOKEN = (await r.json()).access_token; localStorage.setItem('san_token', TOKEN);
+        start();
+      });
+      $('logout').addEventListener('click', logout);
+      function logout() { TOKEN=''; localStorage.removeItem('san_token'); if(timer)clearInterval(timer); $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
+
+      // ── render ──
+      async function refresh() {
+        try {
+          const ov = await (await api('/api/v1/admin/overview')).json();
+          $('s-online').textContent = ov.endpoints_online; $('s-total').textContent = ov.endpoints_total;
+          $('s-events').textContent = ov.events_24h; $('s-crit').textContent = ov.critical_24h;
+
+          const eps = await (await api('/api/v1/admin/endpoints')).json();
+          $('fleet-empty').classList.toggle('hidden', eps.length > 0);
+          $('fleet').innerHTML = eps.map(e => `
+            <div class="card p-4 cursor-pointer hover:border-stone-300" onclick="openDetail('${e.id}')">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2"><span class="dot" style="background:${dotColor(e.status)}"></span><span class="font-medium">${esc(e.hostname)}</span></div>
+                <span class="text-xs text-muted">${esc(e.platform||'')}</span>
+              </div>
+              <div class="text-xs text-muted flex justify-between">
+                <span>${e.agent_count} agent${e.agent_count===1?'':'s'}</span>
+                <span>${esc(e.status)} · ${ago(e.last_heartbeat)}</span>
+              </div>
+              <button class="btn btn-danger !py-1 !px-2 text-xs mt-3" onclick="event.stopPropagation();killEndpoint('${e.id}','${esc(e.hostname)}')">Kill-switch</button>
+            </div>`).join('');
+
+          const q = $('search').value.trim();
+          const evs = await (await api('/api/v1/admin/events?limit=60' + (q ? '&q='+encodeURIComponent(q) : ''))).json();
+          $('events').innerHTML = evs.map(ev => `
+            <div class="card p-3 text-sm">
+              <div class="flex items-center justify-between">
+                <span class="font-medium sev-${ev.severity||'INFO'}">${esc(ev.severity||'INFO')}${ev.decision?' · '+esc(ev.decision):''}</span>
+                <span class="text-xs text-muted">${ago(ev.received_at)}</span>
+              </div>
+              <div class="mt-1">${esc(ev.agent_ref||'agent')} · <span class="font-mono text-xs">${esc(ev.action_name||'')}</span>${ev.target_type?' → '+esc(ev.target_type):''}</div>
+              ${ev.reason?`<div class="text-xs text-muted mt-0.5">${esc(ev.reason)}${ev.risk_score!=null?' · risk '+ev.risk_score:''}</div>`:''}
+            </div>`).join('') || '<p class="text-sm text-muted">No activity.</p>';
+        } catch (_) { /* 401 already handled */ }
+      }
+
+      window.openDetail = async (id) => {
+        const d = await (await api('/api/v1/admin/endpoints/'+id)).json();
+        $('modal-body').innerHTML = `
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2"><span class="dot" style="background:${dotColor(d.status)}"></span><h3 class="font-display font-bold text-lg">${esc(d.hostname)}</h3></div>
+            <button class="btn btn-ghost !py-1 !px-3" onclick="document.getElementById('modal').classList.add('hidden')">Close</button>
+          </div>
+          <div class="text-xs text-muted mb-4">${esc(d.platform||'')} · ${esc(d.status)} · last heartbeat ${ago(d.last_heartbeat)}</div>
+          <button class="btn btn-danger !py-1.5 !px-3 text-sm mb-5" onclick="killEndpoint('${d.id}','${esc(d.hostname)}')">Trigger remote kill-switch</button>
+          <h4 class="font-semibold text-sm mb-2">Agents</h4>
+          <div class="space-y-1 mb-5">${(d.agents||[]).map(a=>`<div class="flex justify-between text-sm border-b border-line py-1"><span>${esc(a.agent_ref)}</span><span class="text-muted">trust ${a.trust_score==null?'–':a.trust_score} · ${esc(a.status||'')}</span></div>`).join('') || '<span class="text-sm text-muted">No agents reported.</span>'}</div>
+          <h4 class="font-semibold text-sm mb-2">Recent events</h4>
+          <div class="space-y-1">${(d.events||[]).map(ev=>`<div class="text-sm border-b border-line py-1"><span class="sev-${ev.severity||'INFO'} font-medium">${esc(ev.severity||'INFO')}</span> ${esc(ev.agent_ref||'')} <span class="font-mono text-xs">${esc(ev.action_name||'')}</span> <span class="text-xs text-muted">${ago(ev.received_at)}</span></div>`).join('') || '<span class="text-sm text-muted">No events.</span>'}</div>`;
+        $('modal').classList.remove('hidden');
+      };
+
+      window.killEndpoint = async (id, name) => {
+        if (!confirm('Trigger the remote kill-switch on "'+name+'"? This halts the agent runtime on that host.')) return;
+        const r = await api('/api/v1/admin/endpoints/'+id+'/kill', { method:'POST', body: JSON.stringify({ reason:'Issued from console' }) });
+        toast(r.ok ? 'Kill-switch queued for '+name : 'Failed to queue kill-switch');
+        $('modal').classList.add('hidden');
+      };
+
+      $('search').addEventListener('input', () => refresh());
+
+      function start() {
+        $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+        try { $('who').textContent = JSON.parse(atob(TOKEN.split('.')[1])).sub ? '' : ''; } catch(_){}
+        refresh(); if (timer) clearInterval(timer); timer = setInterval(refresh, 3000);
+      }
+
+      if (TOKEN) start(); else $('login').classList.remove('hidden');
+    </script>
+  </body>
+</html>

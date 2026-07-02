@@ -1,0 +1,47 @@
+---
+import SiteLayout from './SiteLayout.astro';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  post: CollectionEntry<'blog'>;
+}
+
+const { post } = Astro.props;
+const { title, description, authors, date, readTime, tags } = post.data;
+const dateStr = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+const initials = authors.map((a) => a[0]).join('');
+---
+
+<SiteLayout title={`${title} — SecureAgentNet Blog`} description={description}>
+  <main class="pt-32 pb-20 px-margin-mobile md:px-margin-desktop">
+    <article class="max-w-3xl mx-auto">
+      <a href="/blog" class="inline-flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors text-sm font-medium mb-8">Back to blog</a>
+
+      <div class="flex flex-wrap gap-2 mb-5">
+        {tags.map((t) => (
+          <span class="bg-surface-container-high text-on-surface-variant text-[11px] font-code-md px-2.5 py-1 border border-outline-variant rounded-full">{t}</span>
+        ))}
+      </div>
+
+      <h1 class="font-display text-3xl md:text-5xl font-bold text-on-surface leading-[1.12] tracking-tight mb-5">{title}</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant mb-8">{description}</p>
+
+      <div class="flex items-center gap-4 pb-8 mb-10 border-b border-outline-variant">
+        <div class="w-10 h-10 rounded-full bg-primary-container border border-primary/20 flex items-center justify-center text-primary font-headline-md text-sm font-semibold">{initials}</div>
+        <div class="text-sm">
+          <div class="text-on-surface font-medium">{authors.join(', ')}</div>
+          <div class="text-on-surface-variant text-xs">{dateStr} &mdash; {readTime} read</div>
+        </div>
+      </div>
+
+      <div class="article">
+        <slot />
+      </div>
+
+      <div class="mt-16 pt-8 border-t border-outline-variant flex items-center justify-between gap-4">
+        <a href="/blog" class="text-primary font-medium text-sm hover:underline underline-offset-4">All posts</a>
+        <a href="/install" class="btn-primary">Get started</a>
+      </div>
+    </article>
+  </main>
+</SiteLayout>

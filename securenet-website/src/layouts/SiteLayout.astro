@@ -1,0 +1,62 @@
+---
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+  showNav?: boolean;
+  showFooter?: boolean;
+}
+
+const {
+  title = 'SAN | Zero-Trust AI Security',
+  description = 'Zero-trust security for autonomous AI agents. Real-time interception, reasoning analysis, and sandboxed execution via the SAN ITCD pipeline.',
+  showNav = true,
+  showFooter = true,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="font-body-md text-body-md overflow-x-hidden bg-background text-on-surface">
+    {showNav && <Nav />}
+    <slot />
+    {showFooter && <Footer />}
+
+    <script>
+      // Scroll-reveal: progressively reveal elements with the .reveal class.
+      const els = document.querySelectorAll('.reveal');
+      if (els.length) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                io.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.1 }
+        );
+        els.forEach((el) => io.observe(el));
+      }
+    </script>
+  </body>
+</html>

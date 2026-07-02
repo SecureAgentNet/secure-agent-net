@@ -1,0 +1,106 @@
+@startuml fig6_erd
+' Figure 6: SecureAgentNet Entity Relationship Diagram (eight core entities)
+skinparam shadowing false
+hide circle
+skinparam linetype ortho
+
+entity "Agent" as agent {
+  * agent_id : UUID <<PK>>
+  --
+  * name : varchar
+  * framework : varchar
+  * status : enum(active, suspended, rogue)
+  * trust_score : int
+  public_key : text
+  created_at : timestamp
+  last_authenticated : timestamp
+}
+
+entity "IdentityRegistry" as registry {
+  * registry_id : UUID <<PK>>
+  * agent_id : UUID <<FK>>
+  --
+  * capability_profile : json
+  * failed_auth_count : int
+  registered_at : timestamp
+}
+
+entity "Session" as session {
+  * session_id : UUID <<PK>>
+  * agent_id : UUID <<FK>>
+  --
+  * token : varchar
+  * status : enum(active, suspended, ended)
+  started_at : timestamp
+  ended_at : timestamp
+}
+
+entity "IntentCapsule" as capsule {
+  * capsule_id : UUID <<PK>>
+  * agent_id : UUID <<FK>>
+  --
+  * commissioned_goal : text
+  * approved_actions : json
+  * forbidden_actions : json
+  * expires_at : timestamp
+  created_by : varchar
+}
+
+entity "AuditLog" as audit {
+  * log_id : UUID <<PK>>
+  * session_id : UUID <<FK>>
+  --
+  * event_type : varchar
+  * phase : enum(identify, track, contain, decide)
+  * payload : json
+  * hmac_receipt : varchar
+  * timestamp : timestamp
+}
+
+entity "ContainerProfile" as container {
+  * container_id : UUID <<PK>>
+  * session_id : UUID <<FK>>
+  --
+  * seccomp_profile : varchar
+  * apparmor_policy : varchar
+  * cpu_limit : float
+  * memory_limit : varchar
+  * network_mode : enum(none, whitelist)
+  * executed : boolean
+  provisioned_at : timestamp
+  destroyed_at : timestamp
+}
+
+entity "DecisionRecord" as decision {
+  * decision_id : UUID <<PK>>
+  * session_id : UUID <<FK>>
+  --
+  * tier1_result : enum(pass, deny)
+  * tier2_pii_count : int
+  * tier3_risk_score : float
+  * final_decision : enum(permit, deny, escalate)
+  * evaluated_by : varchar
+  * processing_time_ms : int
+  timestamp : timestamp
+}
+
+entity "SecurityEvent" as event {
+  * event_id : UUID <<PK>>
+  * agent_id : UUID <<FK>>
+  --
+  * event_type : enum(kill_switch, rogue_detected,
+    circuit_breaker, escalation)
+  * severity : enum(info, warning, critical)
+  * description : text
+  * metadata : json
+  timestamp : timestamp
+}
+
+agent ||--|| registry : "is catalogued in"
+agent ||--o{ session : "opens"
+agent ||--o{ capsule : "is commissioned with"
+agent ||--o{ event : "raises"
+session ||--o{ audit : "produces"
+session ||--o{ container : "isolates in"
+session ||--o{ decision : "is judged by"
+@enduml

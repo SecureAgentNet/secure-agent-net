@@ -1,0 +1,143 @@
+{
+  "title": "SecureAgentNet — ITCD Pipeline Observability",
+  "uid": "secureagentnet-itcd",
+  "tags": ["secureagentnet", "ai-agent", "security", "zero-trust"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "title": "Pipeline Throughput",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "rate(san_allowed_requests_total[5m])", "legendFormat": "Allowed — {{phase}}" },
+        { "expr": "rate(san_blocked_requests_total[5m])", "legendFormat": "Blocked — {{phase}} ({{reason}})" }
+      ]
+    },
+    {
+      "title": "Blocked Requests by Reason",
+      "type": "piechart",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum by(reason) (san_blocked_requests_total)", "legendFormat": "{{reason}}" }
+      ]
+    },
+    {
+      "title": "HITL Pending Requests",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 8, "w": 4, "h": 4 },
+      "targets": [
+        { "expr": "san_hitl_pending_requests", "legendFormat": "Pending" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [{ "value": 0, "color": "green" }, { "value": 1, "color": "orange" }, { "value": 5, "color": "red" }]
+          }
+        }
+      }
+    },
+    {
+      "title": "Kill Switch Status",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 8, "w": 4, "h": 4 },
+      "targets": [
+        { "expr": "san_kill_switch_active", "legendFormat": "Kill Switch" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [{ "value": 0, "color": "green" }, { "value": 1, "color": "red" }]
+          },
+          "mappings": [
+            { "type": "value", "value": "0", "text": "Inactive" },
+            { "type": "value", "value": "1", "text": "ACTIVE — HALTED" }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Vault Connected",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 8, "w": 4, "h": 4 },
+      "targets": [
+        { "expr": "san_vault_connected", "legendFormat": "Vault" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [{ "value": 0, "color": "red" }, { "value": 1, "color": "green" }]
+          },
+          "mappings": [
+            { "type": "value", "value": "0", "text": "Disconnected" },
+            { "type": "value", "value": "1", "text": "Connected" }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Active Agents & Containers",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "san_agent_active_total", "legendFormat": "Agents" }
+      ]
+    },
+    {
+      "title": "Sandbox Containers",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "san_container_count", "legendFormat": "Containers" }
+      ]
+    },
+    {
+      "title": "Agent Trust Scores",
+      "type": "gauge",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "san_trust_score", "legendFormat": "{{agent_name}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 100,
+          "thresholds": {
+            "steps": [{ "value": 20, "color": "red" }, { "value": 50, "color": "orange" }, { "value": 80, "color": "green" }]
+          }
+        }
+      }
+    },
+    {
+      "title": "Agent Anomaly Scores",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "san_anomaly_score", "legendFormat": "{{agent_name}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 1,
+          "thresholds": {
+            "steps": [{ "value": 0.5, "color": "orange" }, { "value": 0.8, "color": "red" }]
+          }
+        }
+      }
+    },
+    {
+      "title": "Circuit Breaker Open Agents",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "san_circuit_breaker_open_agents", "legendFormat": "Open circuits" }
+      ]
+    },
+    {
+      "title": "Pipeline Duration (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "rate(san_pipeline_duration_ms_total[5m])", "legendFormat": "{{phase}}" }
+      ]
+    }
+  ]
+}

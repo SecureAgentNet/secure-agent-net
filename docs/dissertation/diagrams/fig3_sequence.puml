@@ -1,0 +1,50 @@
+@startuml fig3_sequence
+' Figure 3: SecureAgentNet Sequence Diagram (one complete agent action)
+skinparam shadowing false
+autonumber
+
+actor "External Agent" as Agent
+participant "Identify\nModule" as Identify
+participant "Track\nModule" as Track
+participant "Contain\nModule" as Contain
+participant "Decide\nModule" as Decide
+database "Vault\n(audit trail)" as Vault
+
+== Authentication ==
+Agent -> Identify : connect via MCP\n(agent metadata)
+Identify -> Identify : verify identity,\ncapabilities, trust score
+Identify -> Vault : log authentication
+Identify --> Agent : session token
+
+== Action Request ==
+Agent -> Identify : propose action\n(tool, parameters, intent)
+Identify -> Identify : kill-switch, circuit breaker,\ncapability and mandate checks
+
+Identify -> Track : forward authorized request
+Track -> Track : capture reasoning chain
+Track -> Vault : write HMAC-signed event
+
+Track -> Contain : request sandbox
+Contain -> Contain : provision hardened container\n(seccomp, AppArmor, no network)
+note right of Contain
+  Sandbox exists **before**
+  the decision is made
+  (contain-first ordering)
+end note
+
+Contain -> Decide : evaluate action
+Decide -> Decide : Tier 1 rules -> Tier 1.5 AST ->\nTier 2 PII redaction ->\nTier 3 semantic evaluation\nagainst Intent Capsule
+Decide -> Vault : log decision + risk score
+
+alt action permitted
+  Decide --> Contain : PERMIT
+  Contain -> Contain : execute workload\ninside existing sandbox
+  Contain -> Vault : log execution + receipt
+  Contain --> Agent : result
+else action denied or escalated
+  Decide --> Contain : DENY / ESCALATE
+  Contain -> Contain : destroy sandbox\n(workload never ran)
+  Contain -> Vault : log teardown
+  Decide --> Agent : blocked notice\n(reason, risk score)
+end
+@enduml

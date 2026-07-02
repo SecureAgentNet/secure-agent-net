@@ -1,0 +1,41 @@
+@startuml fig1_use_case
+' Figure 1: SecureAgentNet Use Case Diagram
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+actor "External Agent" as Agent
+actor "Administrator" as Admin
+
+rectangle "SecureAgentNet" {
+  usecase "Agent Registration\n& Authentication" as UC1
+  usecase "Activity Logging" as UC2
+  usecase "Container Isolation" as UC3
+  usecase "Intent Verification" as UC4
+  usecase "Denial / Kill-Switch" as UC5
+
+  usecase "Commission Agent\n(assign Intent Capsule)" as UC6
+  usecase "Monitor Agent Activity" as UC7
+  usecase "Resolve Escalations\n(HITL approvals)" as UC8
+  usecase "View Audit Logs" as UC9
+  usecase "Revoke Agent Access" as UC10
+}
+
+Agent --> UC1
+Agent --> UC2
+Agent --> UC3
+Agent --> UC4
+
+UC4 ..> UC5 : <<extend>>\n(mandate deviation)
+UC4 ..> UC2 : <<include>>
+UC3 ..> UC2 : <<include>>
+UC1 ..> UC2 : <<include>>
+UC4 ..> UC8 : <<extend>>\n(ambiguous risk)
+
+Admin --> UC6
+Admin --> UC7
+Admin --> UC8
+Admin --> UC9
+Admin --> UC10
+@enduml

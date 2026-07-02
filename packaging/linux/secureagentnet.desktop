@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SecureAgentNet
+Comment=Endpoint Security for Autonomous AI Agents
+Exec=/usr/bin/secureagentnet-desktop
+Icon=secureagentnet
+Type=Application
+Categories=System;Security;
+StartupNotify=true

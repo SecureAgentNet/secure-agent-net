@@ -1,0 +1,75 @@
+@startuml fig4_class
+' Figure 4: SecureAgentNet UML Class Diagram (candidate classes)
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+class SecurityOrchestrator {
+  - identify : IdentityModule
+  - track : TrackModule
+  - contain : ContainModule
+  - decide : DecideModule
+  + executeAgentAction(agentId, request) : Result
+  + emergencyShutdown() : void
+}
+
+class IdentityModule {
+  - registry : AgentRegistry
+  + discoverAgent(mcpConnection) : AgentMetadata
+  + authenticate(metadata) : SessionToken
+  + vetMcpTools(manifest) : VettingReport
+  + detectRogue(agentId) : AnomalyScore
+  + checkKillSwitch() : void
+  + checkCircuitBreaker(agentId) : void
+}
+
+class TrackModule {
+  + logInvocation(action, inputs, outputs) : void
+  + captureReasoning(sessionId) : ReasoningChain
+  + writeSignedEntry(event) : VaultReceipt
+  + verifyReceipt(receipt) : boolean
+}
+
+class ContainModule {
+  + provisionSandbox(agentId, profile) : SandboxHandle
+  + applySecurityProfiles(handle) : void
+  + execute(handle, workload) : ExecutionResult
+  + teardown(handle, executed) : void
+}
+
+class DecideModule {
+  - blockThreshold : float
+  + evaluateRequest(request) : Decision
+  - tier1RuleFilter(request) : TierResult
+  - tier15AstVerify(code, intent) : TierResult
+  - tier2RedactPii(payload) : Payload
+  - tier3SemanticEvaluate(request, capsule) : RiskScore
+  - tier35EscalateToHuman(request) : PendingApproval
+  + tripCircuitBreaker(agentId) : void
+  + fireKillSwitch(reason) : void
+}
+
+class IntentCapsule {
+  - capsuleId : UUID
+  - agentId : UUID
+  - commissionedGoal : String
+  - approvedActions : List<String>
+  - forbiddenActions : List<String>
+  - expiresAt : DateTime
+  + isActive() : boolean
+}
+
+class AgentRegistry {
+  + register(metadata) : AgentRecord
+  + lookup(agentId) : AgentRecord
+  + updateTrustScore(agentId, delta) : void
+  + deregister(agentId) : void
+}
+
+SecurityOrchestrator *-- IdentityModule
+SecurityOrchestrator *-- TrackModule
+SecurityOrchestrator *-- ContainModule
+SecurityOrchestrator *-- DecideModule
+IdentityModule --> AgentRegistry : queries
+DecideModule --> IntentCapsule : evaluates against
+AgentRegistry "1" o-- "0..*" IntentCapsule : agent mandates
+@enduml

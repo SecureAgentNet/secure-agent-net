@@ -1,0 +1,116 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+
+const integrations = [
+  { name: 'LangChain', copy: 'Wrap a LangChain AgentExecutor so every tool call passes through the ITCD pipeline.' },
+  { name: 'CrewAI', copy: 'Govern multi-agent crews and prevent lateral data leaks between collaborators.' },
+];
+
+const endpoints = [
+  { method: 'GET', cls: 'text-secondary', path: '/health', action: 'Liveness and dependency health (Docker, Vault, Redis)' },
+  { method: 'GET', cls: 'text-secondary', path: '/metrics', action: 'Prometheus metrics for the pipeline' },
+  { method: 'GET', cls: 'text-secondary', path: '/docs', action: 'Interactive OpenAPI docs (served by FastAPI)' },
+  { method: 'POST', cls: 'text-primary', path: '/hitl/{request_id}/approve', action: 'Resolve a human-in-the-loop decision' },
+];
+---
+
+<SiteLayout title="Docs — SecureAgentNet">
+  <main class="pt-32 pb-16 px-margin-mobile md:px-margin-desktop max-w-4xl mx-auto">
+    <nav class="flex items-center gap-2 text-on-surface-variant text-xs font-semibold uppercase tracking-wide mb-8">
+      <a class="hover:text-on-surface transition-colors" href="/docs">Documentation</a>
+      <span aria-hidden="true">/</span>
+      <span class="text-primary">Getting started</span>
+    </nav>
+
+    <section class="mb-16">
+      <h1 class="font-headline-lg text-headline-lg text-on-surface mb-4">Quick start</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant mb-8 leading-relaxed">
+        SecureAgentNet is a self-hosted gateway. Install the CLI, run the health check,
+        register an agent, and route its first action through the ITCD pipeline.
+      </p>
+
+      <div class="term">
+        <div class="term-bar"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div><span class="term-title">zsh</span></div>
+        <div class="term-body leading-7">
+          <div><span class="text-stone-500">$</span> <span class="t-cmd">git clone https://github.com/SecureAgentNet/secure-agent-net.git &amp;&amp; pip install -e secure-agent-net</span></div>
+          <div class="t-dim">Installed console scripts: secureagentnet, san</div>
+          <div class="mt-3"><span class="text-stone-500">$</span> <span class="t-cmd">san doctor</span></div>
+          <div class="t-ok">Docker, Ollama, Redis, Vault -- all checks passed</div>
+          <div class="mt-3"><span class="text-stone-500">$</span> <span class="t-cmd">san agent register my-bot --type LangChain</span></div>
+          <div class="t-dim">[IDENTIFY] agent authenticated, trust 50</div>
+          <div class="mt-3"><span class="text-stone-500">$</span> <span class="t-cmd">san run my-bot "python task.py"</span></div>
+          <div class="t-ok">ALLOWED &amp; EXECUTED, sandbox-0c03, vault receipt issued</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Secure existing tools -->
+    <section class="mb-16">
+      <h2 class="font-headline-md text-headline-md text-on-surface mb-3">Secure your existing tools</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant mb-6 max-w-2xl">
+        Wrap the tools you already have. Every invocation is routed through the ITCD pipeline:
+        approved calls return their result, blocked calls return a policy message your agent can read.
+      </p>
+      <div class="term">
+        <div class="term-bar"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div><span class="term-title">python — LangChain</span></div>
+        <pre class="term-body leading-7"><code><span class="t-warn">from</span> secureagentnet.integrations.langchain <span class="t-warn">import</span> secure_tools
+
+<span class="t-dim"># every tool call now flows through Identify, Track, Contain, Decide</span>
+tools = <span class="t-accent">secure_tools</span>(my_tools)
+agent = create_react_agent(llm, tools)</code></pre>
+      </div>
+      <div class="grid md:grid-cols-2 gap-gutter mt-4">
+        <div class="term">
+          <div class="term-bar"><span class="term-title">python — CrewAI</span></div>
+          <pre class="term-body leading-7"><code><span class="t-warn">from</span> secureagentnet.integrations.crewai <span class="t-warn">import</span> secure_tool
+
+tool = <span class="t-accent">secure_tool</span>(tool)</code></pre>
+        </div>
+        <div class="term">
+          <div class="term-bar"><span class="term-title">python — AutoGen</span></div>
+          <pre class="term-body leading-7"><code><span class="t-warn">from</span> secureagentnet.integrations.autogen <span class="t-warn">import</span> secure_function
+
+safe_fn = <span class="t-accent">secure_function</span>(my_tool)</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-gutter mb-16">
+      {integrations.map((it) => (
+        <div class="raised p-6 rounded-lg">
+          <h3 class="font-headline-md text-headline-md text-on-surface mb-2">{it.name}</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant mb-4">{it.copy}</p>
+          <a class="text-primary text-sm font-medium hover:underline underline-offset-4" href="/install">Integration guide</a>
+        </div>
+      ))}
+    </div>
+
+    <section class="mb-8">
+      <h2 class="font-headline-md text-headline-md text-on-surface mb-6">Core API endpoints</h2>
+      <div class="raised rounded-lg overflow-hidden">
+        <table class="w-full text-left">
+          <thead class="bg-surface-container-high">
+            <tr class="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+              <th class="px-6 py-4">Method</th>
+              <th class="px-6 py-4">Endpoint</th>
+              <th class="px-6 py-4">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-outline-variant">
+            {endpoints.map((e) => (
+              <tr class="hover:bg-surface-container-high transition-colors">
+                <td class={`px-6 py-4 font-code-md ${e.cls} font-semibold`}>{e.method}</td>
+                <td class="px-6 py-4 font-code-md text-on-surface">{e.path}</td>
+                <td class="px-6 py-4 font-body-sm text-on-surface-variant">{e.action}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="font-body-sm text-body-sm text-on-surface-variant mt-4">
+        When the server is running, the full interactive API reference is auto-generated at
+        <span class="font-code-md text-primary">/docs</span>.
+      </p>
+    </section>
+  </main>
+</SiteLayout>

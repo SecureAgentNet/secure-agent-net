@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ───────────────────────────────────────────────
+   Light, warm-neutral theme (stone scale). Near-black type, hairline
+   borders, one deep-teal accent. Code/terminal panels stay dark.
+   Green/red/amber appear only as allow/deny/escalate semantics. */
+:root {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  body {
+    background-color: #fafaf9;
+    color: #1c1917;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgba(15, 118, 110, 0.18);
+  }
+}
+
+@layer components {
+  /* Raised surface — white card, hairline border, the faintest shadow.
+     Old names kept as aliases so existing pages restyle for free. */
+  .glass-panel,
+  .glass-module,
+  .raised {
+    background: #ffffff;
+    border: 1px solid #e7e5e4;
+    box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
+    transition: border-color 0.2s var(--ease-out-soft);
+  }
+  .glass-panel:hover,
+  .glass-module:hover,
+  .raised:hover {
+    border-color: #d6d3d1;
+  }
+
+  /* Copyable command pill (primary CTA) — dark, terminal-coded */
+  .cmd-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #1c1917;
+    border: 1px solid #1c1917;
+    border-radius: 0.5rem;
+    padding: 0.8rem 1.05rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    color: #fafaf9;
+    transition: background-color 0.2s var(--ease-out-soft);
+  }
+  .cmd-pill:hover {
+    background: #292524;
+  }
+  .cmd-pill .cmd-copy {
+    color: #a8a29e;
+    cursor: pointer;
+    display: inline-flex;
+    transition: color 0.2s var(--ease-out-soft);
+  }
+  .cmd-pill .cmd-copy:hover {
+    color: #fafaf9;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #1c1917;
+    color: #fafaf9;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 0.7rem 1.4rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s var(--ease-out-soft);
+  }
+  .btn-primary:hover { background: #292524; }
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    color: #1c1917;
+    border: 1px solid #d6d3d1;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 0.7rem 1.4rem;
+    border-radius: 0.5rem;
+    transition: border-color 0.2s var(--ease-out-soft), background-color 0.2s var(--ease-out-soft);
+  }
+  .btn-secondary:hover { background: #f5f5f4; }
+
+  /* Terminal panel chrome (shared <Terminal /> component) — stays dark */
+  .term {
+    background: #16181d;
+    border: 1px solid #2a2d35;
+    border-radius: 0.625rem;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(28, 25, 23, 0.1);
+  }
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid #2a2d35;
+    background: #1c1f26;
+  }
+  .term-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 9999px;
+    background: #3a3e48;
+  }
+  .term-title {
+    margin-left: 0.375rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: #8b909c;
+  }
+  .term-body {
+    padding: 1.125rem 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.75;
+    color: #aab0bc;
+    overflow-x: auto;
+  }
+  /* Decision semantics inside terminals */
+  .t-cmd { color: #e8eaee; }
+  .t-ok { color: #4ade80; }
+  .t-deny { color: #f87171; }
+  .t-warn { color: #fbbf24; }
+  .t-dim { color: #6b7280; }
+  .t-accent { color: #5eead4; }
+}
+
+/* ── Long-form article (rendered markdown) ──────────────────── */
+.article {
+  color: #44403c;
+  font-size: 17px;
+  line-height: 1.78;
+}
+.article > * + * { margin-top: 1.3rem; }
+.article h2 {
+  font-family: 'Schibsted Grotesk', sans-serif;
+  color: #1c1917;
+  font-size: 1.65rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 2.75rem;
+  margin-bottom: 0.25rem;
+}
+.article h3 {
+  font-family: 'Schibsted Grotesk', sans-serif;
+  color: #1c1917;
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-top: 2rem;
+}
+.article a { color: #0f766e; text-decoration: underline; text-underline-offset: 2px; }
+.article a:hover { color: #115e59; }
+.article strong { color: #1c1917; font-weight: 600; }
+.article em { color: #1c1917; }
+.article ul, .article ol { padding-left: 1.4rem; }
+.article ul { list-style: disc; }
+.article ol { list-style: decimal; }
+.article li { margin-top: 0.4rem; }
+.article li::marker { color: #78716c; }
+.article blockquote {
+  border-left: 3px solid #0f766e;
+  padding: 0.5rem 0 0.5rem 1.25rem;
+  color: #1c1917;
+  font-style: italic;
+  background: #f5f5f4;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.article code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875em;
+  background: #f5f5f4;
+  border: 1px solid #e7e5e4;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  color: #0f766e;
+}
+.article pre {
+  background: #16181d;
+  border: 1px solid #2a2d35;
+  border-radius: 0.6rem;
+  padding: 1.1rem;
+  overflow-x: auto;
+}
+.article pre code { background: none; border: 0; padding: 0; color: #aab0bc; }
+.article hr { border: 0; border-top: 1px solid #e7e5e4; margin: 2.75rem 0; }
+
+/* ── Scroll reveal ──────────────────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.6s var(--ease-out-soft),
+    transform 0.6s var(--ease-out-soft);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal.delay-1 { transition-delay: 0.06s; }
+.reveal.delay-2 { transition-delay: 0.12s; }
+.reveal.delay-3 { transition-delay: 0.18s; }
+.reveal.delay-4 { transition-delay: 0.24s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}

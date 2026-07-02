@@ -1,0 +1,38 @@
+# SecureAgentNet Cloud Console — VPS deployment stack.
+#   docker compose -f deployment/cloud/docker-compose.yml up -d
+# Set the secrets in a sibling .env (see deployment/cloud/.env.example).
+services:
+  cloud-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CLOUD_DB_USER:-sancloud}
+      POSTGRES_PASSWORD: ${CLOUD_DB_PASSWORD:?set CLOUD_DB_PASSWORD}
+      POSTGRES_DB: ${CLOUD_DB_NAME:-sancloud}
+    volumes:
+      - cloud_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CLOUD_DB_USER:-sancloud}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cloud-console:
+    build:
+      context: ../..
+      dockerfile: deployment/cloud/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      cloud-db:
+        condition: service_healthy
+    environment:
+      SAN_CLOUD_DATABASE_URL: postgresql://${CLOUD_DB_USER:-sancloud}:${CLOUD_DB_PASSWORD}@cloud-db:5432/${CLOUD_DB_NAME:-sancloud}
+      SAN_CLOUD_SECRET_KEY: ${SAN_CLOUD_SECRET_KEY:?set SAN_CLOUD_SECRET_KEY}
+      SAN_CLOUD_ADMIN_EMAIL: ${SAN_CLOUD_ADMIN_EMAIL:-}
+      SAN_CLOUD_ADMIN_PASSWORD: ${SAN_CLOUD_ADMIN_PASSWORD:-}
+      SAN_CLOUD_PORT: "8800"
+    ports:
+      - "8800:8800"
+
+volumes:
+  cloud_db_data:

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block page_title %}Login{% endblock %}
+
+{% block content %}
+<div class="min-vh-100 d-flex align-items-center justify-content-center" style="margin: -1.5rem; background: radial-gradient(ellipse at center, #112240 0%, #0a192f 100%);">
+    <div class="card" style="width: 100%; max-width: 420px;">
+        <div class="card-body p-4 p-md-5 text-center">
+            <div class="mb-4">
+                <div style="width: 72px; height: 72px; border-radius: 50%; background: var(--teal-primary); margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-shield-lock-fill" style="font-size: 2rem; color: var(--navy-dark);"></i>
+                </div>
+                <h3 class="fw-bold text-teal mb-1">SecureAgentNet</h3>
+                <p class="text-muted small mb-0">Zero-Trust Agent Security Dashboard</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger d-flex align-items-center" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <div>{{ error }}</div>
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('login_page') }}" class="text-start">
+                <div class="mb-3">
+                    <label for="username" class="form-label small text-uppercase fw-semibold text-muted">Username</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                        <input type="text" class="form-control" id="username" name="username" placeholder="Enter username" required autofocus>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label for="password" class="form-label small text-uppercase fw-semibold text-muted">Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                        <input type="password" class="form-control" id="password" name="password" placeholder="Enter password" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-teal w-100 py-2 fw-semibold">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                </button>
+            </form>
+
+            <hr class="my-4" style="border-color: rgba(45,212,191,0.1);">
+            <p class="text-muted small mb-0">Default: admin / admin</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    if (window.innerWidth <= 768) {
+        document.querySelector('.sidebar') && document.querySelector('.sidebar').classList.remove('show');
+    }
+</script>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .wrapper .sidebar, .wrapper .topbar, .wrapper .footer { display: none; }
+    .page-content { margin-left: 0 !important; }
+</style>
+{% endblock %}

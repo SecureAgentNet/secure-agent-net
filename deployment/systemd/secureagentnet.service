@@ -1,0 +1,15 @@
+[Unit]
+Description=SecureAgentNet Desktop Endpoint Security Engine
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/secureagentnet/venv/bin/secureagentnet-daemon
+WorkingDirectory=%h/.secureagentnet
+Restart=on-failure
+RestartSec=5
+Environment="SAN_DAEMON_HOST=127.0.0.1"
+Environment="SAN_DAEMON_PORT=17541"
+
+[Install]
+WantedBy=default.target

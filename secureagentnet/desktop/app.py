@@ -1,0 +1,154 @@
+"""Desktop entry point for SecureAgentNet."""
+from __future__ import annotations
+
+import asyncio
+import logging
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import QThread, Signal
+from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, QFont
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+
+from secureagentnet.desktop.client import DaemonClient
+from secureagentnet.desktop.main_window import MainWindow
+from secureagentnet.desktop.tray import SystemTray
+from secureagentnet.daemon.process import start_daemon, daemon_status
+
+logger = logging.getLogger("SecureAgentNet.Desktop")
+
+
+def _ensure_app_data_dir() -> None:
+    (Path.home() / ".secureagentnet").mkdir(parents=True, exist_ok=True)
+
+
+def _create_icon(color: str, size: int = 64) -> QIcon:
+    """Generate a simple shield-shaped tray icon in memory."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(QColor("transparent"))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setBrush(QColor(color))
+    painter.setPen(QColor("#0f172a"))
+    # Shield shape
+    painter.drawRoundedRect(8, 8, size - 16, size - 16, 12, 12)
+    painter.setPen(QColor("white"))
+    font = QFont("Arial", size // 3, QFont.Bold)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), 0x84, "S")
+    painter.end()
+    return QIcon(pixmap)
+
+
+class AlertWorker(QThread):
+    """Background thread that consumes the daemon WebSocket alert stream."""
+
+    alert_received = Signal(dict)
+
+    def __init__(self, client: DaemonClient, parent=None):
+        super().__init__(parent)
+        self.client = client
+        self._running = True
+
+    def run(self):
+        import websockets
+
+        async def _listen():
+            try:
+                async with websockets.connect(self.client.alert_stream_url()) as ws:
+                    while self._running:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                            import json
+                            self.alert_received.emit(json.loads(message))
+                        except asyncio.TimeoutError:
+                            continue
+            except Exception as exc:
+                logger.debug("Alert stream connection error: %s", exc)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_listen())
+        finally:
+            loop.close()
+
+    def stop(self):
+        self._running = False
+        self.wait(2000)
+
+
+class DesktopApplication:
+    def __init__(self):
+        self.app = QApplication(sys.argv)
+        self.app.setApplicationName("SecureAgentNet")
+        # A system tray is only usable if the desktop session provides a tray host
+        # (a StatusNotifier/AppIndicator). Minimal or Wayland sessions often don't —
+        # constructing a tray icon there raises a D-Bus "ServiceUnknown" error. When
+        # no tray is available we run as an ordinary window app instead.
+        self.has_tray = QSystemTrayIcon.isSystemTrayAvailable()
+        self.app.setQuitOnLastWindowClosed(not self.has_tray)
+
+        self.icons = {
+            "normal": _create_icon("#06b6d4"),
+            "protected": _create_icon("#22c55e"),
+            "warning": _create_icon("#eab308"),
+            "alert": _create_icon("#ef4444"),
+        }
+
+        self.client = DaemonClient()
+        self.main_window: MainWindow = MainWindow(self)
+        self.tray = SystemTray(self) if self.has_tray else None
+        if not self.has_tray:
+            logger.info("No system tray available; running as a window-only app.")
+        self.alert_worker: AlertWorker = AlertWorker(self.client)
+        self.alert_worker.alert_received.connect(self._on_alert)
+
+    def start(self) -> int:
+        _ensure_app_data_dir()
+        self._ensure_daemon_running()
+        if self.tray is not None:
+            self.tray.show()
+        self.alert_worker.start()
+        self.main_window.refresh()
+        self.show_main_window()  # open the window on launch, not just the tray
+        return self.app.exec()
+
+    def _ensure_daemon_running(self) -> None:
+        running, _ = daemon_status()
+        if running:
+            return
+        ok, msg = start_daemon(daemonize=True)
+        if not ok:
+            logger.error("Could not start daemon: %s", msg)
+
+    def _on_alert(self, alert: dict) -> None:
+        self.main_window.handle_alert(alert)
+        if self.tray is not None:
+            self.tray.handle_alert(alert)
+
+    def show_main_window(self) -> None:
+        self.main_window.show()
+        self.main_window.raise_()
+        self.main_window.activateWindow()
+
+    def quit(self) -> None:
+        self.alert_worker.stop()
+        try:
+            self.main_window._poller.stop()
+        except Exception:
+            pass
+        self.app.quit()
+
+
+def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    )
+    app = DesktopApplication()
+    return app.start()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

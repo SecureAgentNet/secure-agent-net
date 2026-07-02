@@ -1,0 +1,22 @@
+{
+  "prompt_injection": {
+    "passed": 11,
+    "total": 11,
+    "rate": 100.0
+  },
+  "goal_hijacking": {
+    "passed": 4,
+    "total": 4,
+    "rate": 100.0
+  },
+  "container_escape": {
+    "passed": 5,
+    "total": 5,
+    "rate": 100.0
+  },
+  "overall": {
+    "passed": 20,
+    "total": 20,
+    "rate": 100.0
+  }
+}

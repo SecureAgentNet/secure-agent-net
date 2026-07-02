@@ -1,0 +1,117 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+
+const phases = [
+  {
+    n: '01', name: 'Identify', accent: 'text-primary',
+    blurb: 'Pre-checks at the gateway. Any failure blocks the request before a container is ever created.',
+    parts: ['MCP Gateway: single authenticated entry point', 'IdentityRegistry: signed identity and live trust score', 'CapabilityProfiler: is this action authorized?', 'RogueDetector: anomaly and suspicious-pattern detection', 'KillSwitch and CircuitBreaker: global stop plus per-agent throttle', 'IntentCapsule: goal-hijack and forbidden-action checks'],
+  },
+  {
+    n: '02', name: 'Track', accent: 'text-secondary',
+    blurb: 'Wraps the rest of the pipeline, capturing reasoning and writing a tamper-evident trail.',
+    parts: ['ReasoningCaptureMiddleware: chain-of-thought capture', 'StructuredLogger and AgentAuditor', 'LogIndexer writing to the Postgres audit_log_index', 'VaultClient: HMAC-signed receipts via Vault Transit'],
+  },
+  {
+    n: '03', name: 'Contain', accent: 'text-error',
+    blurb: 'An isolated sandbox is provisioned up-front, before the decision is made.',
+    parts: ['ContainerProvisioner.provision_sandbox(): created, not started', 'seccomp and AppArmor syscall restriction', 'gVisor (runsc) micro-VM isolation', 'Read-only rootfs, no network by default, resource limits', 'Dynamic secret injection, revoked on teardown'],
+  },
+  {
+    n: '04', name: 'Decide', accent: 'text-tertiary',
+    blurb: 'A layered, fail-closed gateway makes the final call. Denied actions are never executed.',
+    parts: ['Tier 1: RuleFilter (fast deny rules)', 'Tier 1.5: ASTSemanticVerifier (code intent vs AST drift)', 'Tier 2: PiiRedactor (strip PII, fail-closed)', 'Tier 3: SemanticEvaluator (LLM risk scoring)', 'Tier 3.5: HITL gate (human approval for medium risk)'],
+  },
+];
+
+const trace = [
+  { phase: 'IDENTIFY', event: 'pipeline_started', status: 'OK', cls: 'text-primary' },
+  { phase: 'IDENTIFY', event: 'identify_passed', status: 'OK', cls: 'text-primary' },
+  { phase: 'CONTAIN', event: 'container_provisioned', status: 'SANDBOXED', cls: 'text-error' },
+  { phase: 'DECIDE', event: 'decision_approved', status: 'ALLOWED', cls: 'text-secondary' },
+  { phase: 'CONTAIN', event: 'container_executed', status: 'EXECUTED', cls: 'text-error' },
+  { phase: 'CONTAIN', event: 'pipeline_completed', status: 'DONE', cls: 'text-secondary' },
+];
+---
+
+<SiteLayout title="Architecture — SecureAgentNet">
+  <main class="pt-32 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+    <header class="mb-12 max-w-3xl">
+      <p class="text-sm font-semibold text-primary mb-3">Architecture</p>
+      <h1 class="font-display text-display mb-4 text-on-surface">The ITCD pipeline</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant">
+        Every agent action flows through four phases in order: Identify, Track, Contain,
+        Decide. Containment is established before the decision, so an action is only ever
+        executed inside an already-isolated sandbox.
+      </p>
+    </header>
+
+    <!-- Phase cards -->
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-gutter mb-12">
+      {phases.map((p) => (
+        <div class="raised rounded-lg p-8">
+          <h2 class="font-headline-md text-headline-md text-on-surface mb-3">
+            <span class={`${p.accent} font-code-md mr-1`}>{p.n}</span> {p.name}
+          </h2>
+          <p class="font-body-md text-body-md text-on-surface-variant mb-5">{p.blurb}</p>
+          <ul class="space-y-2.5">
+            {p.parts.map((part) => (
+              <li class="flex items-start gap-3 font-body-sm text-body-sm text-on-surface-variant">
+                <span class="mt-[9px] w-1 h-1 rounded-full bg-stone-400 shrink-0"></span>
+                <span>{part}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+
+    <!-- Contain-before-decide callout -->
+    <section class="raised rounded-lg p-8 mb-12 border-l-2 !border-l-primary">
+      <h2 class="font-headline-md text-headline-md text-on-surface mb-3">Contain-first execution</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant mb-5 max-w-3xl">
+        The sandbox container is provisioned in CONTAIN <em>before</em> DECIDE runs. If the gateway approves,
+        the workload runs inside that already-isolated container. If it denies, or escalates to a human,
+        the container is destroyed without the workload ever executing.
+      </p>
+      <div class="term">
+        <div class="term-body !py-3">
+          <span class="t-dim">flow:</span>
+          <span class="t-cmd">IDENTIFY -&gt; TRACK -&gt; CONTAIN(provision) -&gt; DECIDE</span><br />
+          <span class="t-ok">approved? execute in sandbox</span><br />
+          <span class="t-deny">denied? kill un-executed</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live trace table -->
+    <section class="mb-4">
+      <div class="raised rounded-lg p-8">
+        <div class="mb-6">
+          <h2 class="font-headline-lg text-headline-lg text-on-surface">Pipeline event trace</h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">The audit events emitted as a single approved action moves through the pipeline.</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-outline-variant text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                <th class="pb-4 px-4">Phase</th>
+                <th class="pb-4 px-4">Event</th>
+                <th class="pb-4 px-4">Status</th>
+              </tr>
+            </thead>
+            <tbody class="font-code-md text-code-md">
+              {trace.map((t) => (
+                <tr class="border-b border-outline-variant last:border-0 hover:bg-surface-container-high transition-colors">
+                  <td class={`py-3.5 px-4 ${t.cls}`}>{t.phase}</td>
+                  <td class="py-3.5 px-4 text-on-surface-variant">{t.event}</td>
+                  <td class="py-3.5 px-4"><span class={t.cls}>{t.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</SiteLayout>

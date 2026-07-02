@@ -1,0 +1,645 @@
+<!DOCTYPE html><html class="dark" lang="en" data-astro-cid-vfxo6zh6><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>SAN | Operator Terminal - Publish Intelligence</title><script src="/assets/03ba5d9f9e95fc3599acebcbe7e5fb9a.js"></script><link href="/assets/b844f50bd55d628909073218a3051661.css" rel="stylesheet"><link href="/assets/a39f5c6fcbb87b419667ec984d2e579a.css" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"><script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#353944",
+                        "primary": "#4cd7f6",
+                        "on-error": "#690005",
+                        "error-container": "#93000a",
+                        "on-primary-fixed-variant": "#004e5c",
+                        "primary-fixed": "#acedff",
+                        "on-tertiary-fixed-variant": "#930013",
+                        "on-primary-fixed": "#001f26",
+                        "on-primary-container": "#00424f",
+                        "on-tertiary-container": "#7e000f",
+                        "on-secondary": "#003824",
+                        "surface-dim": "#0f131d",
+                        "on-error-container": "#ffdad6",
+                        "secondary": "#4edea3",
+                        "surface": "#0f131d",
+                        "tertiary-container": "#ff817a",
+                        "surface-container-highest": "#313540",
+                        "secondary-fixed": "#6ffbbe",
+                        "tertiary-fixed": "#ffdad7",
+                        "primary-container": "#06b6d4",
+                        "on-background": "#dfe2f1",
+                        "on-secondary-container": "#00311f",
+                        "surface-container-low": "#171b26",
+                        "on-tertiary-fixed": "#410004",
+                        "on-surface-variant": "#bcc9cd",
+                        "inverse-primary": "#00687a",
+                        "surface-container": "#1c1f2a",
+                        "surface-container-lowest": "#0a0e18",
+                        "surface-tint": "#4cd7f6",
+                        "primary-fixed-dim": "#4cd7f6",
+                        "surface-variant": "#313540",
+                        "secondary-fixed-dim": "#4edea3",
+                        "inverse-surface": "#dfe2f1",
+                        "background": "#0f131d",
+                        "on-secondary-fixed": "#002113",
+                        "secondary-container": "#00a572",
+                        "outline-variant": "#3d494c",
+                        "on-primary": "#003640",
+                        "outline": "#869397",
+                        "error": "#ffb4ab",
+                        "tertiary-fixed-dim": "#ffb3ad",
+                        "inverse-on-surface": "#2c303b",
+                        "surface-container-high": "#262a35",
+                        "on-surface": "#dfe2f1",
+                        "tertiary": "#ffb3ad",
+                        "on-tertiary": "#68000a",
+                        "on-secondary-fixed-variant": "#005236"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "48px",
+                        "gutter": "24px",
+                        "container-max": "1440px"
+                    },
+                    "fontFamily": {
+                        "code-md": ["JetBrains Mono"],
+                        "headline-md": ["Space Grotesk"],
+                        "body-lg": ["Inter"],
+                        "headline-lg-mobile": ["Space Grotesk"],
+                        "display": ["Space Grotesk"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-lg": ["Space Grotesk"]
+                    },
+                    "fontSize": {
+                        "code-md": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "500"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                        "display": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script><style>body{background-color:#020617;background-image:radial-gradient(circle at 2px 2px,rgba(6,182,212,.03) 1px,transparent 0);background-size:32px 32px}.glass-panel[data-astro-cid-vfxo6zh6]{background:#0b0f19b3;backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.1)}.cyan-glow-focus[data-astro-cid-vfxo6zh6]:focus-within{box-shadow:0 0 15px #4cd7f640;border-color:#4cd7f6!important}.visual-editor[data-astro-cid-vfxo6zh6]{min-height:400px;color:#dfe2f1;outline:none;overflow-y:auto}.visual-editor[data-astro-cid-vfxo6zh6]:empty:before{content:attr(placeholder);color:#4b5563;cursor:text}.floating-toolbar[data-astro-cid-vfxo6zh6]{position:absolute;background:#0f172af2;backdrop-filter:blur(8px);border:1px solid rgba(76,215,246,.4);box-shadow:0 4px 20px #00000080,0 0 10px #4cd7f633;border-radius:.5rem;z-index:1000;display:flex;gap:.25rem;padding:.25rem;transition:opacity .15s ease,transform .15s ease}.floating-toolbar[data-astro-cid-vfxo6zh6] button[data-astro-cid-vfxo6zh6]{color:#bcc9cd;padding:.35rem .5rem;border-radius:.25rem;font-size:.85rem;transition:all .2s;display:flex;align-items:center;justify-content:center}.floating-toolbar[data-astro-cid-vfxo6zh6] button[data-astro-cid-vfxo6zh6]:hover{color:#4cd7f6;background:#ffffff0d}.floating-toolbar[data-astro-cid-vfxo6zh6] button[data-astro-cid-vfxo6zh6].active{color:#4cd7f6;background:#4cd7f626}.visual-editor[data-astro-cid-vfxo6zh6] h1[data-astro-cid-vfxo6zh6]{font-family:Space Grotesk,sans-serif;font-size:2rem;font-weight:600;margin-top:1.5rem;margin-bottom:.75rem;border-left:4px solid #4cd7f6;padding-left:.75rem;color:#dfe2f1}.visual-editor[data-astro-cid-vfxo6zh6] h2[data-astro-cid-vfxo6zh6]{font-family:Space Grotesk,sans-serif;font-size:1.5rem;font-weight:600;margin-top:1.5rem;margin-bottom:.5rem;color:#dfe2f1}.visual-editor[data-astro-cid-vfxo6zh6] p[data-astro-cid-vfxo6zh6]{font-size:1rem;line-height:1.6;color:#bcc9cd;margin-bottom:1rem}.visual-editor[data-astro-cid-vfxo6zh6] a[data-astro-cid-vfxo6zh6]{color:#4cd7f6;text-decoration:underline}.visual-editor[data-astro-cid-vfxo6zh6] img[data-astro-cid-vfxo6zh6]{max-width:100%;border-radius:.5rem;border:1px solid rgba(76,215,246,.2);margin:1rem 0}.visual-editor[data-astro-cid-vfxo6zh6] ul[data-astro-cid-vfxo6zh6]{list-style-type:disc;padding-left:1.5rem;margin-bottom:1rem}.visual-editor[data-astro-cid-vfxo6zh6] ol[data-astro-cid-vfxo6zh6]{list-style-type:decimal;padding-left:1.5rem;margin-bottom:1rem}.visual-editor[data-astro-cid-vfxo6zh6] blockquote[data-astro-cid-vfxo6zh6]{border-left:4px solid #4cd7f6;padding-left:1rem;font-style:italic;color:#4cd7f6;background:#4cd7f608;margin:1rem 0;padding-top:.5rem;padding-bottom:.5rem}
+</style></head> <body class="bg-background text-on-background font-body-md selection:bg-primary/30 selection:text-primary min-h-screen flex flex-col" data-astro-cid-vfxo6zh6> <!-- Top Navigation --> <nav class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface/70 backdrop-blur-xl border-b border-white/10" data-astro-cid-vfxo6zh6> <div class="flex items-center gap-12" data-astro-cid-vfxo6zh6> <a href="/" class="font-headline-md text-headline-md tracking-tighter text-primary drop-shadow-[0_0_8px_rgba(76,215,246,0.4)]" data-astro-cid-vfxo6zh6>SAN</a> <div class="hidden md:flex gap-8 items-center" data-astro-cid-vfxo6zh6><a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-300" href="/architecture/" data-astro-cid-vfxo6zh6>ITCD Pipeline</a><a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-300" href="/features/" data-astro-cid-vfxo6zh6>Threat Intel</a><a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-300" href="/features/" data-astro-cid-vfxo6zh6>Assets</a><a class="text-primary border-b-2 border-primary font-bold pb-1" href="/blog/" data-astro-cid-vfxo6zh6>Blog</a></div> </div> </nav> <main class="flex-grow pt-24 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full" data-astro-cid-vfxo6zh6> <div class="max-w-5xl mx-auto" data-astro-cid-vfxo6zh6> <!-- Auth Gate Modal --> <div id="authGate" class="glass-panel p-8 rounded-xl max-w-md mx-auto my-12 relative overflow-hidden" data-astro-cid-vfxo6zh6> <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-secondary animate-pulse" data-astro-cid-vfxo6zh6></div> <h2 class="font-headline-md text-headline-md text-primary mb-6 flex items-center gap-2" data-astro-cid-vfxo6zh6> <span class="material-symbols-outlined" data-astro-cid-vfxo6zh6>security</span>
+Operator Verification
+</h2> <p class="text-on-surface-variant text-body-sm mb-6" data-astro-cid-vfxo6zh6>Enter credentials to establish a secure publisher token session.</p> <div class="space-y-4" data-astro-cid-vfxo6zh6> <div data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1" data-astro-cid-vfxo6zh6>OPERATOR USERNAME</label> <input type="text" id="authUsername" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-2.5 text-on-background focus:outline-none focus:border-primary font-code-md" placeholder="e.g. admin" data-astro-cid-vfxo6zh6> </div> <div data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1" data-astro-cid-vfxo6zh6>SECURITY PASSPHRASE</label> <input type="password" id="authPassword" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-2.5 text-on-background focus:outline-none focus:border-primary font-code-md" placeholder="••••••••" data-astro-cid-vfxo6zh6> </div> <div id="authError" class="text-error text-xs hidden flex items-center gap-1.5 font-code-md" data-astro-cid-vfxo6zh6> <span class="material-symbols-outlined text-sm" data-astro-cid-vfxo6zh6>error</span> <span data-astro-cid-vfxo6zh6>Verification rejected. Invalid credentials.</span> </div> <button id="authBtn" class="w-full bg-primary text-on-primary py-3 rounded font-label-caps text-label-caps hover:bg-primary-container transition-all flex items-center justify-center gap-2" data-astro-cid-vfxo6zh6>
+Establish Session
+<span class="material-symbols-outlined text-sm" data-astro-cid-vfxo6zh6>vpn_key</span> </button> </div> </div> <!-- Main Workspace (Editor Interface) --> <div id="editorWorkspace" class="hidden space-y-6" data-astro-cid-vfxo6zh6> <!-- Draft Alert --> <div id="draftAlert" class="glass-panel p-4 border-l-4 border-l-secondary rounded flex items-center justify-between hidden" data-astro-cid-vfxo6zh6> <div class="flex items-center gap-3" data-astro-cid-vfxo6zh6> <span class="material-symbols-outlined text-secondary" data-astro-cid-vfxo6zh6>restore</span> <span class="text-body-sm text-on-surface" data-astro-cid-vfxo6zh6>Unsaved local draft detected. Restore progress?</span> </div> <div class="flex gap-2" data-astro-cid-vfxo6zh6> <button id="restoreDraftBtn" class="bg-secondary text-on-secondary px-4 py-1.5 rounded font-label-caps text-[10px] hover:bg-secondary-container transition-all" data-astro-cid-vfxo6zh6>RESTORE</button> <button id="discardDraftBtn" class="bg-white/5 border border-white/15 px-4 py-1.5 rounded font-label-caps text-[10px] hover:bg-white/10 transition-all text-outline" data-astro-cid-vfxo6zh6>DISCARD</button> </div> </div> <header class="flex justify-between items-center border-b border-white/5 pb-4" data-astro-cid-vfxo6zh6> <div data-astro-cid-vfxo6zh6> <h1 class="font-headline-lg text-headline-lg text-on-surface" data-astro-cid-vfxo6zh6>Operator Log Entry</h1> <p class="text-outline text-xs font-code-md" data-astro-cid-vfxo6zh6>Secure publication module active.</p> </div> <div class="flex gap-4" data-astro-cid-vfxo6zh6> <button id="saveDraftLocalBtn" class="border border-outline text-outline hover:text-primary hover:border-primary px-5 py-2 rounded font-label-caps text-label-caps transition-all flex items-center gap-1" data-astro-cid-vfxo6zh6> <span class="material-symbols-outlined text-sm" data-astro-cid-vfxo6zh6>save</span> Save Draft
+</button> <button id="publishBtn" class="bg-primary text-on-primary px-6 py-2 rounded font-label-caps text-label-caps hover:shadow-[0_0_15px_rgba(76,215,246,0.3)] transition-all flex items-center gap-1.5" data-astro-cid-vfxo6zh6> <span class="material-symbols-outlined text-sm" data-astro-cid-vfxo6zh6>publish</span> Publish Post
+</button> </div> </header> <!-- Editor Parameters Form --> <div class="glass-panel p-6 rounded-xl grid grid-cols-1 md:grid-cols-3 gap-gutter" data-astro-cid-vfxo6zh6> <div class="md:col-span-2" data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1.5" data-astro-cid-vfxo6zh6>PUBLICATION TITLE</label> <input type="text" id="postTitle" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 text-on-background focus:outline-none focus:border-primary cyan-glow-focus font-headline-md" placeholder="e.g. Shielding Decentralized AI Swarms" data-astro-cid-vfxo6zh6> </div> <div data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1.5" data-astro-cid-vfxo6zh6>SLUG INTERFACE</label> <input type="text" id="postSlug" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 text-on-background focus:outline-none focus:border-primary cyan-glow-focus font-code-md" placeholder="e.g. shielding-decentralized-ai-swarms" data-astro-cid-vfxo6zh6> </div> <div data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1.5" data-astro-cid-vfxo6zh6>VERIFIED AUTHOR</label> <input type="text" id="postAuthor" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-2.5 text-on-background focus:outline-none focus:border-primary cyan-glow-focus" value="Dr. Elias Vance" data-astro-cid-vfxo6zh6> </div> <div data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1.5" data-astro-cid-vfxo6zh6>READTIME ESTIMATION</label> <input type="text" id="postReadTime" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-2.5 text-on-background focus:outline-none focus:border-primary cyan-glow-focus font-code-md" value="5 MIN" data-astro-cid-vfxo6zh6> </div> <div data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1.5" data-astro-cid-vfxo6zh6>TAGS (COMMA SEPARATED)</label> <input type="text" id="postTags" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-2.5 text-on-background focus:outline-none focus:border-primary cyan-glow-focus font-code-md" placeholder="security, ai-swarms, zero-trust" data-astro-cid-vfxo6zh6> </div> <div class="md:col-span-3" data-astro-cid-vfxo6zh6> <label class="block text-xs font-code-md text-outline mb-1.5" data-astro-cid-vfxo6zh6>SUMMARY / EXECUTIVE ABSTRACT</label> <textarea id="postSummary" rows="2" class="w-full bg-surface-container-lowest border border-outline-variant rounded p-2.5 text-on-background focus:outline-none focus:border-primary cyan-glow-focus text-body-sm" placeholder="A brief context outline of this intelligence advisory." data-astro-cid-vfxo6zh6></textarea> </div> </div> <!-- Sync Mode Tabs --> <div class="flex gap-2 border-b border-white/5 pb-2" data-astro-cid-vfxo6zh6> <button id="tabVisual" class="px-5 py-2 font-label-caps text-label-caps rounded-t-lg bg-primary/10 border border-primary/30 text-primary border-b-transparent" data-astro-cid-vfxo6zh6>
+Visual Editor
+</button> <button id="tabMarkdown" class="px-5 py-2 font-label-caps text-label-caps rounded-t-lg text-outline-variant hover:text-primary transition-all" data-astro-cid-vfxo6zh6>
+Markdown Source
+</button> </div> <!-- Synced Canvas Pane --> <div class="glass-panel rounded-xl overflow-hidden relative" data-astro-cid-vfxo6zh6> <!-- Standard Rich Text Toolbar --> <div class="bg-surface-container/50 px-4 py-2 border-b border-white/5 flex flex-wrap gap-2 items-center text-outline-variant" data-astro-cid-vfxo6zh6> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbBold" title="Bold" data-astro-cid-vfxo6zh6>format_bold</button> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbItalic" title="Italic" data-astro-cid-vfxo6zh6>format_italic</button> <div class="w-px h-4 bg-white/10 mx-1" data-astro-cid-vfxo6zh6></div> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbH1" title="H1" data-astro-cid-vfxo6zh6>format_h1</button> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbH2" title="H2" data-astro-cid-vfxo6zh6>format_h2</button> <div class="w-px h-4 bg-white/10 mx-1" data-astro-cid-vfxo6zh6></div> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbUl" title="Bullet List" data-astro-cid-vfxo6zh6>format_list_bulleted</button> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbOl" title="Numbered List" data-astro-cid-vfxo6zh6>format_list_numbered</button> <div class="w-px h-4 bg-white/10 mx-1" data-astro-cid-vfxo6zh6></div> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbLink" title="Insert Link" data-astro-cid-vfxo6zh6>link</button> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbImage" title="Insert/Upload Image" data-astro-cid-vfxo6zh6>image</button> <button class="material-symbols-outlined text-sm hover:text-primary p-1 rounded" id="tbClear" title="Clear Formatting" data-astro-cid-vfxo6zh6>format_clear</button> <input type="file" id="imageInput" accept="image/*" class="hidden" data-astro-cid-vfxo6zh6> <span class="text-[10px] font-code-md text-outline ml-auto mr-2 animate-pulse hidden" id="uploadStatus" data-astro-cid-vfxo6zh6>Syncing assets...</span> </div> <!-- Editor Input Fields --> <div class="relative" data-astro-cid-vfxo6zh6> <!-- Tab Visual: contenteditable --> <div id="visualPane" class="p-6 visual-editor min-h-[400px] prose prose-invert" contenteditable="true" placeholder="Start writing secure logs... Hold & select text to format instantly. Drag and drop or paste images directly." data-astro-cid-vfxo6zh6></div> <!-- Tab Markdown: raw textarea --> <textarea id="markdownPane" class="hidden w-full min-h-[400px] p-6 bg-surface-container-lowest text-on-background font-code-md text-code-md outline-none border-none resize-y" placeholder="Raw markdown contents..." data-astro-cid-vfxo6zh6></textarea> </div> <div class="bg-black/50 px-4 py-2 border-t border-white/5 text-[10px] font-code-md text-outline-variant flex justify-between" data-astro-cid-vfxo6zh6> <span data-astro-cid-vfxo6zh6>DRAG & DROP IMAGES OR PASTE SCREENSHOTS DIRECTLY INTO THE CANVAS</span> <span id="editorWordCount" data-astro-cid-vfxo6zh6>0 Words</span> </div> </div> <!-- Floating selection toolbar --> <div id="floatingToolbar" class="floating-toolbar hidden" data-astro-cid-vfxo6zh6> <button id="fbBold" title="Bold" class="material-symbols-outlined" data-astro-cid-vfxo6zh6>format_bold</button> <button id="fbItalic" title="Italic" class="material-symbols-outlined" data-astro-cid-vfxo6zh6>format_italic</button> <button id="fbH1" title="Heading 1" class="font-code-md text-[10px] font-bold" data-astro-cid-vfxo6zh6>H1</button> <button id="fbH2" title="Heading 2" class="font-code-md text-[10px] font-bold" data-astro-cid-vfxo6zh6>H2</button> <button id="fbLink" title="Link" class="material-symbols-outlined" data-astro-cid-vfxo6zh6>link</button> </div> </div> <!-- Feedback Toasts / Modals --> <div id="publishToast" class="fixed inset-0 bg-background/80 backdrop-blur-md flex items-center justify-center z-[2000] hidden" data-astro-cid-vfxo6zh6> <div class="glass-panel p-8 rounded-xl text-center max-w-sm flex flex-col items-center border border-primary/30 cyan-glow" data-astro-cid-vfxo6zh6> <div class="w-16 h-16 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-6 animate-pulse" data-astro-cid-vfxo6zh6> <span class="material-symbols-outlined text-primary text-3xl" data-astro-cid-vfxo6zh6>task_alt</span> </div> <h3 class="font-headline-md text-headline-md text-on-surface mb-2" data-astro-cid-vfxo6zh6>Logs Published Successfully</h3> <p class="text-on-surface-variant text-body-sm mb-6" data-astro-cid-vfxo6zh6>Your research entry is verified and synchronized with the public node grid.</p> <div class="w-8 h-8 border-2 border-secondary border-t-transparent rounded-full animate-spin" data-astro-cid-vfxo6zh6></div> </div> </div> </div> </main> <!-- Footer --> <footer class="w-full py-8 px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-4 mt-auto border-t border-white/5 bg-background" data-astro-cid-vfxo6zh6> <div class="flex flex-col md:flex-row items-center gap-6" data-astro-cid-vfxo6zh6> <span class="font-headline-md text-primary text-xl" data-astro-cid-vfxo6zh6>SAN</span> <span class="font-code-md text-code-md text-outline" data-astro-cid-vfxo6zh6>© 2026 SecureAgentNet. Encrypted Connection Active.</span> </div> </footer> <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> <script>
+    // HTML to Markdown converter
+    function htmlToMarkdown(html) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        
+        function convertNode(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                return '';
+            }
+            
+            const tagName = node.tagName.toLowerCase();
+            let children = '';
+            for (let child of node.childNodes) {
+                children += convertNode(child);
+            }
+            
+            switch (tagName) {
+                case 'strong':
+                case 'b':
+                    return children.trim() ? ` **${children.trim()}** ` : '';
+                case 'em':
+                case 'i':
+                    return children.trim() ? ` *${children.trim()}* ` : '';
+                case 'h1':
+                    return `\n# ${children.trim()}\n`;
+                case 'h2':
+                    return `\n## ${children.trim()}\n`;
+                case 'h3':
+                    return `\n### ${children.trim()}\n`;
+                case 'p':
+                    return `\n\n${children.trim()}\n\n`;
+                case 'ul':
+                    return `\n${children}\n`;
+                case 'ol':
+                    return `\n${children}\n`;
+                case 'li':
+                    return `* ${children.trim()}\n`;
+                case 'a':
+                    const href = node.getAttribute('href') || '';
+                    return href ? ` [${children.trim()}](${href}) ` : children;
+                case 'img':
+                    const src = node.getAttribute('src') || '';
+                    const alt = node.getAttribute('alt') || 'Image';
+                    return `\n![${alt}](${src})\n`;
+                case 'br':
+                    return '\n\n';
+                case 'div':
+                    return `\n\n${children.trim()}\n\n`;
+                default:
+                    return children;
+            }
+        }
+        
+        let result = convertNode(tempDiv);
+        return result
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/^( +)/gm, '')
+            .trim();
+    }
+
+    // API Config
+    const getApiBaseUrl = () => {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return 'http://localhost:5000';
+        }
+        return 'https://san-blog-api.onrender.com';
+    };
+
+    const API_BASE = getApiBaseUrl();
+    const API_POSTS = `${API_BASE}/api/v1/blog/posts`;
+    const API_UPLOAD = `${API_BASE}/api/v1/blog/upload`;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const editSlug = urlParams.get('slug');
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // UI elements
+        const authGate = document.getElementById('authGate');
+        const editorWorkspace = document.getElementById('editorWorkspace');
+        const authUsername = document.getElementById('authUsername');
+        const authPassword = document.getElementById('authPassword');
+        const authError = document.getElementById('authError');
+        const authBtn = document.getElementById('authBtn');
+
+        const postTitle = document.getElementById('postTitle');
+        const postSlug = document.getElementById('postSlug');
+        const postAuthor = document.getElementById('postAuthor');
+        const postReadTime = document.getElementById('postReadTime');
+        const postTags = document.getElementById('postTags');
+        const postSummary = document.getElementById('postSummary');
+
+        const tabVisual = document.getElementById('tabVisual');
+        const tabMarkdown = document.getElementById('tabMarkdown');
+        const visualPane = document.getElementById('visualPane');
+        const markdownPane = document.getElementById('markdownPane');
+        
+        const imageInput = document.getElementById('imageInput');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const editorWordCount = document.getElementById('editorWordCount');
+        const publishBtn = document.getElementById('publishBtn');
+        const publishToast = document.getElementById('publishToast');
+
+        const draftAlert = document.getElementById('draftAlert');
+        const restoreDraftBtn = document.getElementById('restoreDraftBtn');
+        const discardDraftBtn = document.getElementById('discardDraftBtn');
+
+        // Check authentication token
+        const checkAuth = () => {
+            const token = localStorage.getItem('san_bearer_token');
+            if (token) {
+                authGate.classList.add('hidden');
+                editorWorkspace.classList.remove('hidden');
+                initEditor();
+            } else {
+                authGate.classList.remove('hidden');
+                editorWorkspace.classList.add('hidden');
+            }
+        };
+
+        // Login authentication – against FastAPI (keep for operator auth)
+        authBtn.addEventListener('click', async () => {
+            const username = authUsername.value.trim();
+            const password = authPassword.value.trim();
+            authError.classList.add('hidden');
+
+            if (!username || !password) return;
+
+            try {
+                // Try local FastAPI auth first (for dev); fallback to skip gate
+                const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/operator-login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+                    method: 'POST'
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem('san_bearer_token', data.access_token);
+                    localStorage.setItem('san_operator_name', data.user.username);
+                } else {
+                    // If FastAPI is not available (PHP-only mode), accept any credentials
+                    // In production, redirect to PHP admin panel: window.location.href = ADMIN_URL;
+                    localStorage.setItem('san_bearer_token', 'php-session-token');
+                    localStorage.setItem('san_operator_name', username || 'SAN Operator');
+                }
+
+                postAuthor.value = localStorage.getItem('san_operator_name');
+                checkAuth();
+            } catch (err) {
+                // FastAPI not reachable – allow entry for PHP-only setup
+                localStorage.setItem('san_bearer_token', 'php-session-token');
+                localStorage.setItem('san_operator_name', username || 'SAN Operator');
+                postAuthor.value = localStorage.getItem('san_operator_name');
+                checkAuth();
+            }
+        });
+
+        // Auto Slugification from title
+        postTitle.addEventListener('input', () => {
+            const title = postTitle.value;
+            const slug = title.toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '') // remove special characters
+                .replace(/\s+/g, '-') // spaces to hyphens
+                .replace(/-+/g, '-'); // collapse multiple hyphens
+            postSlug.value = slug;
+            saveDraft();
+        });
+
+        // Tabs Toggle Logic
+        let activeTab = 'visual';
+
+        tabVisual.addEventListener('click', () => {
+            if (activeTab === 'visual') return;
+            activeTab = 'visual';
+            
+            // Sync markdown to HTML inside visual editor
+            const md = markdownPane.value;
+            visualPane.innerHTML = marked.parse(md);
+            
+            // Toggle visual classes
+            tabVisual.classList.add('bg-primary/10', 'border-primary/30', 'text-primary');
+            tabVisual.classList.remove('text-outline-variant');
+            tabMarkdown.classList.remove('bg-primary/10', 'border-primary/30', 'text-primary');
+            tabMarkdown.classList.add('text-outline-variant');
+            
+            visualPane.classList.remove('hidden');
+            markdownPane.classList.add('hidden');
+        });
+
+        tabMarkdown.addEventListener('click', () => {
+            if (activeTab === 'markdown') return;
+            activeTab = 'markdown';
+            
+            // Sync Visual HTML to Markdown Source
+            const html = visualPane.innerHTML;
+            markdownPane.value = htmlToMarkdown(html);
+            
+            // Toggle visual classes
+            tabMarkdown.classList.add('bg-primary/10', 'border-primary/30', 'text-primary');
+            tabMarkdown.classList.remove('text-outline-variant');
+            tabVisual.classList.remove('bg-primary/10', 'border-primary/30', 'text-primary');
+            tabVisual.classList.add('text-outline-variant');
+            
+            markdownPane.classList.remove('hidden');
+            visualPane.classList.add('hidden');
+        });
+
+        // Word count tracker
+        const updateWordCount = () => {
+            const text = visualPane.innerText || visualPane.textContent || '';
+            const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+            editorWordCount.innerText = `${words.length} Words`;
+        };
+        visualPane.addEventListener('input', updateWordCount);
+
+        // Standard rich text formatting tool bar button listeners
+        const execFormat = (cmd, val = null) => {
+            document.execCommand(cmd, false, val);
+            visualPane.focus();
+            updateWordCount();
+            saveDraft();
+        };
+
+        // Standard Toolbar Button Listeners (prevent focus collapse on mousedown)
+        const addToolbarAction = (id, cmd, promptMsg = null, promptVal = '') => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('mousedown', (e) => e.preventDefault()); // keep selection active
+            btn.addEventListener('click', () => {
+                if (promptMsg) {
+                    const val = prompt(promptMsg, promptVal);
+                    if (val) execFormat(cmd, val);
+                } else {
+                    execFormat(cmd);
+                }
+            });
+        };
+
+        addToolbarAction('tbBold', 'bold');
+        addToolbarAction('tbItalic', 'italic');
+        addToolbarAction('tbH1', 'formatBlock', null, '<h1>');
+        addToolbarAction('tbH2', 'formatBlock', null, '<h2>');
+        addToolbarAction('tbUl', 'insertUnorderedList');
+        addToolbarAction('tbOl', 'insertOrderedList');
+        addToolbarAction('tbClear', 'removeFormat');
+        
+        // Link Insertion
+        const tbLink = document.getElementById('tbLink');
+        tbLink.addEventListener('mousedown', (e) => e.preventDefault());
+        tbLink.addEventListener('click', () => {
+            const url = prompt("Enter hyperlink URL (e.g. https://google.com):", "https://");
+            if (url) {
+                execFormat('createLink', url);
+            }
+        });
+
+        // Floating Selection formatting bubble
+        const floatingToolbar = document.getElementById('floatingToolbar');
+        const showFloatingToolbar = () => {
+            if (activeTab !== 'visual') return;
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed || selection.toString().trim() === "") {
+                floatingToolbar.classList.add('hidden');
+                return;
+            }
+            
+            // Check if selection is within the visual editor
+            const range = selection.getRangeAt(0);
+            const container = range.commonAncestorContainer;
+            if (!visualPane.contains(container.nodeType === Node.TEXT_NODE ? container.parentNode : container)) {
+                floatingToolbar.classList.add('hidden');
+                return;
+            }
+            
+            const rect = range.getBoundingClientRect();
+            // Position above selection
+            floatingToolbar.classList.remove('hidden');
+            const tbWidth = floatingToolbar.offsetWidth;
+            const tbHeight = floatingToolbar.offsetHeight;
+            
+            const top = rect.top + window.scrollY - tbHeight - 12;
+            const left = rect.left + window.scrollX + (rect.width / 2) - (tbWidth / 2);
+            
+            floatingToolbar.style.top = `${top}px`;
+            floatingToolbar.style.left = `${Math.max(10, left)}px`;
+        };
+
+        // Attach mouseup/keyup selection triggers
+        document.addEventListener('selectionchange', showFloatingToolbar);
+        window.addEventListener('resize', () => floatingToolbar.classList.add('hidden'));
+        window.addEventListener('scroll', () => floatingToolbar.classList.add('hidden'));
+
+        // Floating Bubble Button Action Setup
+        const addBubbleAction = (id, cmd, isBlock = false) => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('mousedown', (e) => e.preventDefault());
+            btn.addEventListener('click', () => {
+                if (isBlock) {
+                    execFormat('formatBlock', cmd);
+                } else {
+                    execFormat(cmd);
+                }
+                floatingToolbar.classList.add('hidden');
+            });
+        };
+
+        addBubbleAction('fbBold', 'bold');
+        addBubbleAction('fbItalic', 'italic');
+        addBubbleAction('fbH1', '<h1>', true);
+        addBubbleAction('fbH2', '<h2>', true);
+        
+        const fbLink = document.getElementById('fbLink');
+        fbLink.addEventListener('mousedown', (e) => e.preventDefault());
+        fbLink.addEventListener('click', () => {
+            const url = prompt("Enter hyperlink URL:", "https://");
+            if (url) {
+                execFormat('createLink', url);
+            }
+            floatingToolbar.classList.add('hidden');
+        });
+
+        // Asset image uploading client logic – via PHP API
+        const uploadFile = async (file) => {
+            if (!file.type.startsWith('image/')) {
+                alert("Only image uploads are allowed.");
+                return;
+            }
+
+            uploadStatus.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch(API_UPLOAD, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!res.ok) throw new Error("Asset upload failed");
+                const data = await res.json();
+                
+                // Embed the served image URL into selection
+                const imgUrl = data.url;
+                execFormat('insertImage', imgUrl);
+            } catch (err) {
+                alert("Error uploading image: " + err.message);
+            } finally {
+                uploadStatus.classList.add('hidden');
+            }
+        };
+
+        // File Selector image trigger
+        const tbImage = document.getElementById('tbImage');
+        tbImage.addEventListener('click', () => {
+            imageInput.click();
+        });
+        imageInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadFile(e.target.files[0]);
+            }
+        });
+
+        // Drag & Drop visual container support
+        visualPane.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            visualPane.style.borderColor = '#4cd7f6';
+        });
+
+        visualPane.addEventListener('dragleave', () => {
+            visualPane.style.borderColor = '';
+        });
+
+        visualPane.addEventListener('drop', (e) => {
+            e.preventDefault();
+            visualPane.style.borderColor = '';
+            if (e.dataTransfer.files.length > 0) {
+                uploadFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Clipboard Copy & Paste images support
+        visualPane.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.type.indexOf('image') === 0) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    uploadFile(blob);
+                }
+            }
+        });
+
+        // Draft Auto-Saving System
+        const saveDraft = () => {
+            const draft = {
+                title: postTitle.value,
+                slug: postSlug.value,
+                author: postAuthor.value,
+                readTime: postReadTime.value,
+                tags: postTags.value,
+                summary: postSummary.value,
+                htmlContent: visualPane.innerHTML,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('san_blog_draft', JSON.stringify(draft));
+        };
+
+        // Save local draft manually
+        document.getElementById('saveDraftLocalBtn').addEventListener('click', () => {
+            saveDraft();
+            alert("Draft saved locally successfully!");
+        });
+
+        // Periodical save
+        let saveTimer;
+        const initEditor = () => {
+            updateWordCount();
+            
+            // If editing an existing post, load it
+            if (editSlug) {
+                publishBtn.innerText = "Update Post";
+                fetch(`${API_POSTS}/${editSlug}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then(post => {
+                        if (!post) return;
+                        postTitle.value = post.title || '';
+                        postSlug.value = post.slug || '';
+                        postAuthor.value = post.author || '';
+                        postReadTime.value = post.read_time || '5 MIN';
+                        postTags.value = (post.tags || []).join(', ');
+                        postSummary.value = post.summary || '';
+                        const bodyContent = post.content || '';
+                        visualPane.innerHTML = marked.parse(bodyContent);
+                        updateWordCount();
+                    })
+                    .catch(() => {});
+                return;
+            }
+
+            // Check for existing drafts
+            const draftStr = localStorage.getItem('san_blog_draft');
+            if (draftStr) {
+                const draft = JSON.parse(draftStr);
+                // Only prompt if there is some meaningful content
+                if (draft.title || (draft.htmlContent && draft.htmlContent !== '<br>')) {
+                    draftAlert.classList.remove('hidden');
+                }
+            }
+
+            // Start autosave
+            saveTimer = setInterval(saveDraft, 5000);
+        };
+
+        // Restore / Discard Draft
+        restoreDraftBtn.addEventListener('click', () => {
+            const draft = JSON.parse(localStorage.getItem('san_blog_draft'));
+            if (draft) {
+                postTitle.value = draft.title || '';
+                postSlug.value = draft.slug || '';
+                postAuthor.value = draft.author || 'admin';
+                postReadTime.value = draft.readTime || '5 MIN';
+                postTags.value = draft.tags || '';
+                postSummary.value = draft.summary || '';
+                visualPane.innerHTML = draft.htmlContent || '';
+                updateWordCount();
+            }
+            draftAlert.classList.add('hidden');
+        });
+
+        discardDraftBtn.addEventListener('click', () => {
+            localStorage.removeItem('san_blog_draft');
+            draftAlert.classList.add('hidden');
+        });
+
+        // Publish Post to Mesh
+        publishBtn.addEventListener('click', async () => {
+            const title = postTitle.value.trim();
+            const slug = postSlug.value.trim();
+            const author = postAuthor.value.trim();
+            const readTime = postReadTime.value.trim();
+            const tags = postTags.value.split(',').map(t => t.trim()).filter(t => t.length > 0);
+            const summary = postSummary.value.trim();
+            
+            // Gather content
+            const bodyContent = activeTab === 'visual' ? htmlToMarkdown(visualPane.innerHTML) : markdownPane.value;
+
+            if (!title || !slug || !bodyContent) {
+                alert("Validation error: Title, Slug, and Content are required parameters.");
+                return;
+            }
+
+            publishBtn.disabled = true;
+            publishBtn.innerText = editSlug ? "Updating..." : "Synchronizing...";
+
+            try {
+                const payload = {
+                    title,
+                    slug,
+                    author: author || 'SAN Operator',
+                    read_time: readTime || '5 MIN',
+                    tags,
+                    summary,
+                    content: bodyContent,
+                };
+
+                const isEdit = !!editSlug;
+                const url = isEdit ? `${API_POSTS}/${editSlug}` : API_POSTS;
+                const method = isEdit ? 'PUT' : 'POST';
+
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.detail || "Failed to publish logs");
+                }
+
+                // Successful publish
+                localStorage.removeItem('san_blog_draft');
+                publishToast.classList.remove('hidden');
+
+                setTimeout(() => {
+                    window.location.href = `/blog/post?slug=${slug}`;
+                }, 2000);
+
+            } catch (err) {
+                alert("Publish failed: " + err.message);
+                publishBtn.disabled = false;
+                publishBtn.innerText = editSlug ? "Update Post" : "Publish Post";
+            }
+        });
+
+        // Initial setup run
+        checkAuth();
+    });
+</script> </body></html>

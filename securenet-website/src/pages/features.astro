@@ -1,0 +1,156 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+---
+
+<SiteLayout title="Platform — SecureAgentNet">
+  <main class="pt-32 pb-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+    <!-- Hero -->
+    <section class="mb-12">
+      <div class="max-w-3xl">
+        <p class="text-sm font-semibold text-primary mb-3">Platform</p>
+        <h1 class="font-display text-display mb-4 text-on-surface">The SecureAgentNet toolkit</h1>
+        <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl leading-relaxed">
+          The security primitives behind the ITCD pipeline: a single authenticated gateway,
+          mandate-bound intent verification, MCP tool-poisoning vetting, containerized isolation,
+          dynamic PII redaction, and a tamper-evident audit ledger.
+        </p>
+      </div>
+    </section>
+
+    <!-- Bento grid -->
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+      <!-- Intent Verification / Mandate Enforcement (large) -->
+      <div class="md:col-span-8 raised rounded-lg p-8">
+        <div class="h-full flex flex-col">
+          <h3 class="font-headline-md text-headline-md text-on-surface mb-3">Intent verification</h3>
+          <p class="font-body-md text-body-md text-on-surface-variant mb-3 max-w-lg">
+            Every agent is commissioned with a <span class="text-on-surface font-medium">mandate</span>: the goal it
+            was actually tasked to do. In the DECIDE phase each action is checked against that mandate, so an
+            agent hijacked into a different objective is blocked even when its credentials are valid.
+            No mandate, no action. The gateway is fail-closed.
+          </p>
+          <a href="/evaluation" class="text-sm text-primary font-medium hover:underline underline-offset-4 mb-6 w-fit">
+            Measured: 6/6 goal hijacks blocked, falling to 3/6 with mandates ablated
+          </a>
+          <div class="mt-auto term">
+            <div class="term-body !py-3">
+              <span class="text-stone-500">$</span> <span class="t-cmd">san agent commission payroll-bot --goal "Pay employee salaries"</span><br />
+              <span class="t-accent">[DECIDE]</span> <span class="t-dim">transfer_funds -&gt; unlisted account</span><br />
+              <span class="t-accent">[DECIDE]</span> <span class="t-dim">deviates from commissioned goal</span><br />
+              <span class="t-deny">[BLOCKED]</span> <span class="t-dim">goal hijacking detected</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCP Tool Vetting (small) -->
+      <div class="md:col-span-4 raised rounded-lg p-8">
+        <div class="flex flex-col h-full">
+          <h3 class="font-headline-md text-headline-md text-on-surface mb-3">MCP tool vetting</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant mb-6">
+            Before an agent trusts an MCP server, SecureAgentNet scans every tool description for injected
+            instructions (tool poisoning), pins a content hash to catch silent rug-pulls, and scopes
+            each tool to the agent&rsquo;s mandate.
+          </p>
+          <div class="mt-auto term">
+            <div class="term-body !py-3">
+              <span class="t-dim">$ san mcp vet weather.json</span><br />
+              <span class="t-cmd">search_docs</span> <span class="t-deny">[MALICIOUS]</span><br />
+              <span class="t-dim">hidden instruction in description</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCP Gateway (large) -->
+      <div class="md:col-span-8 raised rounded-lg p-8">
+        <div class="h-full flex flex-col">
+          <h3 class="font-headline-md text-headline-md text-on-surface mb-3">MCP gateway</h3>
+          <p class="font-body-md text-body-md text-on-surface-variant mb-6 max-w-lg">
+            The single authenticated entry point for agent traffic. Every request is identified
+            and capability-checked before it is allowed into the ITCD pipeline.
+          </p>
+          <div class="mt-auto term">
+            <div class="term-body !py-3">
+              <span class="text-stone-500">$</span> <span class="t-cmd">san agent list</span><br />
+              <span class="t-accent">[IDENTIFY]</span> <span class="t-dim">verifying signed identity</span><br />
+              <span class="t-accent">[IDENTIFY]</span> <span class="t-dim">capabilities checked</span><br />
+              <span class="t-ok">[SUCCESS]</span> <span class="t-dim">request admitted to pipeline</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PII Redaction (small) -->
+      <div class="md:col-span-4 raised rounded-lg p-8">
+        <div class="flex flex-col h-full">
+          <h3 class="font-headline-md text-headline-md text-on-surface mb-3">PII redaction</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant mb-6">
+            Sensitive data is scrubbed in the DECIDE phase before any payload is evaluated or executed.
+          </p>
+          <div class="mt-auto term">
+            <div class="term-body !py-3">
+              <span class="t-dim"># input: "User ID 12903-X"</span><br />
+              <span class="t-cmd">redact(payload) -&gt;</span> <span class="t-ok">"[REDACTED]"</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kernel isolation (small) -->
+      <div class="md:col-span-4 raised rounded-lg p-8">
+        <div class="flex flex-col h-full">
+          <h3 class="font-headline-md text-headline-md text-on-surface mb-3">Kernel isolation</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant mb-6">
+            Untrusted payloads run under seccomp, AppArmor and gVisor: a read-only, no-network sandbox.
+          </p>
+          <div class="mt-auto term">
+            <div class="term-body !py-3">
+              <span class="t-dim">seccomp + read-only rootfs</span><br />
+              <span class="t-cmd">network:</span> <span class="t-ok">none</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audit ledger (large) -->
+      <div class="md:col-span-8 raised rounded-lg p-8">
+        <div class="flex flex-col md:flex-row gap-8 items-start">
+          <div class="flex-1">
+            <h3 class="font-headline-md text-headline-md text-on-surface mb-3">Tamper-evident auditing</h3>
+            <p class="font-body-md text-body-md text-on-surface-variant mb-6">
+              Every event is HMAC-signed with HashiCorp Vault's Transit engine and written to an
+              append-only audit trail, so the record of what an agent did is verifiable after the fact.
+            </p>
+            <div class="flex gap-8">
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-1">Signing</span>
+                <span class="font-code-md text-code-md text-on-surface">Vault Transit (HMAC)</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-1">Ledger</span>
+                <span class="font-code-md text-code-md text-on-surface">Append-only</span>
+              </div>
+            </div>
+          </div>
+          <div class="w-full md:w-64 shrink-0 term">
+            <div class="term-body !py-3 text-xs space-y-2">
+              <div class="flex justify-between border-b border-[#2a2d35] pb-1"><span class="t-dim">0x4F2A</span><span class="t-ok">VERIFIED</span></div>
+              <div class="flex justify-between border-b border-[#2a2d35] pb-1"><span class="t-dim">0x9C11</span><span class="t-ok">VERIFIED</span></div>
+              <div class="flex justify-between border-b border-[#2a2d35] pb-1"><span class="t-dim">0x2B90</span><span class="t-ok">VERIFIED</span></div>
+              <div class="flex justify-between"><span class="t-accent">0xA4F8</span><span class="t-accent">SIGNING</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA band -->
+      <div class="md:col-span-12 raised rounded-lg py-14 flex items-center justify-center">
+        <div class="text-center">
+          <h4 class="font-headline-md text-headline-md text-on-surface mb-5">See the full pipeline in action</h4>
+          <a class="btn-primary" href="/docs">Read the docs</a>
+        </div>
+      </div>
+    </div>
+  </main>
+</SiteLayout>

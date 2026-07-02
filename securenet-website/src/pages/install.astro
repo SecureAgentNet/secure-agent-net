@@ -1,0 +1,68 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+
+const prereqs = [
+  { name: 'Python 3.10+', note: 'Runs the SecureAgentNet gateway and CLI' },
+  { name: 'Docker', note: 'Provisions the execution sandboxes' },
+  { name: 'PostgreSQL + Redis', note: 'Audit store and shared state' },
+  { name: 'HashiCorp Vault', note: 'Tamper-evident audit receipts' },
+];
+
+const steps = [
+  { n: '1', title: 'Clone & install', cmd: 'git clone https://github.com/SecureAgentNet/secure-agent-net.git && cd secure-agent-net && pip install -e .', out: 'Installed console scripts: secureagentnet, san' },
+  { n: '2', title: 'Start the dependencies', cmd: 'docker compose up -d vault redis postgres', out: 'securenet-vault, redis, postgres -- healthy' },
+  { n: '3', title: 'Verify the environment', cmd: 'san doctor', out: 'Docker, Ollama, Redis, Vault -- all checks passed' },
+  { n: '4', title: 'Register an agent', cmd: 'san agent register my-bot --type LangChain', out: '[IDENTIFY] agent authenticated, trust 50' },
+  { n: '5', title: 'Run an action through ITCD', cmd: 'san run my-bot "python task.py"', out: 'ALLOWED & EXECUTED, sandbox-0c03, vault receipt issued' },
+];
+---
+
+<SiteLayout title="Install — SecureAgentNet">
+  <main class="pt-32 pb-16 px-margin-mobile md:px-margin-desktop max-w-4xl mx-auto">
+    <section class="mb-12">
+      <p class="text-sm font-semibold text-primary mb-3">Get started</p>
+      <h1 class="font-display text-display text-on-surface mb-4">Install SecureAgentNet</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl leading-relaxed">
+        SecureAgentNet is self-hosted: it runs entirely on your own infrastructure. Bring up the
+        dependencies, verify the environment, and route your first agent action through the ITCD pipeline.
+      </p>
+    </section>
+
+    <!-- Prerequisites -->
+    <section class="mb-14">
+      <h2 class="text-xs font-semibold uppercase tracking-wide text-on-surface-variant mb-4">Prerequisites</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter">
+        {prereqs.map((p) => (
+          <div class="raised rounded-lg p-5">
+            <div class="font-headline-md text-[16px] text-on-surface mb-1">{p.name}</div>
+            <div class="font-body-sm text-body-sm text-on-surface-variant">{p.note}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- Steps -->
+    <section class="space-y-5">
+      {steps.map((s) => (
+        <div class="raised rounded-lg p-6 flex flex-col md:flex-row md:items-center gap-5">
+          <div class="flex items-center gap-4 md:w-64 shrink-0">
+            <div class="w-9 h-9 rounded-lg bg-surface-container-high text-on-surface border border-outline-variant flex items-center justify-center font-headline-md font-semibold">{s.n}</div>
+            <h3 class="font-headline-md text-[17px] text-on-surface">{s.title}</h3>
+          </div>
+          <div class="flex-1 term">
+            <div class="term-body !py-3">
+              <div><span class="text-stone-500">$</span> <span class="t-cmd">{s.cmd}</span></div>
+              <div class="t-dim mt-1">{s.out}</div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </section>
+
+    <div class="mt-12 raised rounded-lg p-10 text-center">
+      <h3 class="font-headline-lg text-headline-lg text-on-surface mb-3">Next: wire it into your agents</h3>
+      <p class="font-body-md text-on-surface-variant mb-6 max-w-xl mx-auto">See the integration guides for LangChain, CrewAI and AutoGen.</p>
+      <a class="btn-primary" href="/docs">Read the docs</a>
+    </div>
+  </main>
+</SiteLayout>

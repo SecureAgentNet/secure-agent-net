@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}Agents{% endblock %}
+{% block page_title %}Agent Management{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="input-group" style="max-width: 280px;">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" id="agentSearch" placeholder="Search agents..." onkeyup="filterAgents()">
+        </div>
+        <select class="form-select" id="statusFilter" style="width: auto;" onchange="filterAgents()">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+            <option value="revoked">Revoked</option>
+        </select>
+        <select class="form-select" id="typeFilter" style="width: auto;" onchange="filterAgents()">
+            <option value="">All Types</option>
+        </select>
+    </div>
+    <button class="btn btn-teal" data-bs-toggle="modal" data-bs-target="#registerAgentModal">
+        <i class="bi bi-plus-lg me-1"></i> Register Agent
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-robot"></i> Registered Agents
+        <span class="badge badge-phase ms-auto">{{ agents|length }} total</span>
+    </div>
+    <div class="card-body p-0">
+        {% if agents and agents|length > 0 %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="agentsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Trust Score</th>
+                        <th>Anomaly Score</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for agent in agents %}
+                    {% set aid = agent.get('agent_id', agent.get('id', '')) %}
+                    {% set score = anomaly_scores.get(aid, 0) if anomaly_scores else 0 %}
+                    <tr class="agent-row" data-name="{{ agent.get('name', agent.get('agent_name', '')).lower() }}" data-status="{{ agent.get('status', 'active').lower() }}" data-type="{{ agent.get('type', agent.get('agent_type', '')).lower() }}">
+                        <td>
+                            <a href="{{ url_for('agent_detail', agent_id=aid) }}" class="text-decoration-none fw-semibold">
+                                <i class="bi bi-person-badge me-1 text-teal"></i>
+                                {{ agent.get('name', agent.get('agent_name', aid)) }}
+                            </a>
+                            <div class="small text-muted">{{ aid }}</div>
+                        </td>
+                        <td><span class="badge badge-phase">{{ agent.get('type', agent.get('agent_type', '—')) }}</span></td>
+                        <td>
+                            <span class="badge {{ statusBadgeClass(agent.get('status', 'unknown')) }}">
+                                <i class="{{ statusIconClass(agent.get('status', 'unknown')) }} me-1"></i>
+                                {{ agent.get('status', 'unknown') }}
+                            </span>
+                        </td>
+                        <td>
+                            {% set trust = agent.get('trust_score', agent.get('trust', 1.0)) %}
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height: 6px; max-width: 100px;">
+                                    <div class="progress-bar {% if trust < 0.4 %}bg-danger{% elif trust < 0.7 %}bg-warning{% else %}bg-success{% endif %}" style="width: {{ trust * 100 }}%"></div>
+                                </div>
+                                <span class="small">{{ '%.2f'|format(trust) }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if score is number %}
+                            <span class="fw-semibold {% if score > 0.7 %}text-danger{% elif score > 0.4 %}text-warning{% else %}text-success{% endif %}">
+                                {{ '%.4f'|format(score) }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('agent_detail', agent_id=aid) }}" class="btn btn-outline-teal" title="View Details">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <button class="btn btn-outline-warning btn-sm suspend-agent" data-agent-id="{{ aid }}" title="Suspend">
+                                    <i class="bi bi-pause-circle"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm revoke-agent" data-agent-id="{{ aid }}" title="Revoke">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-robot"></i>
+            <p>No agents registered yet</p>
+            <button class="btn btn-teal btn-sm" data-bs-toggle="modal" data-bs-target="#registerAgentModal">Register your first agent</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="modal fade" id="registerAgentModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-teal"><i class="bi bi-plus-circle me-2"></i>Register New Agent</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="registerAgentForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Agent Name</label>
+                        <input type="text" class="form-control" id="regName" name="name" placeholder="e.g. agent-file-scanner" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Agent Type</label>
+                        <select class="form-select" id="regType" name="type" required>
+                            <option value="">Select type...</option>
+                            <option value="file_monitor">File Monitor</option>
+                            <option value="network_scanner">Network Scanner</option>
+                            <option value="process_watcher">Process Watcher</option>
+                            <option value="log_collector">Log Collector</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label small text-muted">Description</label>
+                        <textarea class="form-control" id="regDesc" name="description" rows="2" placeholder="Optional description"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="color: #94a3b8; border-color: rgba(45,212,191,0.15);">Cancel</button>
+                    <button type="submit" class="btn btn-teal" id="registerSubmit">
+                        <span id="regSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                        Register Agent
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function filterAgents() {
+    var search = document.getElementById('agentSearch').value.toLowerCase();
+    var status = document.getElementById('statusFilter').value.toLowerCase();
+    var rows = document.querySelectorAll('.agent-row');
+    rows.forEach(function(row) {
+        var name = row.getAttribute('data-name');
+        var rstatus = row.getAttribute('data-status');
+        var match = (!search || name.indexOf(search) > -1) && (!status || rstatus === status);
+        row.style.display = match ? '' : 'none';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var types = new Set();
+    document.querySelectorAll('.agent-row').forEach(function(row) {
+        var t = row.getAttribute('data-type');
+        if (t) types.add(t);
+    });
+    var sel = document.getElementById('typeFilter');
+    types.forEach(function(t) {
+        var opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+        sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function() {
+        var val = this.value.toLowerCase();
+        var search = document.getElementById('agentSearch').value.toLowerCase();
+        var status = document.getElementById('statusFilter').value.toLowerCase();
+        document.querySelectorAll('.agent-row').forEach(function(row) {
+            var name = row.getAttribute('data-name');
+            var rstatus = row.getAttribute('data-status');
+            var rtype = row.getAttribute('data-type');
+            var match = (!search || name.indexOf(search) > -1) && (!status || rstatus === status) && (!val || rtype === val);
+            row.style.display = match ? '' : 'none';
+        });
+    });
+
+    document.getElementById('registerAgentForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var btn = document.getElementById('registerSubmit');
+        var spinner = document.getElementById('regSpinner');
+        btn.disabled = true;
+        spinner.classList.remove('d-none');
+        fetch('/api/agents', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                name: document.getElementById('regName').value,
+                type: document.getElementById('regType').value,
+                description: document.getElementById('regDesc').value
+            })
+        }).then(function(r) {
+            if (r.ok) return r.json();
+            throw new Error('Registration failed');
+        }).then(function() {
+            showToast('Agent registered successfully', 'success');
+            setTimeout(function() { location.reload(); }, 1000);
+        }).catch(function(err) {
+            showToast(err.message || 'Failed to register agent', 'danger');
+            btn.disabled = false;
+            spinner.classList.add('d-none');
+        });
+    });
+
+    document.querySelectorAll('.suspend-agent').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = this.getAttribute('data-agent-id');
+            if (confirm('Suspend agent ' + id + '?')) {
+                fetch('/api/agents/' + id, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({status: 'suspended'})
+                }).then(function(r) {
+                    if (r.ok) { showToast('Agent suspended', 'warning'); setTimeout(function() { location.reload(); }, 800); }
+                    else { showToast('Failed to suspend agent', 'danger'); }
+                });
+            }
+        });
+    });
+
+    document.querySelectorAll('.revoke-agent').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = this.getAttribute('data-agent-id');
+            if (confirm('Are you sure you want to permanently revoke agent ' + id + '? This cannot be undone.')) {
+                fetch('/api/agents/' + id, {method: 'DELETE'}).then(function(r) {
+                    if (r.ok) { showToast('Agent revoked', 'danger'); setTimeout(function() { location.reload(); }, 800); }
+                    else { showToast('Failed to revoke agent', 'danger'); }
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,281 @@
+---
+// Scroll-driven ITCD story: a hijacked payroll agent's request travels
+// IDENTIFY -> TRACK -> CONTAIN -> DECIDE and is blocked at the mandate check.
+//
+// Desktop + motion-ok: the section pins (500vh scroll distance), scroll
+// progress drives a CSS var + data-phase attribute; cards crossfade.
+// Mobile / no-JS / reduced-motion: the same four cards render statically
+// stacked — the content is identical, only the choreography is gone.
+
+const phases = [
+  { n: '01', name: 'IDENTIFY' },
+  { n: '02', name: 'TRACK' },
+  { n: '03', name: 'CONTAIN' },
+  { n: '04', name: 'DECIDE' },
+];
+---
+
+<section id="itcd-story" class="relative border-t border-outline-variant" data-phase="0">
+  <div class="story-sticky">
+    <div class="max-w-5xl mx-auto px-margin-mobile md:px-margin-desktop w-full">
+      <!-- Section header -->
+      <div class="text-center mb-8 md:mb-10">
+        <p class="text-sm font-semibold text-primary mb-3">The ITCD pipeline</p>
+        <h2 class="font-headline-lg text-headline-lg md:text-3xl text-on-surface">
+          Watch a hijacked agent get caught
+        </h2>
+      </div>
+
+      <!-- The intercepted request -->
+      <div class="flex flex-wrap items-center justify-center gap-2 md:gap-3 mb-8 font-code-md text-code-md">
+        <span class="px-3 py-1.5 rounded-md bg-surface-container border border-outline-variant text-on-surface-variant">
+          <span class="text-on-surface font-medium">payroll-bot</span> with valid credentials
+        </span>
+        <span class="text-on-surface-variant">requests</span>
+        <span class="px-3 py-1.5 rounded-md bg-surface-container border border-outline-variant text-on-surface-variant">
+          transfer_funds -&gt; <span class="text-on-surface font-medium">acct 0xATTACKER</span>
+        </span>
+        <span id="story-status" class="px-3 py-1.5 rounded-md border font-semibold tracking-wide">VERIFYING</span>
+      </div>
+
+      <!-- Pipeline rail -->
+      <div class="relative mb-8 hidden sm:block" aria-hidden="true">
+        <div class="absolute top-[7px] left-[12.5%] right-[12.5%] h-px bg-outline-variant"></div>
+        <div id="story-rail-fill" class="absolute top-[6.5px] left-[12.5%] h-[2px] bg-primary" style="width:0%"></div>
+        <div class="grid grid-cols-4">
+          {phases.map((p, i) => (
+            <div class="flex flex-col items-center gap-3">
+              <div class="story-node w-[15px] h-[15px] rounded-full border-2 bg-background z-10" data-node={i}></div>
+              <span class="text-xs font-semibold tracking-wide story-node-label" data-node-label={i}>{p.n} {p.name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- Phase cards -->
+      <div class="story-cards relative">
+        <!-- 01 IDENTIFY -->
+        <article class="story-card" data-card="0">
+          <div class="term">
+            <div class="term-bar"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div><span class="term-title">01 IDENTIFY</span></div>
+            <div class="term-body">
+              <div><span class="t-accent">[IDENTIFY]</span> signature verified, agent payroll-bot <span class="t-ok">ok</span></div>
+              <div><span class="t-accent">[IDENTIFY]</span> trust score 50, status active <span class="t-ok">ok</span></div>
+              <div><span class="t-accent">[IDENTIFY]</span> capability <span class="t-cmd">transfer_funds</span> granted <span class="t-ok">ok</span></div>
+            </div>
+          </div>
+          <p class="story-note">The credentials are <span class="text-on-surface font-medium">valid</span>. A hijacked agent walks straight through identity checks, which is exactly why identity alone isn't enough.</p>
+        </article>
+
+        <!-- 02 TRACK -->
+        <article class="story-card" data-card="1">
+          <div class="term">
+            <div class="term-bar"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div><span class="term-title">02 TRACK</span></div>
+            <div class="term-body">
+              <div><span class="t-accent">[TRACK]</span> reasoning captured: <span class="t-cmd">"routing payment per updated instructions..."</span></div>
+              <div><span class="t-accent">[TRACK]</span> audit event written, vault-signed <span class="t-dim">hmac:9f3a...c41d</span></div>
+            </div>
+          </div>
+          <p class="story-note">Whatever happens next, the evidence already exists. It's HMAC-signed in Vault, so it can't be silently edited afterwards.</p>
+        </article>
+
+        <!-- 03 CONTAIN -->
+        <article class="story-card" data-card="2">
+          <div class="term">
+            <div class="term-bar"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div><span class="term-title">03 CONTAIN</span></div>
+            <div class="term-body">
+              <div><span class="t-accent">[CONTAIN]</span> sandbox provisioned, <span class="t-cmd">sbx-7f21</span></div>
+              <div><span class="t-accent">[CONTAIN]</span> seccomp-bpf + AppArmor, rootfs read-only, network <span class="t-cmd">none</span></div>
+              <div><span class="t-accent">[CONTAIN]</span> holding for decision -- <span class="t-cmd">nothing has executed</span></div>
+            </div>
+          </div>
+          <p class="story-note">The action is boxed <span class="text-on-surface font-medium">before</span> it is judged. Even an approved action can only touch what its sandbox allows.</p>
+        </article>
+
+        <!-- 04 DECIDE -->
+        <article class="story-card" data-card="3">
+          <div class="term">
+            <div class="term-bar"><div class="term-dot"></div><div class="term-dot"></div><div class="term-dot"></div><span class="term-title">04 DECIDE</span></div>
+            <div class="term-body">
+              <div><span class="t-dim">mandate:</span> <span class="t-cmd">"Pay employee salaries to their registered accounts"</span></div>
+              <div><span class="t-dim">action:&nbsp;</span> transfer_funds -&gt; acct 0xATTACKER <span class="t-warn">(unlisted)</span></div>
+              <div class="mt-1"><span class="t-accent">[DECIDE]</span> deviates from commissioned goal, risk <span class="t-warn">1.00</span></div>
+              <div class="story-blocked-line"><span class="t-deny font-bold">BLOCKED</span> <span class="t-dim">goal hijacking, sandbox torn down, unexecuted</span></div>
+            </div>
+          </div>
+          <p class="story-note">The intent doesn't serve the goal the agent was <span class="text-on-surface font-medium">commissioned</span> for. Valid credentials, plausible action. Blocked anyway.</p>
+        </article>
+      </div>
+
+      <!-- Finale -->
+      <p id="story-finale" class="text-center text-on-surface-variant mt-8 text-body-lg">
+        Every action. Every agent. <span class="text-on-surface font-medium">Checked before execution.</span>
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* ── Static layout (mobile / no-JS / reduced-motion default) ── */
+  .story-sticky {
+    padding: 5rem 0;
+  }
+  .story-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 44rem;
+    margin: 0 auto;
+  }
+  .story-note {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #57534e;
+    margin-top: 0.875rem;
+    max-width: 38rem;
+  }
+  #story-status {
+    border-color: rgba(185, 28, 28, 0.35);
+    color: #b91c1c;
+    background: rgba(185, 28, 28, 0.06);
+  }
+  /* In static mode the status chip shows the outcome */
+  #itcd-story:not(.pinned) #story-status { font-size: 0; }
+  #itcd-story:not(.pinned) #story-status::before { content: 'BLOCKED'; font-size: 13px; }
+
+  .story-node { border-color: #d6d3d1; }
+  .story-node-label { color: #a8a29e; }
+
+  /* ── Pinned scroll choreography (desktop + motion ok, JS adds .pinned) ── */
+  #itcd-story.pinned {
+    height: 500vh;
+  }
+  #itcd-story.pinned .story-sticky {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    padding: 0;
+  }
+  #itcd-story.pinned .story-cards {
+    display: block;
+    height: 280px;
+  }
+  #itcd-story.pinned .story-card {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 0.45s var(--ease-out-soft), transform 0.45s var(--ease-out-soft);
+    pointer-events: none;
+  }
+  #itcd-story.pinned[data-phase='0'] [data-card='0'],
+  #itcd-story.pinned[data-phase='1'] [data-card='1'],
+  #itcd-story.pinned[data-phase='2'] [data-card='2'],
+  #itcd-story.pinned[data-phase='3'] [data-card='3'],
+  #itcd-story.pinned[data-phase='4'] [data-card='3'] {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* Status chip per phase */
+  #itcd-story.pinned #story-status {
+    border-color: rgba(15, 118, 110, 0.35);
+    color: #0f766e;
+    background: rgba(15, 118, 110, 0.06);
+    transition: all 0.3s var(--ease-out-soft);
+  }
+  #itcd-story.pinned #story-status::before { content: none; }
+  #itcd-story.pinned #story-status { font-size: 13px; }
+  #itcd-story.pinned[data-phase='3'] #story-status {
+    border-color: rgba(180, 83, 9, 0.4);
+    color: #b45309;
+    background: rgba(180, 83, 9, 0.06);
+  }
+  #itcd-story.pinned[data-phase='4'] #story-status {
+    border-color: rgba(185, 28, 28, 0.4);
+    color: #b91c1c;
+    background: rgba(185, 28, 28, 0.07);
+  }
+
+  /* Rail nodes light as the request passes */
+  #itcd-story.pinned[data-phase='0'] [data-node='0'],
+  #itcd-story.pinned[data-phase='1'] [data-node='0'],
+  #itcd-story.pinned[data-phase='1'] [data-node='1'],
+  #itcd-story.pinned[data-phase='2'] [data-node='0'],
+  #itcd-story.pinned[data-phase='2'] [data-node='1'],
+  #itcd-story.pinned[data-phase='2'] [data-node='2'],
+  #itcd-story.pinned[data-phase='3'] [data-node]:not([data-node='3']),
+  #itcd-story.pinned[data-phase='4'] [data-node]:not([data-node='3']) {
+    border-color: #0f766e;
+    background: #ccfbf1;
+  }
+  #itcd-story.pinned[data-phase='3'] [data-node='3'] {
+    border-color: #b45309;
+    background: #fed7aa;
+  }
+  #itcd-story.pinned[data-phase='4'] [data-node='3'] {
+    border-color: #b91c1c;
+    background: #fecaca;
+  }
+
+  /* BLOCKED line lands only in the finale beat (always visible when static) */
+  #itcd-story.pinned .story-blocked-line {
+    opacity: 0;
+    transition: opacity 0.4s var(--ease-out-soft);
+  }
+  #itcd-story.pinned[data-phase='4'] .story-blocked-line { opacity: 1; }
+
+  /* Finale text */
+  #itcd-story.pinned #story-finale {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s var(--ease-out-soft), transform 0.5s var(--ease-out-soft);
+  }
+  #itcd-story.pinned[data-phase='4'] #story-finale {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+
+<script>
+  const story = document.getElementById('itcd-story');
+  const fill = document.getElementById('story-rail-fill');
+  const statusEl = document.getElementById('story-status');
+  const STATUS = ['VERIFYING', 'TRACING', 'CONTAINED', 'EVALUATING', 'BLOCKED'];
+
+  const wide = window.matchMedia('(min-width: 768px)').matches;
+  const motionOk = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (story && fill && statusEl && wide && motionOk) {
+    story.classList.add('pinned');
+    let ticking = false;
+
+    const update = () => {
+      ticking = false;
+      const total = story.offsetHeight - window.innerHeight;
+      const scrolled = -story.getBoundingClientRect().top;
+      const p = Math.min(1, Math.max(0, scrolled / total));
+      // 5 beats: identify, track, contain, decide, blocked finale
+      const phase = Math.min(4, Math.floor(p * 5));
+      story.dataset.phase = String(phase);
+      statusEl.textContent = STATUS[phase];
+      // rail completes as the request reaches DECIDE
+      fill.style.width = `${Math.min(1, p / 0.8) * 75}%`;
+    };
+
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (!ticking) {
+          ticking = true;
+          requestAnimationFrame(update);
+        }
+      },
+      { passive: true }
+    );
+    update();
+  }
+</script>

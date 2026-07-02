@@ -1,0 +1,71 @@
+@startuml fig5_flowchart
+' Figure 5: SecureAgentNet Pipeline Flowchart (decision gates)
+skinparam shadowing false
+skinparam ConditionEndStyle hline
+
+start
+:Agent action intercepted;
+
+if (Agent authenticated?) then (no)
+  :Reject;
+  end
+else (yes)
+endif
+
+if (Kill-switch / circuit\nbreaker clear?) then (no)
+  :Block;
+  end
+else (yes)
+endif
+
+if (Mandate active?) then (no)
+  :Deny (fail-closed);
+  end
+else (yes)
+endif
+
+:Log + sign event (TRACK);
+:Provision sandbox (CONTAIN);
+
+if (Rule filter pass?) then (no)
+  :Deny;
+  :Destroy sandbox;
+  end
+else (yes)
+endif
+
+if (AST check pass?\n(code actions)) then (no)
+  :Deny;
+  :Destroy sandbox;
+  end
+else (yes)
+endif
+
+if (PII redaction\nsucceeded?) then (no)
+  :Deny (fail-closed);
+  :Destroy sandbox;
+  end
+else (yes)
+endif
+
+:Semantic evaluation vs mandate;
+
+if (Risk score?) then (>= block\nthreshold)
+  :Deny;
+  :Destroy sandbox;
+  :Trip circuit breaker;
+  end
+elseif (escalation\nband) then
+  if (Human approves?) then (no)
+    :Deny;
+    :Destroy sandbox;
+    end
+  else (yes)
+  endif
+else (low)
+endif
+
+:Execute in existing sandbox;
+:Log result + teardown;
+end
+@enduml
