@@ -1,8 +1,10 @@
 FROM postgres:14
 
+# Non-secret defaults only. POSTGRES_PASSWORD must be supplied at runtime
+# (e.g. via --env-file .env or the compose environment); it is intentionally NOT
+# baked into the image so no credential ships in the layers.
 ENV POSTGRES_DB=securenet_db \
-    POSTGRES_USER=secureagent \
-    POSTGRES_PASSWORD=securepassword
+    POSTGRES_USER=secureagent
 
 COPY secureagentnet/database/schema.sql /docker-entrypoint-initdb.d/01_schema.sql
 COPY secureagentnet/database/migrations/ /docker-entrypoint-initdb.d/

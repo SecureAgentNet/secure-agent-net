@@ -6,7 +6,7 @@ import logging
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, qInstallMessageHandler
 from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, QFont
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
@@ -20,6 +20,24 @@ logger = logging.getLogger("SecureAgentNet.Desktop")
 
 def _ensure_app_data_dir() -> None:
     (Path.home() / ".secureagentnet").mkdir(parents=True, exist_ok=True)
+
+
+# Benign, session-specific Qt warnings emitted when the desktop's StatusNotifier /
+# notification host is missing or flaky. The app degrades to window-only gracefully,
+# so these are pure noise — filter just these, and let every other Qt message through.
+_SUPPRESSED_QT_WARNINGS = (
+    "QDBusTrayIcon",
+    "QSystemTrayIcon::showMessage",
+    "No such object path",
+    "org.kde.StatusNotifierWatcher",
+)
+
+
+def _qt_message_filter(mode, context, message: str) -> None:
+    if any(marker in message for marker in _SUPPRESSED_QT_WARNINGS):
+        logger.debug("Suppressed Qt tray/D-Bus warning: %s", message)
+        return
+    sys.stderr.write(message + "\n")
 
 
 def _create_icon(color: str, size: int = 64) -> QIcon:
@@ -98,17 +116,36 @@ class DesktopApplication:
 
         self.client = DaemonClient()
         self.main_window: MainWindow = MainWindow(self)
-        self.tray = SystemTray(self) if self.has_tray else None
+        # isSystemTrayAvailable() can still return True on sessions whose tray host
+        # is flaky, where constructing the tray raises a QDBus error. Build it
+        # defensively and fall back to a window-only app on any failure.
+        self.tray = None
+        if self.has_tray:
+            try:
+                self.tray = SystemTray(self)
+            except Exception as exc:
+                logger.warning("System tray unavailable (%s); running window-only.", exc)
+                self._disable_tray()
         if not self.has_tray:
             logger.info("No system tray available; running as a window-only app.")
         self.alert_worker: AlertWorker = AlertWorker(self.client)
         self.alert_worker.alert_received.connect(self._on_alert)
 
+    def _disable_tray(self) -> None:
+        """Drop to window-only mode so the app stays usable and quittable."""
+        self.tray = None
+        self.has_tray = False
+        self.app.setQuitOnLastWindowClosed(True)
+
     def start(self) -> int:
         _ensure_app_data_dir()
         self._ensure_daemon_running()
         if self.tray is not None:
-            self.tray.show()
+            try:
+                self.tray.show()
+            except Exception as exc:
+                logger.warning("Could not show system tray (%s); running window-only.", exc)
+                self._disable_tray()
         self.alert_worker.start()
         self.main_window.refresh()
         self.show_main_window()  # open the window on launch, not just the tray
@@ -146,6 +183,7 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
+    qInstallMessageHandler(_qt_message_filter)
     app = DesktopApplication()
     return app.start()
 

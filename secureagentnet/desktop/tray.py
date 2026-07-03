@@ -1,6 +1,7 @@
 """System tray icon and menu for the SecureAgentNet desktop app."""
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QSystemTrayIcon, QMenu, QWidget
@@ -8,6 +9,8 @@ from PySide6.QtCore import Signal
 
 if TYPE_CHECKING:
     from secureagentnet.desktop.app import DesktopApplication
+
+logger = logging.getLogger("SecureAgentNet.Desktop.Tray")
 
 
 class SystemTray(QWidget):
@@ -50,9 +53,24 @@ class SystemTray(QWidget):
         self.app.show_main_window()
         self.app.main_window._select(key)
 
+    def _notify(self, title: str, message: str, icon, msecs: int) -> None:
+        """Show a balloon notification, tolerating D-Bus/notification failures.
+
+        On some Linux sessions the StatusNotifier host advertises itself but the
+        org.freedesktop.Notifications service is missing or flaky, so showMessage
+        raises a QDBus error. Skip it when the platform reports no message support,
+        and swallow any residual error so a failed notification never breaks the app.
+        """
+        try:
+            if not self.tray.supportsMessages():
+                return
+            self.tray.showMessage(title, message, icon, msecs)
+        except Exception as exc:  # pragma: no cover - environment-dependent
+            logger.debug("Tray notification suppressed (%s): %s", title, exc)
+
     def show(self) -> None:
         self.tray.show()
-        self.tray.showMessage(
+        self._notify(
             "SecureAgentNet",
             "Background protection is active.",
             QSystemTrayIcon.Information,
@@ -68,7 +86,7 @@ class SystemTray(QWidget):
         if severity == "CRITICAL":
             self.tray.setIcon(self.app.icons["alert"])
             self.tray.setToolTip("SecureAgentNet — Critical Alert!")
-            self.tray.showMessage(
+            self._notify(
                 alert.get("title", "Security Alert"),
                 alert.get("message", ""),
                 QSystemTrayIcon.Critical,
@@ -77,7 +95,7 @@ class SystemTray(QWidget):
         elif severity == "WARNING":
             self.tray.setIcon(self.app.icons["warning"])
             self.tray.setToolTip("SecureAgentNet — Warning")
-            self.tray.showMessage(
+            self._notify(
                 alert.get("title", "Security Warning"),
                 alert.get("message", ""),
                 QSystemTrayIcon.Warning,

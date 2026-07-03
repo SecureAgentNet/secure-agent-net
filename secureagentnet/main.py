@@ -55,17 +55,25 @@ def initialize_system():
         with get_db_session() as session:
             admin_user = session.query(User).filter(User.username == "admin").first()
             if not admin_user:
+                # The seed password comes from SAN_ADMIN_PASSWORD; the built-in value
+                # is only a demo default and must not be relied on outside a demo.
+                admin_password = os.getenv("SAN_ADMIN_PASSWORD", "admin123")
                 admin_user = User(
                     user_id=uuid4(),
                     username="admin",
                     email="admin@secureagentnet.dev",
-                    password_hash=hashlib.sha256("admin123".encode()).hexdigest(),
+                    password_hash=hashlib.sha256(admin_password.encode()).hexdigest(),
                     role="admin",
                     active=True
                 )
                 session.add(admin_user)
                 session.commit()
-                logger.info("Seeded default admin operator (username: admin, password: admin123).")
+                if admin_password == "admin123":
+                    logger.warning(
+                        "Seeded admin operator with the built-in DEMO password. Set "
+                        "SAN_ADMIN_PASSWORD to a strong value for any non-demo deployment.")
+                else:
+                    logger.info("Seeded admin operator 'admin' from SAN_ADMIN_PASSWORD.")
 
         if not IdentityRegistry.get_agent_by_name("admin-agent"):
             admin_key = secrets.token_hex(16)
@@ -251,10 +259,13 @@ else:
 
 
 if __name__ == "__main__":
+    # Auto-reload watches the source tree and is a development-only convenience; it
+    # must be off in production (wasteful, and it re-execs on any file change).
+    _reload = os.getenv("ENVIRONMENT", "development").lower() != "production"
     uvicorn.run(
         "secureagentnet.main:app",
-        host="0.0.0.0",
-        port=5000,
-        reload=True,
+        host=os.getenv("SAN_API_HOST", "0.0.0.0"),
+        port=int(os.getenv("SAN_API_PORT", "5000")),
+        reload=_reload,
         log_level="info",
     )
