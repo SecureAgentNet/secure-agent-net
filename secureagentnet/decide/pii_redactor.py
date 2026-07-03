@@ -1,8 +1,20 @@
+"""DECIDE Tier-2 — PII redaction (Presidio).
+
+Two tiers of detection:
+
+* Structured identifiers (always on): emails, phone numbers, US SSNs, credit
+  cards, IP addresses and US passports are matched by deterministic pattern
+  recognizers — no ML model required.
+* Named entities (when a spaCy model is installed): people's names, locations
+  and NRP (nationality/religion/political) are additionally redacted via spaCy
+  NER. The model is chosen by ``SAN_SPACY_MODEL`` (default ``en_core_web_sm``);
+  if it is not installed the redactor degrades gracefully to structured-only.
+"""
 import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 from presidio_analyzer.nlp_engine import NlpEngine, NlpArtifacts
@@ -17,13 +29,19 @@ from secureagentnet.core.exceptions import PIIRedactionError
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_ENTITIES = [
+# Structured identifiers matched by pattern recognizers (no ML model needed).
+PATTERN_ENTITIES = [
     "EMAIL_ADDRESS", "PHONE_NUMBER", "US_SSN", "CREDIT_CARD",
     "IP_ADDRESS", "US_PASSPORT",
 ]
+# Named entities added when a spaCy NER model is available.
+NER_ENTITIES = ["PERSON", "LOCATION", "NRP"]
+# Backwards-compatible alias; the effective set is resolved at analyzer build time.
+SUPPORTED_ENTITIES = PATTERN_ENTITIES
 
 _analyzer: Optional[AnalyzerEngine] = None
 _anonymizer: Optional[AnonymizerEngine] = None
+_active_entities: List[str] = list(PATTERN_ENTITIES)
 
 
 def _ensure_cache_dir():
@@ -60,8 +78,29 @@ class _NoOpNlpEngine(NlpEngine):
         return [NlpArtifacts([], [], [], [], language, "") for _ in texts]
 
 
+def _build_nlp_engine():
+    """Return (nlp_engine, ner_entities).
+
+    Use a spaCy NER engine when its model is installed so people's names and
+    locations are detected; otherwise fall back to the NoOp engine (pattern
+    recognizers only) so PII redaction still works with no ML dependency.
+    """
+    model = os.environ.get("SAN_SPACY_MODEL", "en_core_web_sm")
+    try:
+        import spacy
+        if spacy.util.is_package(model):
+            from presidio_analyzer.nlp_engine import SpacyNlpEngine
+            engine = SpacyNlpEngine(models=[{"lang_code": "en", "model_name": model}])
+            engine.load()
+            return engine, list(NER_ENTITIES)
+        logger.warning("spaCy model '%s' not installed; using structured-only PII redaction.", model)
+    except Exception as exc:  # pragma: no cover - environment-dependent
+        logger.warning("spaCy NER unavailable (%s); using structured-only PII redaction.", exc)
+    return _NoOpNlpEngine(), []
+
+
 def _get_analyzer() -> AnalyzerEngine:
-    global _analyzer
+    global _analyzer, _active_entities
     if _analyzer is None:
         _ensure_cache_dir()
         registry = RecognizerRegistry()
@@ -71,8 +110,20 @@ def _get_analyzer() -> AnalyzerEngine:
         registry.add_recognizer(UsSsnRecognizer())
         registry.add_recognizer(IpRecognizer())
         registry.add_recognizer(UsPassportRecognizer())
-        _analyzer = AnalyzerEngine(registry=registry, nlp_engine=_NoOpNlpEngine())
-        logger.info("Presidio AnalyzerEngine initialized with %d recognizers", len(_analyzer.registry.recognizers))
+
+        nlp_engine, ner_entities = _build_nlp_engine()
+        if ner_entities:
+            from presidio_analyzer.predefined_recognizers import SpacyRecognizer
+            registry.add_recognizer(SpacyRecognizer(supported_entities=ner_entities))
+        _active_entities = list(PATTERN_ENTITIES) + ner_entities
+
+        _analyzer = AnalyzerEngine(
+            registry=registry, nlp_engine=nlp_engine, supported_languages=["en"])
+        logger.info(
+            "Presidio AnalyzerEngine initialized with %d recognizers; NER %s.",
+            len(_analyzer.registry.recognizers),
+            "enabled" if ner_entities else "disabled (structured-only)",
+        )
     return _analyzer
 
 
@@ -120,7 +171,7 @@ class PiiRedactor:
         results = analyzer.analyze(
             text=text,
             language="en",
-            entities=SUPPORTED_ENTITIES,
+            entities=_active_entities,
             score_threshold=threshold,
         )
         if not results:

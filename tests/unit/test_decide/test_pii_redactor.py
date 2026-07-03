@@ -2,11 +2,29 @@ import pytest
 from secureagentnet.decide.pii_redactor import PiiRedactor
 
 
+def _spacy_model_available() -> bool:
+    try:
+        import spacy
+        return spacy.util.is_package("en_core_web_sm")
+    except Exception:
+        return False
+
+
 class TestPiiRedactor:
     def test_redact_email(self):
         payload = {"user_email": "john.doe@example.com"}
         result = PiiRedactor.redact_payload(payload)
         assert result["user_email"] == "[REDACTED_EMAIL_ADDRESS]"
+
+    @pytest.mark.skipif(not _spacy_model_available(),
+                        reason="spaCy NER model (en_core_web_sm) not installed")
+    def test_redact_person_name_via_ner(self):
+        # Named-entity PII (a person's name) is redacted only when a spaCy model
+        # is present; structured recognizers alone would miss it.
+        payload = {"note": "Please email John Smith about the invoice."}
+        result = PiiRedactor.redact_payload(payload)
+        assert "[REDACTED_PERSON]" in result["note"]
+        assert "John Smith" not in result["note"]
 
     def test_redact_multiple_emails(self):
         payload = {
@@ -81,9 +99,11 @@ class TestPiiRedactor:
             ],
         }
         result = PiiRedactor.redact_payload(payload)
+        # Verifies redaction traverses lists of dicts.
         assert result["contacts"][0]["email"] == "[REDACTED_EMAIL_ADDRESS]"
-        assert result["contacts"][0]["name"] == "Alice"
         assert result["contacts"][1]["email"] == "[REDACTED_EMAIL_ADDRESS]"
+        # 'name' is redacted to [REDACTED_PERSON] when NER is active, else left as-is.
+        assert result["contacts"][0]["name"] in ("Alice", "[REDACTED_PERSON]")
 
     def test_no_pii_no_change(self):
         payload = {
