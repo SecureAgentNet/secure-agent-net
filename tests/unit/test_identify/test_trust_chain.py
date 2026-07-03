@@ -140,6 +140,26 @@ class TestTrustChain:
         assert unp is False
         assert "not pinned" in reason2
 
+    def test_pin_tool_trust_on_first_use_and_rugpull(self):
+        # Trust-on-first-use: pin_tool records the tool the agent was authorized
+        # against; a later definition change is then caught by verify_tool.
+        agent = IdentityRegistry.register_agent({
+            "name": "pin-bot", "public_key": "pk", "capabilities": {"weather": True},
+        })
+        aid = agent["agent_id"]
+        assert TrustChainService.pin_tool(aid, "weather", "hash-v1") is True
+        assert TrustChainService.verify_tool(aid, "weather", "hash-v1")[0] is True
+        rug, reason = TrustChainService.verify_tool(aid, "weather", "hash-v2-changed")
+        assert rug is False and "rug-pull" in reason
+        # Re-pinning the same value is a no-op that still succeeds.
+        assert TrustChainService.pin_tool(aid, "weather", "hash-v1") is True
+        # The pin survives an unrelated (capability-triggered) manifest reissue.
+        IdentityRegistry.update_agent(aid, {"capabilities": {"weather": True, "news": True}})
+        assert TrustChainService.verify_tool(aid, "weather", "hash-v1")[0] is True
+
+    def test_pin_tool_without_manifest_returns_false(self):
+        assert TrustChainService.pin_tool("never-registered", "t", "h") is False
+
 
 # --- integration with the registry -------------------------------------
 class TestRegistryTrustIntegration:

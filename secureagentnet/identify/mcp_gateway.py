@@ -156,6 +156,25 @@ async def execute_tool(request: ExecuteRequest, agent: dict = Depends(get_curren
             return {"status": "blocked", "reason": reason,
                     "evaluated_by": "McpToolVetter", "phase": "IDENTIFY"}
 
+        # Rug-pull defense (trust-chain layer, independent of the vetting registry):
+        # pin the vetted tool definition into the agent's manifest on first use, then
+        # verify every later use against that pin. If the tool's definition changes
+        # after the agent was authorized for it, the hash no longer matches and the
+        # call is blocked fail-closed until the agent is re-authorized.
+        from secureagentnet.identify.trust_chain import TrustChainService
+        verdict = McpServerRegistry.get_verdict(request.server_id, request.action_name)
+        if verdict and verdict.content_hash:
+            manifest = TrustChainService.get_manifest(agent["agent_id"])
+            pinned = manifest.manifest.tool_hashes.get(request.action_name) if manifest else None
+            if pinned is None:
+                TrustChainService.pin_tool(agent["agent_id"], request.action_name, verdict.content_hash)
+            else:
+                ok, tool_reason = TrustChainService.verify_tool(
+                    agent["agent_id"], request.action_name, verdict.content_hash)
+                if not ok:
+                    return {"status": "blocked", "reason": tool_reason,
+                            "evaluated_by": "TrustChainService", "phase": "IDENTIFY"}
+
     from secureagentnet.core.pipeline import ITCDPipeline
     pipeline = ITCDPipeline()
     command_str = request.payload.get("command", "")

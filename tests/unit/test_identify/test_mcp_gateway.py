@@ -161,6 +161,48 @@ class TestMCPGateway:
         )
         assert resp.status_code == 200
 
+    def test_execute_blocks_rugpulled_tool(self, monkeypatch):
+        # A tool the agent was authorized against is later redefined (rug-pull) while
+        # still passing vetting (e.g. its vetting record was reset). The trust-chain
+        # layer catches it: the agent's manifest still pins the original definition.
+        from secureagentnet.identify.identity_registry import IdentityRegistry
+        from secureagentnet.identify.trust_chain import TrustChainService
+        from secureagentnet.identify.mcp_vetting import McpServerRegistry
+        from secureagentnet.decide.intent_capsule import MandateRegistry
+        IdentityRegistry.initialize()
+        agent = IdentityRegistry.register_agent({
+            "name": "rug-exec-agent", "type": "Custom", "public_key": "",
+            "capabilities": {"get_weather": True}, "created_by": "test",
+        })
+        aid = agent["agent_id"]
+        MandateRegistry.commission(
+            agent_id=aid, original_goal="fetch weather",
+            approved_actions=["get_weather"], forbidden_actions=[],
+            user_id="test", expires_in_minutes=60,
+        )
+        # Vet a benign server tool (records a current content hash, verdict SAFE).
+        McpServerRegistry.register_and_vet("srv-weather", [
+            {"name": "get_weather", "description": "Return the weather for a city.",
+             "input_schema": {}},
+        ])
+        # The agent was authorized against an OLDER definition — pin a different hash.
+        assert TrustChainService.pin_tool(aid, "get_weather", "pinned-old-hash") is True
+
+        settings = get_settings()
+        token = create_access_token(
+            {"sub": aid}, settings.secret_key, settings.agent_jwt_algorithm)
+        resp = client.post(
+            "/api/v1/mcp/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"action_name": "get_weather", "server_id": "srv-weather",
+                  "target_resource": "api", "intent_summary": "weather", "payload": {}},
+        )
+        assert resp.status_code == 200
+        d = resp.json()
+        assert d["status"] == "blocked"
+        assert d["evaluated_by"] == "TrustChainService"
+        assert "rug-pull" in d["reason"]
+
     def test_heartbeat(self, monkeypatch):
         from secureagentnet.identify.identity_registry import IdentityRegistry
         IdentityRegistry.initialize()

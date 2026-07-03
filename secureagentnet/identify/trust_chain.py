@@ -296,6 +296,24 @@ class TrustChainService:
             tool_hashes = existing.manifest.tool_hashes if existing else None
         return cls.issue(agent, tool_hashes=tool_hashes)
 
+    @classmethod
+    def pin_tool(cls, agent_id: str, tool_name: str, content_hash: str) -> bool:
+        """Pin a tool's content hash into the agent's manifest (trust-on-first-use).
+
+        Records the exact tool definition the agent was authorized against, so a later
+        change to that definition (a rug-pull) can be detected via ``verify_tool``.
+        Merges into the existing pins and re-signs. No-op if the hash is already pinned
+        to the same value. Returns True if a manifest exists (or was pinned).
+        """
+        signed = _ManifestStore.get(agent_id)
+        if signed is None:
+            return False
+        if signed.manifest.tool_hashes.get(tool_name) == content_hash:
+            return True  # already pinned to this value — nothing to re-sign
+        merged = dict(signed.manifest.tool_hashes)
+        merged[tool_name] = content_hash
+        return cls.reissue(agent_id, tool_hashes=merged) is not None
+
     # ---- verification ---------------------------------------------------
     @classmethod
     def verify_signed(cls, signed: SignedManifest) -> Tuple[bool, str]:
