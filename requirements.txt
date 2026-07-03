@@ -8,6 +8,11 @@ python-dotenv>=1.0.0
 psycopg2-binary>=2.9.9          # PostgreSQL driver
 PyMySQL>=1.1.0                   # MariaDB/MySQL driver (mysql+pymysql://)
 SQLAlchemy>=2.0.21
+alembic>=1.18.0                  # schema migrations
+
+# DECIDE Tier-2 — PII redaction (Presidio; uses a NoOp NLP engine, no spaCy model needed)
+presidio-analyzer>=2.2.0
+presidio-anonymizer>=2.2.0
 
 # APIs and Gateway
 fastapi>=0.104.0
