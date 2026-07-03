@@ -116,8 +116,9 @@ class RuleFilter:
         if request.action_name in cls.DENY_ACTIONS:
             return True, 1.0, f"Action '{request.action_name}' is explicitly denied."
 
+        target_resource = request.target_resource or ""
         for path in cls.DANGEROUS_PATHS:
-            if path in request.target_resource:
+            if path in target_resource:
                 return True, 0.9, f"Target resource contains restricted path: {path}"
 
         for value in _iter_payload_strings(request.payload):

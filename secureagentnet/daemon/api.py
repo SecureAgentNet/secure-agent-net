@@ -4,11 +4,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from secureagentnet.core.pipeline import ITCDPipeline
@@ -21,6 +23,35 @@ from secureagentnet.track.log_indexer import LogIndexer
 from secureagentnet.track.models import AgentActionRequest
 
 logger = logging.getLogger("SecureAgentNet.Daemon.API")
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _require_local_or_token(request: Request) -> None:
+    """Authorize mutating daemon control endpoints based on the bind exposure.
+
+    The daemon binds to 127.0.0.1 by default; a loopback-only bind is not reachable
+    remotely, so the local desktop client talks to it with no credentials and that
+    stays unauthenticated (nothing local breaks). If the daemon is configured to bind
+    on a non-loopback interface, mutating endpoints (intercept, HITL approve/deny,
+    scan) must present an ``X-SAN-Token`` header matching the ``SAN_DAEMON_TOKEN``
+    environment variable, or they fail closed — preventing a remote party from
+    self-approving HITL escalations or driving the pipeline.
+    """
+    try:
+        bind_host = (get_state().settings.daemon_host or "").strip()
+    except Exception:
+        bind_host = "127.0.0.1"
+    if bind_host in _LOOPBACK_HOSTS or bind_host == "":
+        return
+    token = os.environ.get("SAN_DAEMON_TOKEN", "")
+    presented = request.headers.get("X-SAN-Token", "")
+    if token and presented and secrets.compare_digest(presented, token):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Daemon control endpoints require a valid X-SAN-Token when bound to a non-loopback interface",
+    )
 
 
 class InterceptRequest(BaseModel):
@@ -133,19 +164,20 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
         from secureagentnet.decide.hitl import get_hitl_gate
         return {"pending": get_hitl_gate().get_all_pending()}
 
-    @app.post("/v1/hitl/{request_id}/approve")
+    @app.post("/v1/hitl/{request_id}/approve", dependencies=[Depends(_require_local_or_token)])
     async def hitl_approve(request_id: str) -> Dict[str, str]:
         from secureagentnet.decide.hitl import get_hitl_gate
         decision = get_hitl_gate().approve(request_id, "desktop")
         return {"request_id": request_id, "decision": getattr(decision, "value", str(decision))}
 
-    @app.post("/v1/hitl/{request_id}/deny")
+    @app.post("/v1/hitl/{request_id}/deny", dependencies=[Depends(_require_local_or_token)])
     async def hitl_deny(request_id: str) -> Dict[str, str]:
         from secureagentnet.decide.hitl import get_hitl_gate
         decision = get_hitl_gate().deny(request_id, "desktop")
         return {"request_id": request_id, "decision": getattr(decision, "value", str(decision))}
 
-    @app.post("/v1/intercept", response_model=InterceptResponse)
+    @app.post("/v1/intercept", response_model=InterceptResponse,
+              dependencies=[Depends(_require_local_or_token)])
     async def intercept(req: InterceptRequest) -> InterceptResponse:
         state = get_state()
         command = req.command or req.payload.get("command", "")
@@ -168,20 +200,30 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
                 "correlation_id": "",
             }
 
-        is_block = result.get("status") in ("blocked", "error")
+        status = result.get("status")
+        # A genuinely blocked action is a security event; an "error" status is an
+        # internal/infrastructure failure (Docker down, pipeline exception) and must
+        # NOT be counted as a blocked threat or escalated to a CRITICAL alert.
+        is_block = status == "blocked"
+        is_error = status == "error"
         is_critical = is_block and (result.get("risk_score", 0.0) >= 0.7 or "CRITICAL" in str(result.get("reason", "")))
 
         if is_block:
             state.threats_blocked += 1
 
-        if is_block:
-            severity = "CRITICAL" if is_critical else "WARNING"
+        if is_block or is_error:
+            if is_error:
+                severity = "ERROR"
+                title = "Pipeline Error"
+            else:
+                severity = "CRITICAL" if is_critical else "WARNING"
+                title = f"{'CRITICAL: ' if is_critical else ''}Action Blocked"
             agent = IdentityRegistry.get_agent(req.agent_id)
             agent_name = agent.get("name", req.agent_id) if agent else req.agent_id
             trust_score = agent.get("trust_score", 0.0) if agent else 0.0
             await state.alert_manager.emit(
                 severity=severity,
-                title=f"{'CRITICAL: ' if is_critical else ''}Action Blocked",
+                title=title,
                 message=f"Agent '{agent_name}' attempted {req.action_name} on {req.target_resource}",
                 metadata={
                     "agent_id": req.agent_id,
@@ -208,7 +250,7 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
             error_details=result.get("error_details"),
         )
 
-    @app.post("/v1/scan")
+    @app.post("/v1/scan", dependencies=[Depends(_require_local_or_token)])
     async def scan() -> Dict[str, Any]:
         state = get_state()
         if state.discovery_scheduler:

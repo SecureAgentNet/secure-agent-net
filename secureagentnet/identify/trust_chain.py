@@ -140,8 +140,11 @@ class AgentManifest:
         return sha256(self.canonical_bytes()).hexdigest()[:16]
 
     def is_expired(self) -> bool:
+        # Fail closed: a manifest with a missing or unparseable expiry is treated as
+        # expired. issue() always sets expires_at, so an absent value signals a
+        # legacy/tampered record rather than an intentional "never expires".
         if not self.expires_at:
-            return False
+            return True
         try:
             return _now() > datetime.fromisoformat(self.expires_at)
         except ValueError:

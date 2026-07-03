@@ -87,7 +87,6 @@ def test_service_health(client):
     for svc in ("Database", "Vault", "Ollama LLM", "Docker", "MCP Gateway"):
         assert svc in data
         assert data[svc] in ("online", "offline")
-    assert data["MCP Gateway"] == "online"
 
 
 def test_hitl_pending_and_decide(client):

@@ -70,6 +70,7 @@ class ITCDPipeline:
         command: str,
         session_id: Optional[str] = None,
         intent_capsule: Optional[IntentCapsule] = None,
+        presented_public_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         correlation_id = generate_correlation_id()
         start_time = time.time()
@@ -100,6 +101,25 @@ class ITCDPipeline:
         except Exception as e:
             self._log_event(agent_id, "agent_inactive", PipelinePhase.IDENTIFY, EventSeverity.WARNING, correlation_id=correlation_id)
             return {"status": "blocked", "reason": str(e), "evaluated_by": "IdentityRegistry", "phase": "IDENTIFY"}
+
+        # === TRUST CHAIN (Deliverable 3) ===
+        # The agent's action must chain back to the SAN root authority via its signed
+        # manifest. Enforced here in the shared IDENTIFY phase so EVERY entry point
+        # (daemon /v1/intercept, framework adapters, MCP gateway) is covered — not just
+        # the MCP route. Fail-closed on a tampered, expired, revoked or key-mismatched
+        # manifest. A registered-but-unmanifested agent (e.g. persisted before the trust
+        # chain existed) is backfilled once, then re-verified.
+        from secureagentnet.identify.trust_chain import TrustChainService
+        trusted, treason = TrustChainService.verify_agent(agent_id, presented_public_key)
+        if not trusted and TrustChainService.get_manifest(agent_id) is None:
+            if IdentityRegistry.ensure_manifest(agent_id):
+                trusted, treason = TrustChainService.verify_agent(agent_id, presented_public_key)
+        if not trusted:
+            self._log_event(agent_id, "trust_chain_failed", PipelinePhase.IDENTIFY,
+                            EventSeverity.WARNING, {"reason": treason}, correlation_id)
+            IdentityRegistry.update_trust_score(agent_id, -10)
+            return {"status": "blocked", "reason": f"Trust chain verification failed: {treason}",
+                    "evaluated_by": "TrustChainService", "phase": "IDENTIFY"}
 
         if not CapabilityProfiler.is_authorized(agent_id, request.action_name):
             reason = f"Agent lacks capability: {request.action_name}"

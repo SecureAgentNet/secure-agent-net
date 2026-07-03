@@ -26,8 +26,49 @@ class IdentityRegistry:
         if not cls._initialized:
             cls._agents = {}
             cls._load()
+            cls._backfill_manifests()
             cls._initialized = True
             logger.info("IdentityRegistry initialized.")
+
+    @classmethod
+    def _backfill_manifests(cls):
+        """Ensure every persisted agent has a signed trust manifest.
+
+        Agents restored from storage (or registered before the trust chain existed)
+        would otherwise have no manifest and be blocked fail-closed at the IDENTIFY
+        trust gate. Issue one for any that is missing so restored agents remain usable.
+        """
+        try:
+            from secureagentnet.identify.trust_chain import TrustChainService
+        except Exception as exc:  # pragma: no cover - trust chain unavailable
+            logger.warning(f"Trust chain unavailable; cannot backfill manifests: {exc}")
+            return
+        for agent in cls._agents.values():
+            try:
+                if TrustChainService.get_manifest(agent["agent_id"]) is None:
+                    cls._issue_manifest(agent)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(f"Could not backfill manifest for {agent.get('agent_id')}: {exc}")
+
+    @classmethod
+    def ensure_manifest(cls, agent_id: str) -> bool:
+        """Issue a manifest for a registered agent if it lacks one.
+
+        Returns True if a valid manifest exists afterward. Used by the pipeline's
+        IDENTIFY trust gate to lazily backfill legacy agents without weakening the
+        fail-closed check for tampered/expired/revoked manifests.
+        """
+        agent = cls._agents.get(agent_id)
+        if not agent:
+            return False
+        try:
+            from secureagentnet.identify.trust_chain import TrustChainService
+            if TrustChainService.get_manifest(agent_id) is None:
+                cls._issue_manifest(agent)
+            return TrustChainService.get_manifest(agent_id) is not None
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(f"Could not ensure trust manifest for {agent_id}: {exc}")
+            return False
 
     @classmethod
     def register_agent(cls, agent_data: Dict[str, Any]) -> Dict[str, Any]:

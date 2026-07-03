@@ -6,7 +6,10 @@ cloud System-Health panels.
 """
 from __future__ import annotations
 
+import os
 import socket
+import urllib.error
+import urllib.request
 from urllib.parse import urlparse
 from typing import Dict
 
@@ -18,6 +21,25 @@ def _tcp_ok(url: str, default_port: int, timeout: float = 1.0) -> bool:
         port = u.port or default_port
         with socket.create_connection((host, port), timeout=timeout):
             return True
+    except Exception:
+        return False
+
+
+def _http_ok(url: str, timeout: float = 1.5) -> bool:
+    """True if an HTTP server actually answers at ``url``.
+
+    Stronger than a raw TCP connect: a container can publish a port while the app
+    inside has crashed on startup, accepting the TCP handshake and then resetting
+    the HTTP request. Any real HTTP status (even 401/404/405) counts as online;
+    a connection reset/refused/timeout counts as offline.
+    """
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status < 600
+    except urllib.error.HTTPError:
+        # The server responded with an HTTP error code — it is alive.
+        return True
     except Exception:
         return False
 
@@ -66,11 +88,17 @@ def probe_services() -> Dict[str, str]:
     def mark(ok: bool) -> str:
         return "online" if ok else "offline"
 
+    # The MCP gateway is served by the SecureAgentNet API server (main.py mounts
+    # mcp_router), which listens on port 5000 by default and is a separate process/
+    # container from this daemon. Probe it at the HTTP level: the gateway is often a
+    # published Docker port, which can accept a TCP connection even when the app
+    # inside has crashed on startup — a TCP-only check would falsely report "online".
+    mcp_url = os.environ.get("SAN_MCP_GATEWAY_URL", "http://127.0.0.1:5000/")
+
     return {
         "Database": mark(_database_ok()),
         "Vault": mark(_tcp_ok(vault_addr, 8200)),
         "Ollama LLM": mark(_tcp_ok(ollama_url, 11434)),
         "Docker": mark(_docker_ok()),
-        # The MCP gateway is served by this daemon process — if this responds, it is up.
-        "MCP Gateway": "online",
+        "MCP Gateway": mark(_http_ok(mcp_url)),
     }

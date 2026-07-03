@@ -1033,8 +1033,18 @@ class MainWindow(QMainWindow):
             self._set_state("threat", "Threat blocked", detail[:80])
 
     def _add_security_alert(self, sev: str, text: str) -> None:
-        if getattr(self, "_sec_alert_empty", None) is not None:
-            self._sec_alert_empty.hide()
+        # Drop the "no alerts yet" placeholder from the layout the first time an alert
+        # arrives, and clear the reference. Otherwise the prune loop below eventually
+        # takeAt()/deleteLater()s it (it sits at the bottom of the box), leaving a
+        # dangling C++ object that raises "already deleted" on the next access.
+        placeholder = getattr(self, "_sec_alert_empty", None)
+        if placeholder is not None:
+            self._sec_alert_empty = None
+            try:
+                self.sec_alerts_box.removeWidget(placeholder)
+                placeholder.deleteLater()
+            except RuntimeError:
+                pass  # already deleted in a previous (pre-fix) session
         fg, bg = _STATUS_STYLE.get(sev.upper(), ("#1d4ed8", "#dbeafe"))
         row = QLabel(text); row.setWordWrap(True)
         row.setStyleSheet(

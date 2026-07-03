@@ -7,7 +7,6 @@ to a deterministic demo mode.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -15,10 +14,16 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from secureagentnet.core.config import get_settings
-from secureagentnet.daemon.config import get_daemon_settings
-
 logger = logging.getLogger("SecureAgentNet.CloudScanner")
+
+
+def _verdict_for(score: float) -> str:
+    """Map a risk score to a coarse verdict label (shared by demo and fallback)."""
+    if score >= 0.7:
+        return "MALICIOUS"
+    if score >= 0.4:
+        return "SUSPICIOUS"
+    return "SAFE"
 
 
 class CloudScanResult:
@@ -41,6 +46,10 @@ class CloudScanner:
     """Remote/cloud risk scanner with local fallback."""
 
     def __init__(self):
+        # Lazily import the daemon settings so that constructing a DecisionGateway
+        # (via the framework adapters / core pipeline) does not create an
+        # import-time dependency on the daemon subpackage.
+        from secureagentnet.daemon.config import get_daemon_settings
         daemon_settings = get_daemon_settings()
         self.url = daemon_settings.cloud_scan_url
         self.api_key = daemon_settings.cloud_scan_api_key
@@ -85,7 +94,6 @@ class CloudScanner:
     def _demo_scan(self, action_name: str, payload: Dict[str, Any], intent: str) -> CloudScanResult:
         """Deterministic demo mode for presentations without external services."""
         text = f"{action_name} {intent} {json.dumps(payload, default=str, sort_keys=True)}".lower()
-        digest = hashlib.sha256(text.encode()).hexdigest()
         # Deterministic but varied demo verdicts.
         if any(kw in text for kw in ("exfiltrate", "delete_database", "format_drive", "prompt_injection")):
             return CloudScanResult(0.95, "MALICIOUS", "Demo cloud scanner detected malicious pattern", "cloud-demo")
@@ -94,28 +102,17 @@ class CloudScanner:
         return CloudScanResult(0.05, "SAFE", "Demo cloud scanner found no risk", "cloud-demo")
 
     def _local_fallback(self, agent_id: str, action_name: str, payload: Dict[str, Any], intent: str) -> CloudScanResult:
-        """Use the local Ollama semantic evaluator if available."""
-        try:
-            from secureagentnet.decide.semantic_evaluator import SemanticEvaluator
-            from secureagentnet.decide.models import EvaluationRequest
+        """No remote scanner is configured or reachable.
 
-            settings = get_settings()
-            evaluator = SemanticEvaluator()
-            request = EvaluationRequest(
-                agent_id=agent_id,
-                action_name=action_name,
-                target_resource=payload.get("resource", "unknown"),
-                intent_summary=intent,
-                payload=payload,
-                commissioned_goal=None,
-            )
-            result = evaluator.evaluate(request)
-            return CloudScanResult(
-                risk_score=result.risk_score,
-                verdict=result.verdict if hasattr(result, "verdict") else ("MALICIOUS" if result.risk_score >= 0.7 else "SAFE"),
-                reason=result.reason,
-                source="local-llm",
-            )
-        except Exception as exc:
-            logger.debug("Local LLM fallback unavailable: %s", exc)
-            return CloudScanResult(0.0, "SAFE", "No cloud or local scan available; default allow", "fallback")
+        Tier 4 is meant to add a *second* opinion from a remote service. The DECIDE
+        pipeline has already run the local Ollama semantic evaluator in Tier 3, so
+        re-running it here would be redundant work that adds no independent signal
+        (and would double the per-action LLM latency). Return an explicit, neutral
+        "not scanned" result: risk 0.0 so it never lowers the gateway's max(), and a
+        verdict that does not masquerade as an affirmative SAFE in the audit trail.
+        """
+        return CloudScanResult(
+            0.0, "NOT_SCANNED",
+            "No cloud scanner configured; local Tier-3 evaluation already applied",
+            "none",
+        )

@@ -140,14 +140,10 @@ async def list_vetted_servers(agent: dict = Depends(get_current_agent)):
 
 @mcp_router.post("/execute")
 async def execute_tool(request: ExecuteRequest, agent: dict = Depends(get_current_agent)):
-    # Trust chain: the agent's signed manifest must verify back to the SAN root
-    # authority before any action is considered. A missing, tampered, expired or
-    # revoked manifest fails closed.
-    from secureagentnet.identify.trust_chain import TrustChainService
-    trusted, treason = TrustChainService.verify_agent(agent["agent_id"])
-    if not trusted:
-        return {"status": "blocked", "reason": f"trust chain verification failed: {treason}",
-                "evaluated_by": "TrustChainService", "phase": "IDENTIFY"}
+    # Trust-chain verification (signed manifest → SAN root authority) is enforced
+    # centrally in the pipeline's IDENTIFY phase so every entry point is covered.
+    # We forward the key the agent authenticated with so the pipeline can also bind
+    # it to the manifest (anti-impersonation).
 
     # External MCP tools must clear vetting (no tool poisoning) AND fall within the
     # agent's commissioned mandate before they ever reach the pipeline.
@@ -169,7 +165,10 @@ async def execute_tool(request: ExecuteRequest, agent: dict = Depends(get_curren
         intent_summary=request.intent_summary,
         payload=request.payload,
     )
-    result = await pipeline.execute_agent_action(agent["agent_id"], action_req, command_str)
+    result = await pipeline.execute_agent_action(
+        agent["agent_id"], action_req, command_str,
+        presented_public_key=agent.get("public_key"),
+    )
     return result
 
 

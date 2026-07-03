@@ -152,6 +152,22 @@ class TestITCDPipelineFullPipeline:
         assert agent["trust_score"] > 50.0
 
     @pytest.mark.asyncio
+    async def test_pipeline_blocks_revoked_manifest(self, pipeline, registered_agent, benign_request):
+        # Deliverable 3 is enforced in the shared IDENTIFY phase: revoking an agent's
+        # signed manifest must block its actions on the PRIMARY pipeline path (daemon
+        # /v1/intercept and framework adapters), not only the MCP route.
+        from secureagentnet.identify.trust_chain import TrustChainService
+        agent_id = registered_agent["agent_id"]
+        assert TrustChainService.revoke(agent_id) is True
+
+        result = await pipeline.execute_agent_action(
+            agent_id=agent_id, request=benign_request, command="python analyze.py",
+        )
+        assert result["status"] == "blocked"
+        assert result["evaluated_by"] == "TrustChainService"
+        assert result["phase"] == "IDENTIFY"
+
+    @pytest.mark.asyncio
     async def test_full_pipeline_reject_malicious(self, pipeline, registered_agent, malicious_request, monkeypatch):
         agent_id = registered_agent["agent_id"]
         CapabilityProfiler.add_capability(agent_id, "execute_sql")

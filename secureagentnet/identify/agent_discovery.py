@@ -31,6 +31,18 @@ _SAN_INFRA_MARKERS = (
     "secureagentnet-daemon", "secureagentnet-cloud", "secureagentnet-desktop",
     "interfaces.cli.terminal", "secureagentnet/main",
 )
+# Strong signals that a "custom" (unmatched-framework) process is really an AI agent:
+# it links a recognized agent framework or LLM SDK/client. This lets us catch ROGUE
+# agents that never self-declare an AGENT_ID env var — the whole point of discovery —
+# without registering ordinary processes (a single loose keyword like "bot" is still
+# not enough).
+_AGENT_SDK_SIGNALS = (
+    "langchain", "langgraph", "llama_index", "llama-index", "llamaindex",
+    "autogen", "crewai", "smolagents", "semantic_kernel", "semantic-kernel",
+    "litellm", "openai_agents", "openai-agents", "agentkit", "haystack",
+    "openai", "anthropic", "ollama",
+    "mcp.server", "fastmcp", "modelcontextprotocol",
+)
 
 
 @dataclass
@@ -478,16 +490,18 @@ class ProcessScanner(BaseScanner):
 
     def _is_agent_worthy(self, cmdline: str, env_vars: dict, framework: str, pid: int) -> bool:
         # A matched framework signature (langchain / crewai / autogen / other
-        # agentic runtimes) is a real agent. A "custom" process only qualifies
-        # when it carries an explicit agent identity tag — loose keywords like
-        # "bot" or "assistant" are deliberately NOT enough, to avoid registering
-        # ordinary processes as AI agents.
+        # agentic runtimes) is a real agent. A "custom" process qualifies when it
+        # either carries an explicit agent identity tag OR links a recognized agent
+        # framework / LLM SDK in its command line — so a rogue agent that never
+        # self-declares an AGENT_ID is still discovered. Loose keywords like "bot"
+        # or "assistant" remain NOT enough, to avoid registering ordinary processes.
         if framework != "custom":
             return True
-        return bool(
-            env_vars.get("AGENT_ID") or env_vars.get("SAN_AGENT_ID")
-            or env_vars.get("SAN_AGENT_NAME") or env_vars.get("AGENT_NAME")
-        )
+        if (env_vars.get("AGENT_ID") or env_vars.get("SAN_AGENT_ID")
+                or env_vars.get("SAN_AGENT_NAME") or env_vars.get("AGENT_NAME")):
+            return True
+        blob = f"{cmdline} {' '.join(env_vars.keys())}".lower()
+        return any(sig in blob for sig in _AGENT_SDK_SIGNALS)
 
     def _extract_process_name(self, cmdline: str, env_vars: dict, pid: int, framework: str) -> str:
         name = env_vars.get("AGENT_NAME") or env_vars.get("SAN_AGENT_NAME")

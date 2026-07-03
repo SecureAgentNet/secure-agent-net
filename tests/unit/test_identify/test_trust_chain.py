@@ -96,6 +96,16 @@ class TestTrustChain:
         assert ok is False
         assert "expired" in reason
 
+    def test_empty_expiry_is_treated_as_expired(self):
+        # Fail-closed: a manifest with a missing/blank expires_at (legacy or tampered
+        # record) must NOT be treated as never-expiring.
+        manifest = AgentManifest(
+            agent_id="a", name="n", agent_type="Custom", public_key="k",
+            capabilities=["execute"], issued_at="2026-01-01T00:00:00+00:00",
+            expires_at="",
+        )
+        assert manifest.is_expired() is True
+
     def test_revoked_manifest_fails(self):
         TrustChainService.issue(self._agent(agent_id="rev-1"))
         assert TrustChainService.revoke("rev-1") is True
