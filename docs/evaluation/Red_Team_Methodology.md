@@ -1,6 +1,6 @@
 # Red-Team Methodology
 
-_Generated 2026-06-12T06:35:57.839677+00:00_
+_Generated 2026-07-04T13:12:34.792300+00:00_
 
 ## Corpus
 
@@ -23,8 +23,8 @@ Three configurations are compared (see `Ablation_and_Baselines.md`):
 | LLM01 - Prompt Injection | 14 | 14 | 100.0% | runtime |
 | LLM02 - Insecure Output Handling | 5 | 5 | 100.0% | runtime |
 | LLM03 - Training Data Poisoning | 3 | 3 | 100.0% | architectural* |
-| LLM04 - Model Denial of Service | 5 | 4 | 80.0% | runtime |
-| LLM05 - Supply Chain | 5 | 5 | 100.0% | architectural* |
+| LLM04 - Model Denial of Service | 5 | 5 | 100.0% | runtime |
+| LLM05 - Supply Chain | 5 | 4 | 80.0% | architectural* |
 | LLM06 - Sensitive Information Disclosure | 5 | 4 | 80.0% | runtime |
 | LLM07 - Insecure Plugin Design | 5 | 5 | 100.0% | runtime |
 | LLM08 - Excessive Agency | 5 | 5 | 100.0% | runtime |

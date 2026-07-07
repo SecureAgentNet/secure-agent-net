@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS kill_switch_state (
     armed BOOLEAN DEFAULT TRUE,
     active BOOLEAN DEFAULT FALSE,
     trigger_count INT DEFAULT 0,
+    denial_counts JSONB DEFAULT '{}',
     last_triggered_at TIMESTAMPTZ,
     last_reset_at TIMESTAMPTZ,
     reset_by VARCHAR(255)
@@ -192,6 +193,16 @@ CREATE TABLE IF NOT EXISTS kill_switch_state (
 
 INSERT INTO kill_switch_state (id, armed, active) VALUES (1, TRUE, FALSE)
 ON CONFLICT (id) DO NOTHING;
+
+-- ===== CIRCUIT-BREAKER STATE (per-agent) =====
+CREATE TABLE IF NOT EXISTS circuit_breaker_state (
+    agent_id VARCHAR(64) PRIMARY KEY,
+    failures JSONB DEFAULT '[]',
+    state VARCHAR(20) NOT NULL DEFAULT 'CLOSED' CHECK (state IN ('CLOSED', 'OPEN', 'HALF_OPEN')),
+    tripped_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_breaker_state ON circuit_breaker_state(state);
 
 -- ===== USERS (Dashboard) =====
 CREATE TABLE IF NOT EXISTS users (
