@@ -23,11 +23,11 @@ from secureagentnet.identify.identity_registry import IdentityRegistry
 from secureagentnet.track.log_indexer import LogIndexer
 from secureagentnet.core.config import get_settings
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+from secureagentnet.utils.logging_config import configure_logging
+
+# Structured logging driven by LOG_FORMAT (json|text) / LOG_LEVEL env vars —
+# set LOG_FORMAT=json in containers so logs aggregate cleanly downstream.
+configure_logging(force=True)
 
 logger = logging.getLogger("SecureAgentNet")
 
@@ -143,6 +143,30 @@ async def health_check():
         "agents_registered": IdentityRegistry.get_total_count(),
         "agents_active": IdentityRegistry.get_active_count(),
     }
+
+
+@app.get("/readyz")
+async def readiness_check():
+    """Readiness probe (distinct from /health liveness): reports whether the
+    service can actually serve traffic — i.e. its backing store is reachable.
+    Returns 503 when a dependency is down so orchestrators hold traffic off this
+    replica instead of routing requests it cannot fulfil."""
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+    from secureagentnet.database.connection import get_db_session
+
+    checks = {}
+    ready = True
+    try:
+        with get_db_session() as session:
+            session.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:  # noqa: BLE001 - probe must never raise
+        checks["database"] = f"error: {type(exc).__name__}"
+        ready = False
+
+    body = {"status": "ready" if ready else "not_ready", "checks": checks}
+    return JSONResponse(status_code=200 if ready else 503, content=body)
 
 
 @app.get("/api/version")

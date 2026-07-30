@@ -55,6 +55,49 @@ class LocalExecutor:
             self._pipeline.execute_agent_action(self.agent_id, request, command)
         )
 
+    def adjudicate(self, *, action_name, target_resource, intent_summary, payload):
+        """Decision-only enforcement for tools with a **real in-process side effect**
+        (send an email, write a row, call an API) — where sandbox-executing a shell
+        ``command`` makes no sense. Runs the mandate gate (IDENTIFY) and the
+        mandate-anchored DECIDE gateway, but performs no CONTAIN/execution; the
+        caller runs the real tool body itself on an ``allowed`` verdict.
+
+        Returns a status dict: ``{"status": "allowed"|"blocked"|"escalated", ...}``.
+        Fail-closed: an uncommissioned/expired agent, or an action outside its
+        mandate, is blocked before the request ever reaches the model tier.
+        """
+        from secureagentnet.decide.models import EvaluationRequest
+        from secureagentnet.decide.intent_capsule import MandateRegistry
+
+        mandate = MandateRegistry.get_active(self.agent_id)
+        if mandate is None:
+            return {"status": "blocked", "evaluated_by": "MandateRegistry",
+                    "reason": "Agent has no active mandate — it has not been commissioned"}
+        if mandate.is_expired():
+            return {"status": "blocked", "evaluated_by": "MandateRegistry",
+                    "reason": "Agent mandate has expired — re-commission required"}
+        if mandate.detect_goal_hijack(action_name, intent_summary):
+            return {"status": "blocked", "evaluated_by": "MandateRegistry",
+                    "reason": f"Goal hijacking: action '{action_name}' deviates from the mandate"}
+        if not mandate.is_action_allowed(action_name):
+            return {"status": "blocked", "evaluated_by": "MandateRegistry",
+                    "reason": f"Action '{action_name}' is outside the agent's commissioned mandate"}
+
+        req = EvaluationRequest(
+            agent_id=self.agent_id,
+            action_name=action_name,
+            target_resource=target_resource,
+            intent_summary=intent_summary,
+            payload=payload or {},
+            commissioned_goal=mandate.original_goal,
+        )
+        result = self._pipeline.gateway.evaluate_request(req)
+        hitl = bool(result.metadata.get("hitl_required")) or \
+            result.evaluated_by == "HITLApprovalGate"
+        status = "allowed" if result.is_allowed else ("escalated" if hitl else "blocked")
+        return {"status": status, "reason": result.reason,
+                "risk_score": result.risk_score, "evaluated_by": result.evaluated_by}
+
 
 class RemoteExecutor:
     """Routes a call to a remote SAN gateway over HTTP via the client SDK."""
@@ -85,6 +128,38 @@ class RemoteExecutor:
             intent_summary=intent_summary,
             payload=payload or {},
         )
+
+    def adjudicate(self, *, action_name, target_resource, intent_summary, payload):
+        """Decision-only enforcement via the **MCP gateway** (`/api/v1/mcp/execute`).
+
+        The gateway authenticates the agent, runs the full ITCD pipeline and returns
+        a verdict. For tools with a real local side effect (send an email, write a
+        record) we act on the verdict and perform the effect ourselves on approval —
+        the gateway's sandbox executes command *workloads*, not side effects. Any
+        gateway/transport error is treated as a denial (fail-closed).
+        """
+        command = payload.get("command") if isinstance(payload, dict) else None
+        res = self._client.execute_tool(
+            action_name=action_name,
+            target_resource=target_resource,
+            command=command or action_name,
+            intent_summary=intent_summary,
+            payload=payload or {},
+        )
+        status = res.get("status")
+        if status == "success":
+            return {"status": "allowed", "reason": "approved by MCP gateway",
+                    "evaluated_by": res.get("evaluated_by", "MCP gateway")}
+        if status == "escalated":
+            return {"status": "escalated", "reason": res.get("reason", "pending approval"),
+                    "evaluated_by": res.get("evaluated_by", "MCP gateway")}
+        if status == "blocked":
+            return {"status": "blocked", "reason": res.get("reason", "policy denial"),
+                    "evaluated_by": res.get("evaluated_by", "MCP gateway")}
+        # error / unknown → fail-closed
+        return {"status": "blocked",
+                "reason": res.get("error") or res.get("reason") or "gateway error (fail-closed)",
+                "evaluated_by": "MCP gateway"}
 
 
 def get_default_executor() -> SecureExecutor:
@@ -142,26 +217,66 @@ def secure_callable(
     target_resource: str = "tool",
     intent_summary: str = "",
     executor: Optional[SecureExecutor] = None,
+    enforce_only: bool = False,
+    target_resolver: Optional[Callable[[tuple, dict], str]] = None,
 ) -> Callable[..., Any]:
     """Wrap any callable so its invocation is governed by the SAN ITCD pipeline.
 
-    The wrapped call is delegated to SAN (which adjudicates and sandboxes it); the
-    original function body is not run in-process. Returns the sandbox output on
-    approval, or a ``[SecureAgentNet] Blocked…/Escalated…`` message otherwise.
+    Two enforcement modes:
+
+    * **Sandbox mode (default).** The call is delegated to SAN, which adjudicates
+      *and* executes it in an isolated sandbox; the original body is not run in
+      this process. Right for tools whose effect is a shell/command workload.
+    * **Adjudicate-only mode** (``enforce_only=True``). SAN *decides* (mandate +
+      DECIDE), and on approval the original ``fn`` runs in-process to perform its
+      real side effect (send an email, write a record, call an API). Right for
+      tools that must act locally, where sandboxing a synthetic command is wrong.
+
+    ``target_resolver(args, kwargs) -> str`` optionally derives the DECIDE
+    ``target_resource`` from the runtime arguments (e.g. an email's recipient), so
+    the evaluator judges *this* call's target — central to catching, say, a reply
+    being redirected to an external address. Returns the tool output on approval,
+    or a ``[SecureAgentNet] Blocked…/Escalated…`` message otherwise.
     """
     ex = executor or get_default_executor()
     name = getattr(fn, "__name__", "tool")
     intent = intent_summary or f"Agent invoking tool: {name}"
 
+    def _resource(args, kwargs) -> str:
+        if target_resolver is not None:
+            try:
+                return str(target_resolver(args, kwargs)) or target_resource
+            except Exception:  # noqa: BLE001 — a resolver hiccup must not bypass the gate
+                return target_resource
+        return target_resource
+
     def wrapper(*args, **kwargs):
+        resource = _resource(args, kwargs)
+        payload = {"args": list(args), "kwargs": dict(kwargs)}
+
+        if enforce_only and hasattr(ex, "adjudicate"):
+            logger.info("Adjudicating tool '%s' through SecureAgentNet…", name)
+            decision = ex.adjudicate(
+                action_name=action_name,
+                target_resource=resource,
+                intent_summary=intent,
+                payload=payload,
+            )
+            status = decision.get("status")
+            if status == "allowed":
+                return fn(*args, **kwargs)  # approved → the real side effect runs here
+            if status == "escalated":
+                return f"{ESCALATED_PREFIX}: {decision.get('reason', 'pending approval')}"
+            return f"{BLOCKED_PREFIX}: {decision.get('reason', 'policy denial')}"
+
         command = format_command(args, kwargs) or name
         logger.info("Routing tool '%s' through SecureAgentNet…", name)
         res = ex.execute(
             action_name=action_name,
-            target_resource=target_resource,
+            target_resource=resource,
             command=command,
             intent_summary=intent,
-            payload={"args": list(args), "kwargs": dict(kwargs)},
+            payload=payload,
         )
         return interpret_result(res)
 

@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (Column, String, Text, Float, Boolean, DateTime,
-                        ForeignKey, Uuid as _SAUuid)
+                        ForeignKey, Integer, Uuid as _SAUuid)
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import relationship
 
@@ -56,9 +56,42 @@ class AdminUser(Base):
     tenant_id = Column(Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="owner")  # owner|admin|operator|viewer
     created_at = Column(DateTime(timezone=True), default=_now)
 
     tenant = relationship("Tenant", back_populates="admins")
+
+
+class ApiKey(Base):
+    """A tenant-scoped programmatic key for the public API / SDK. Distinct from a
+    per-endpoint daemon key: this authenticates a *tenant* (with a role) to the
+    read/query API, so customers can build on top of the console."""
+    __tablename__ = "api_keys"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(200), nullable=False)
+    key_prefix = Column(String(16), nullable=False)   # shown in listings (e.g. "sank_abcd")
+    key_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="viewer")
+    created_at = Column(DateTime(timezone=True), default=_now)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked = Column(Boolean, default=False)
+
+    tenant = relationship("Tenant")
+
+
+class UsageCounter(Base):
+    """Per-tenant, per-month usage tally — the metering foundation a billing
+    integration (e.g. Stripe) reads. Metadata counts only; no customer data."""
+    __tablename__ = "usage_counters"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    period = Column(String(7), nullable=False)         # "YYYY-MM"
+    events_ingested = Column(Integer, nullable=False, default=0)
+    api_calls = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), default=_now)
 
 
 class EnrollmentToken(Base):

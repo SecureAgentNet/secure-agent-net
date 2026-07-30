@@ -85,10 +85,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    from secureagentnet.cloud import routes_admin, routes_enroll, routes_ingest
+    from secureagentnet.cloud import (routes_admin, routes_enroll, routes_ingest,
+                                       routes_public)
     app.include_router(routes_admin.router)
     app.include_router(routes_enroll.router)
     app.include_router(routes_ingest.router)
+    app.include_router(routes_public.router)
 
     @app.get("/health")
     async def health() -> dict:

@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import Optional
 
 from secureagentnet.database.connection import get_db_session
@@ -20,8 +20,7 @@ class OperatorResponse(BaseModel):
     created_at: Optional[str] = None
     last_login: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CreateOperatorRequest(BaseModel):

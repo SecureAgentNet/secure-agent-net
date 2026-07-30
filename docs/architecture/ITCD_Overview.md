@@ -38,4 +38,4 @@ When an AI agent attempts to execute an action (e.g., "Delete user records" or "
 2. **Phase 2: The Identity & Gateway (Identify)** (MCP Server, Agent Auth)
 3. **Phase 3: The Execution Sandbox (Contain)** (Docker Wrappers, Security Profiles)
 4. **Phase 4: The Brains (Decide & Track)** (Semantic Evaluator, Vault Integration)
-5. **Phase 5: The Glass Pane (Interfaces)** (Web Dashboard, CLI)
+5. **Phase 5: The Glass Pane (Interfaces)** (Web Dashboard, CLI, Console)

@@ -41,6 +41,18 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /build .
 
+# Run as an unprivileged user (defense-in-depth: a security gateway should not
+# run its own process as root). When DEPLOY_MODE=docker, sandbox provisioning
+# talks to the Docker socket — grant that access at run time without re-adding
+# root, e.g.:
+#   docker run --group-add "$(getent group docker | cut -d: -f3)" ...
+# The `local` and `minimal` deploy modes need no socket access at all.
+RUN groupadd --system app \
+    && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
+ENV HOME=/app
+
 EXPOSE 5000
 EXPOSE 8443
 

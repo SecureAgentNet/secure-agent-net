@@ -9,6 +9,7 @@ include alembic.ini
 recursive-include config *.json *.yaml *.yml
 recursive-include scripts *.sh
 recursive-include packaging *
+recursive-include secureagentnet *.py *.json *.yaml *.yml *.mako *.ini
 recursive-include src *.py *.json *.yaml *.yml
 recursive-include docs *
 prune **/__pycache__

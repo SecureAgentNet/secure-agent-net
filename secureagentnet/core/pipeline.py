@@ -71,6 +71,7 @@ class ITCDPipeline:
         session_id: Optional[str] = None,
         intent_capsule: Optional[IntentCapsule] = None,
         presented_public_key: Optional[str] = None,
+        files: Optional[list] = None,
     ) -> Dict[str, Any]:
         correlation_id = generate_correlation_id()
         start_time = time.time()
@@ -175,6 +176,7 @@ class ITCDPipeline:
             exec_req = ExecutionRequest(
                 command=safe_command,
                 environment_vars={"AGENT_ID": agent_id, "CORRELATION_ID": correlation_id},
+                files=files or [],
             )
             sandbox_config = SandboxConfig(
                 timeout_seconds=get_settings().container_timeout_seconds,
@@ -286,6 +288,20 @@ class ITCDPipeline:
         # Success
         exec_data = result["data"]
         total_time = calculate_execution_time_ms(start_time)
+
+        # Per-agent resource attribution: the sandbox that just ran belongs to
+        # exactly this agent, so its container counters name who egressed data or
+        # burned resources. Anomalies raise the agent's rogue-detection score and
+        # dock trust — connecting CONTAIN telemetry to IDENTIFY rogue detection.
+        resource_usage = getattr(exec_data, "resource_usage", None)
+        oom_killed = bool(getattr(exec_data, "oom_killed", False))
+        if resource_usage or oom_killed:
+            flagged, why = self.rogue_detector.record_resource_usage(
+                agent_id, resource_usage or {}, oom_killed=oom_killed)
+            if flagged:
+                self._log_event(agent_id, "resource_anomaly", PipelinePhase.CONTAIN,
+                                EventSeverity.WARNING, {"detail": why}, correlation_id)
+                IdentityRegistry.update_trust_score(agent_id, -8)
 
         IdentityRegistry.update_trust_score(agent_id, 2)
         self._log_event(

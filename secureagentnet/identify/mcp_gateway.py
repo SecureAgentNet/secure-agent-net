@@ -176,6 +176,7 @@ async def execute_tool(request: ExecuteRequest, agent: dict = Depends(get_curren
                             "evaluated_by": "TrustChainService", "phase": "IDENTIFY"}
 
     from secureagentnet.core.pipeline import ITCDPipeline
+    from secureagentnet.contain.models import InjectedFile
     pipeline = ITCDPipeline()
     command_str = request.payload.get("command", "")
     action_req = AgentActionRequest(
@@ -184,9 +185,15 @@ async def execute_tool(request: ExecuteRequest, agent: dict = Depends(get_curren
         intent_summary=request.intent_summary,
         payload=request.payload,
     )
+    # Optional input files the tool carries into the sandbox workspace (e.g. the
+    # email the agent was asked to read). They are placed *before* the command runs;
+    # DECIDE still adjudicates the action before anything executes.
+    injected = [InjectedFile(path=f.path, content_base64=f.content_base64,
+                             executable=f.executable) for f in request.files]
     result = await pipeline.execute_agent_action(
         agent["agent_id"], action_req, command_str,
         presented_public_key=agent.get("public_key"),
+        files=injected,
     )
     return result
 

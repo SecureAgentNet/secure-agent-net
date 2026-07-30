@@ -1792,3 +1792,81 @@ def cloud_status():
         f"[bold]Reporting:[/] metadata only (decisions, alerts, agent inventory, trust)",
         title="[bold green]Enrolled[/]", border_style="green",
     ))
+
+
+def _host_bar(pct: float, width: int = 24) -> str:
+    """A coloured text meter for the terminal host view."""
+    pct = max(0.0, min(pct, 100.0))
+    filled = int(round(pct / 100 * width))
+    color = "red" if pct >= 90 else ("yellow" if pct >= 70 else "green")
+    return f"[{color}]{'█' * filled}[/]{'░' * (width - filled)} {pct:4.0f}%"
+
+
+def _host_renderable(m: dict):
+    """Build the rich view for one host telemetry sample."""
+    from rich.table import Table as _T
+    from rich.console import Group
+    if not m.get("available"):
+        return Panel("[red]psutil not available — host monitoring unavailable[/]",
+                     title="Host Monitor", border_style="red")
+    cpu, mem, disk, net, sysd = (m["cpu"], m["memory"], m["disk"],
+                                 m["network"], m["system"])
+    conns = net["connections"]
+    header = (f"[bold]{sysd['hostname']}[/]  •  up {sysd['uptime']}  •  "
+              f"{cpu['count']} cores  •  {sysd['process_count']} procs  •  "
+              f"{conns if conns >= 0 else 'n/a'} connections")
+
+    vitals = _T.grid(padding=(0, 2))
+    vitals.add_column(justify="right"); vitals.add_column()
+    vitals.add_row("CPU", _host_bar(cpu["percent"]) + f"   load {cpu['load_avg'][0]}")
+    vitals.add_row("Memory", _host_bar(mem["percent"]) + f"   {mem['used_h']}/{mem['total_h']}")
+    vitals.add_row("Disk /", _host_bar(disk["percent"]) + f"   {disk['used_h']}/{disk['total_h']}")
+    vitals.add_row("Network", f"[cyan]↓ {net['down_h']}[/]   [magenta]↑ {net['up_h']}[/]   "
+                              f"({net['recv_total_h']} rx / {net['sent_total_h']} tx)")
+
+    procs = _T(title="Top processes", box=box.SIMPLE, expand=True)
+    procs.add_column("PID", justify="right", style="dim")
+    procs.add_column("Process"); procs.add_column("CPU %", justify="right")
+    procs.add_column("MEM %", justify="right")
+    for pr in m["processes"]:
+        procs.add_row(str(pr["pid"]), pr["name"], f"{pr['cpu']:.1f}", f"{pr['mem']:.1f}")
+
+    return Panel(Group(header, "", vitals, "", procs),
+                 title="[bold]SecureAgentNet — Host Monitor[/]", border_style="cyan")
+
+
+@click.command()
+@click.option("--watch", "-w", is_flag=True, help="Live-updating view (Ctrl-C to exit)")
+@click.option("--interval", default=1.0, help="Refresh seconds when using --watch")
+@click.option("--json", "as_json", is_flag=True, help="Emit one JSON snapshot and exit")
+def host(watch, interval, as_json):
+    """Live telemetry for the host this endpoint protects (CPU/mem/disk/network)."""
+    from secureagentnet.monitoring import HostSampler
+    from secureagentnet.monitoring.host_metrics import psutil_available
+    import time
+
+    if not psutil_available():
+        console.print("[red]psutil not installed — run: pip install psutil[/]")
+        return
+
+    sampler = HostSampler(top_n=8)
+
+    if as_json:
+        import json as _json
+        sampler.sample(); time.sleep(0.3)
+        console.print_json(_json.dumps(sampler.sample(), default=str))
+        return
+
+    if watch:
+        from rich.live import Live
+        sampler.sample()  # prime network/cpu rates
+        with Live(console=console, refresh_per_second=4, screen=True) as live:
+            try:
+                while True:
+                    live.update(_host_renderable(sampler.sample()))
+                    time.sleep(max(0.2, interval))
+            except KeyboardInterrupt:
+                pass
+    else:
+        sampler.sample(); time.sleep(0.3)
+        console.print(_host_renderable(sampler.sample()))

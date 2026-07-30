@@ -18,10 +18,27 @@ class Settings(BaseSettings):
     vault_addr: str = Field(default="http://127.0.0.1:8200", alias="VAULT_ADDR")
     vault_token: str = Field(default="", alias="VAULT_TOKEN")
 
+    # DECIDE Tier-3 model provider: "ollama" (local LLM), "hosted_api"
+    # (OpenAI-compatible chat completions), or "classifier" (small local model).
+    decide_model_provider: str = Field(default="ollama", alias="DECIDE_MODEL_PROVIDER")
+
     ollama_api_url: str = Field(default="http://127.0.0.1:11434/api/generate", alias="OLLAMA_API_URL")
     ollama_model: str = Field(default="llama3.2:7b", alias="OLLAMA_MODEL")
     ollama_timeout: int = Field(default=30, alias="OLLAMA_TIMEOUT")
     ollama_retry_count: int = Field(default=2, alias="OLLAMA_RETRY_COUNT")
+
+    # Hosted-API provider (OpenAI-compatible: OpenAI, vLLM, Together, Groq, …).
+    hosted_api_base_url: str = Field(default="https://api.openai.com/v1", alias="HOSTED_API_BASE_URL")
+    hosted_api_key: str = Field(default="", alias="HOSTED_API_KEY")
+    hosted_api_model: str = Field(default="gpt-4o-mini", alias="HOSTED_API_MODEL")
+    hosted_api_timeout: int = Field(default=30, alias="HOSTED_API_TIMEOUT")
+
+    # Small-classifier provider: a HuggingFace text-classification model id/path
+    # (used if `transformers` is installed), else a dependency-free linear model
+    # whose feature weights load from this JSON path (falls back to built-ins).
+    classifier_model: str = Field(default="", alias="CLASSIFIER_MODEL")
+    classifier_weights_path: str = Field(default="", alias="CLASSIFIER_WEIGHTS_PATH")
+
     # TTL (seconds) for cached Tier-3 verdicts; 0 disables caching.
     semantic_cache_ttl: int = Field(default=300, alias="SEMANTIC_CACHE_TTL")
 
@@ -45,6 +62,11 @@ class Settings(BaseSettings):
     kill_switch_threshold: int = Field(default=3, alias="KILL_SWITCH_THRESHOLD")
     circuit_breaker_timeout: int = Field(default=60, alias="CIRCUIT_BREAKER_TIMEOUT")
     block_threshold: float = Field(default=0.7, alias="BLOCK_THRESHOLD")
+
+    # Feed host telemetry (outbound-network / CPU spikes) into DECIDE as an
+    # additive risk signal — can escalate exfil-shaped actions to HITL during a
+    # host anomaly, never auto-denies. Off by default; opt in per deployment.
+    decide_host_telemetry_enabled: bool = Field(default=False, alias="DECIDE_HOST_TELEMETRY")
 
     model_config = SettingsConfigDict(
         env_file=".env",

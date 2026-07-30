@@ -89,7 +89,7 @@ class TestSemanticEvaluatorAnchorsToGoal:
             resp.json = lambda: {"response": "SCORE: 0.1\nREASON: ok"}
             return resp
 
-        with patch("secureagentnet.decide.semantic_evaluator.requests.post", side_effect=fake_post):
+        with patch("secureagentnet.decide.model_providers.requests.post", side_effect=fake_post):
             evaluator.evaluate(request, request.payload)
         return captured["prompt"]
 

@@ -1,16 +1,16 @@
 # Ablation and Baselines
 
-_Generated 2026-07-04T13:12:34.793772+00:00_
+_Generated 2026-07-09T16:19:44.881175+00:00_
 
 Comparison of the full DECIDE pipeline against (a) the same pipeline with mandate anchoring removed and (b) the deterministic Tier-1 RuleFilter alone. The delta between columns is the measured contribution of each component.
 
 | Metric | Full pipeline | Mandate ablation (no commissioned goals) | Rule-only baseline (Tier 1, no LLM) |
 |---|---|---|---|
-| Detection rate | 94.5% | 100.0% | 14.5% |
-| Specificity | 92.0% | 36.0% | 100.0% |
-| Hard FP rate | 0.0% | 4.0% | 0.0% |
-| Benign escalation rate | 8.0% | 60.0% | 0.0% |
-| F1 (hard decisions) | 0.923 | 0.984 | 0.254 |
+| Detection rate | 98.6% | 100.0% | 15.1% |
+| Specificity | 92.5% | 37.5% | 100.0% |
+| Hard FP rate | 0.0% | 0.0% | 0.0% |
+| Benign escalation rate | 7.5% | 62.5% | 0.0% |
+| F1 (hard decisions) | 0.979 | 1.000 | 0.262 |
 
 ## Goal-hijacking pairs by configuration
 

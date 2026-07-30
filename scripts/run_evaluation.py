@@ -150,6 +150,7 @@ def run_once(gateway, ablate_mandate: bool):
         records.append({
             "id": s["id"], "group": "attack", "category": s["owasp_category"],
             "code": _code(s["owasp_category"]), "severity": s.get("severity", ""),
+            "atlas": s.get("mitre_atlas", []),
             "expected_block": True, "blocked": not result.is_allowed,
             "tier": result.evaluated_by, "risk_score": result.risk_score,
             "latency_ms": round(ms, 1),
@@ -488,6 +489,206 @@ def write_comparison_doc():
     return True
 
 
+def _load_standards():
+    path = DATASET_DIR / "standards_map.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
+def write_standards_coverage(records):
+    """Two-standard coverage matrix: OWASP LLM Top 10 ↔ MITRE ATLAS ↔ the
+    SecureAgentNet defense tier, annotated with measured detection per category.
+    Independent of the LLM tier's non-determinism at the *mapping* level, so it
+    is emitted for every mode (the detection column reflects the current run)."""
+    std = _load_standards()
+    if not std:
+        return False
+    cats = std["categories"]
+
+    # Measured detection per OWASP code from this run.
+    per_code = {}
+    for r in records:
+        if r["group"] != "attack":
+            continue
+        c = per_code.setdefault(r["code"], {"n": 0, "blocked": 0})
+        c["n"] += 1
+        c["blocked"] += 1 if r["blocked"] else 0
+
+    doc = []
+    doc.append("# Standards Coverage\n")
+    doc.append(f"_Generated {datetime.now(timezone.utc).isoformat()}_\n")
+    doc.append(f"Mapping of every attack category to **two** industry threat "
+               f"frameworks — the {std['sources']['owasp']} and "
+               f"{std['sources']['atlas']} — and to the ITCD defense tier that "
+               "primarily addresses it. The *Detected* column is the measured "
+               "block rate for that category in the most recent evaluation run.\n")
+    doc.append("| OWASP | Name | MITRE ATLAS technique(s) | ATLAS tactic | Primary defense (ITCD) | Scope | Detected |")
+    doc.append("|---|---|---|---|---|---|---|")
+    for code in sorted(cats):
+        c = cats[code]
+        atlas = "<br>".join(f"`{t['id']}` {t['name']}" for t in c["atlas"])
+        seen = per_code.get(code)
+        det = _pct(seen["blocked"] / seen["n"]) if seen and seen["n"] else "—"
+        doc.append(
+            f"| {code} | {c['owasp_name']} | {atlas} | {c['atlas_tactic']} | "
+            f"{c['primary_defense']} | {c['scope']} | {det} |"
+        )
+    doc.append("")
+    doc.append("**Scope** — *runtime* categories are enforceable by the DECIDE "
+               "request-decision gateway at execution time; *architectural* "
+               "categories (training-data poisoning, supply chain, overreliance, "
+               "model theft) are mitigated by other ITCD layers (IDENTIFY discovery "
+               "/ MCP vetting, TRACK tamper-proof audit, CONTAIN isolation, HITL) "
+               "rather than a single request decision, and are reported here for "
+               "completeness of the threat-framework coverage.\n")
+    doc.append("> ATLAS technique IDs are the public MITRE ATLAS identifiers; the "
+               "OWASP↔ATLAS cross-walk is category-level, matching how the two "
+               "frameworks reference each other.\n")
+
+    # Per-technique detection: prefer each scenario's own `mitre_atlas` tags,
+    # falling back to the category-level map for scenarios without tags.
+    names = {}
+    for c in cats.values():
+        for t in c["atlas"]:
+            names[t["id"]] = t["name"]
+    tech = {}
+    for r in records:
+        if r["group"] != "attack":
+            continue
+        ids = r.get("atlas") or [t["id"] for t in cats.get(r["code"], {}).get("atlas", [])]
+        for tid in ids:
+            e = tech.setdefault(tid, {"n": 0, "blocked": 0})
+            e["n"] += 1
+            e["blocked"] += 1 if r["blocked"] else 0
+    if tech:
+        doc.append("## Detection by MITRE ATLAS technique\n")
+        doc.append("Attacks mapped to each technique (a scenario may map to several). "
+                   "Rate is the measured block rate for scenarios touching that technique "
+                   "in the most recent run.\n")
+        doc.append("| ATLAS technique | Name | Scenarios | Detected | Rate |")
+        doc.append("|---|---|---|---|---|")
+        for tid in sorted(tech):
+            e = tech[tid]
+            rate = _pct(e["blocked"] / e["n"]) if e["n"] else "—"
+            doc.append(f"| `{tid}` | {names.get(tid, '—')} | {e['n']} | {e['blocked']} | {rate} |")
+        doc.append("")
+
+    (OUT_DIR / "Standards_Coverage.md").write_text("\n".join(doc))
+    return True
+
+
+def _threshold_sweep(a_scores, b_scores):
+    """Sweep a block threshold over [0,1] and, at each, treat risk_score >= t as a
+    predicted block. Returns per-threshold TPR/FPR/precision/F1/Youden-J plus the
+    trapezoidal ROC-AUC. Pure-Python (no numpy/sklearn dependency)."""
+    na, nb = len(a_scores), len(b_scores)
+    grid = [round(i * 0.05, 2) for i in range(0, 21)]
+    thresholds = sorted(set(grid + a_scores + b_scores + [1.01]))
+    rows = []
+    for t in thresholds:
+        tp = sum(1 for s in a_scores if s >= t)
+        fp = sum(1 for s in b_scores if s >= t)
+        tpr = tp / na if na else 0.0
+        fpr = fp / nb if nb else 0.0
+        prec = tp / (tp + fp) if (tp + fp) else 1.0
+        f1 = (2 * prec * tpr / (prec + tpr)) if (prec + tpr) else 0.0
+        rows.append({"t": t, "tp": tp, "fp": fp, "tpr": tpr, "fpr": fpr,
+                     "precision": prec, "f1": f1, "youden": tpr - fpr})
+    # ROC-AUC: max TPR per distinct FPR, trapezoid, anchored at (0,0)-(1,1).
+    best_tpr = {}
+    for r in rows:
+        best_tpr[r["fpr"]] = max(best_tpr.get(r["fpr"], 0.0), r["tpr"])
+    best_tpr.setdefault(0.0, 0.0)
+    best_tpr[1.0] = 1.0
+    pts = sorted(best_tpr.items())
+    auc = sum((x1 - x0) * (y0 + y1) / 2 for (x0, y0), (x1, y1) in zip(pts, pts[1:]))
+    return rows, auc
+
+
+def write_threshold_analysis(records, current_threshold=None):
+    """Emit Threshold_Analysis.md: ROC sweep of the block threshold against the
+    recorded risk scores, the F1- and Youden-optimal operating points, and how
+    they compare to the deployed `block_threshold`. Works from any run's records
+    (full pipeline gives the richest curve; rule-only is bimodal by nature)."""
+    a_scores = [r["risk_score"] for r in records if r["group"] == "attack"]
+    b_scores = [r["risk_score"] for r in records if r["group"] == "benign"]
+    if not a_scores or not b_scores:
+        return False
+    rows, auc = _threshold_sweep(a_scores, b_scores)
+    best_f1 = max(rows, key=lambda r: (r["f1"], -r["t"]))
+    best_j = max(rows, key=lambda r: (r["youden"], -r["t"]))
+
+    doc = ["# Threshold Analysis\n", f"_Generated {datetime.now(timezone.utc).isoformat()}_\n"]
+    doc.append("ROC-style sweep of the DECIDE **block threshold** against the risk "
+               "scores recorded for the labelled corpus. At each candidate threshold a "
+               "request is counted as blocked when `risk_score >= threshold`; this "
+               "isolates the *threshold* choice from the tiering logic and shows the "
+               "precision/recall trade-off available to an operator.\n")
+    doc.append(f"- **ROC-AUC:** {auc:.3f}  _(1.0 = perfect separation of attacks from "
+               "benign by score; 0.5 = chance)_")
+    doc.append(f"- **F1-optimal threshold:** {best_f1['t']:.2f} "
+               f"(F1={best_f1['f1']:.3f}, TPR={_pct(best_f1['tpr'])}, FPR={_pct(best_f1['fpr'])})")
+    doc.append(f"- **Youden-J-optimal threshold:** {best_j['t']:.2f} "
+               f"(J={best_j['youden']:.3f}, TPR={_pct(best_j['tpr'])}, FPR={_pct(best_j['fpr'])})")
+    if current_threshold is not None:
+        doc.append(f"- **Currently deployed `block_threshold`:** {current_threshold}")
+    doc.append("")
+    doc.append("| Threshold | TPR (recall) | FPR | Precision | F1 |")
+    doc.append("|---|---|---|---|---|")
+    for r in rows:
+        if abs((r["t"] * 20) - round(r["t"] * 20)) < 1e-9 and 0.0 <= r["t"] <= 1.0 \
+                and round(r["t"] * 100) % 10 == 0:  # every 0.1 for readability
+            doc.append(f"| {r['t']:.1f} | {_pct(r['tpr'])} | {_pct(r['fpr'])} | "
+                       f"{_pct(r['precision'])} | {r['f1']:.3f} |")
+    doc.append("")
+    doc.append("> The recorded scores come from the full tiered pipeline, so this sweep "
+               "answers \"if the only knob were the numeric block threshold, where is the "
+               "best operating point?\" — a sanity check on the deployed value, not a "
+               "replacement for the tier logic. A rule-only run is intentionally bimodal "
+               "(scores cluster at 0.0 / ~0.9), so its curve has few distinct points.\n")
+    (OUT_DIR / "Threshold_Analysis.md").write_text("\n".join(doc))
+    return True
+
+
+def run_check(thresholds_path: Path) -> int:
+    """Deterministic regression gate for CI. Runs the rule-only (Tier-1) baseline —
+    no LLM / Ollama required — and asserts the committed detection floors still
+    hold. Exits non-zero on regression so a change that weakens the deterministic
+    layer or starts hard-denying benign work fails the build.
+
+    The LLM tier is intentionally *not* gated here: it is non-deterministic and
+    needs a model server, so it cannot be a reproducible CI signal. This gate
+    protects the floor; the full-pipeline numbers live in the benchmark docs.
+    """
+    th = json.loads(thresholds_path.read_text())
+    print(f"Detection regression gate (rule-only baseline) — thresholds: {thresholds_path.name}")
+    SemanticEvaluator.clear_cache()
+    records, gh = run_once(RuleOnlyGateway(), ablate_mandate=False)
+    m = _metrics(records)
+    gh_correct = sum(1 for g in gh if g["blocked"] == g["expected_block"])
+
+    checks = [
+        ("rule-only detection_rate", m["detection_rate"], ">=", th["min_rule_only_detection_rate"]),
+        ("benign hard-FP rate", m["hard_fp_rate"], "<=", th["max_hard_fp_rate"]),
+        ("benign specificity", m["specificity"], ">=", th["min_specificity"]),
+        ("goal-hijack pairs caught (rule-only)", gh_correct / max(len(gh), 1), ">=",
+         th["min_rule_only_goal_hijack_rate"]),
+    ]
+    ok = True
+    print()
+    for name, val, op, bound in checks:
+        passed = (val >= bound) if op == ">=" else (val <= bound)
+        ok = ok and passed
+        print(f"  [{'PASS' if passed else 'FAIL'}] {name} = {val:.3f} {op} {bound}")
+    print()
+    if ok:
+        print("Detection gate PASSED — deterministic floor holds.")
+        return 0
+    print("Detection gate FAILED — a change regressed the deterministic detection floor.")
+    return 1
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -498,7 +699,15 @@ def main():
                     help="Tier-1 RuleFilter baseline only, no LLM calls")
     ap.add_argument("--report-only", action="store_true",
                     help="regenerate docs from saved results.json without re-running")
+    ap.add_argument("--check", action="store_true",
+                    help="CI regression gate: run rule-only baseline (no LLM) and "
+                         "exit non-zero if detection floors regress")
+    ap.add_argument("--thresholds", default=str(OUT_DIR / "detection_thresholds.json"),
+                    help="path to the committed detection thresholds file (for --check)")
     args = ap.parse_args()
+
+    if args.check:
+        sys.exit(run_check(Path(args.thresholds)))
 
     settings = get_settings()
     mode = "rule_only" if args.rule_only else ("ablation" if args.ablate_mandate else "full")
@@ -516,6 +725,8 @@ def main():
         print("Regenerating docs from existing results.json (no LLM run)...")
         m, gh_ok, gh_n = write_docs(records, gh, _S(), agg, n_runs)
         write_comparison_doc()
+        write_standards_coverage(records)
+        write_threshold_analysis(records, getattr(_S, "block_threshold", None))
         print(f"Detection: {_pct(m['detection_rate'])}  |  hard-FP: {_pct(m['hard_fp_rate'])}")
         return
 
@@ -557,6 +768,10 @@ def main():
         print(f"       {OUT_DIR / 'Red_Team_Methodology.md'}")
     if write_comparison_doc():
         print(f"Wrote: {OUT_DIR / 'Ablation_and_Baselines.md'}")
+    if write_standards_coverage(records):
+        print(f"Wrote: {OUT_DIR / 'Standards_Coverage.md'}")
+    if write_threshold_analysis(records, settings.block_threshold):
+        print(f"Wrote: {OUT_DIR / 'Threshold_Analysis.md'}")
 
     print("\n" + "=" * 60)
     print(f"Mode: {mode}  |  runs: {args.runs}")

@@ -22,6 +22,8 @@ class DecisionGateway:
         self.semantic_evaluator = SemanticEvaluator()
         self.block_threshold = settings.block_threshold
         self.cloud_scanner = CloudScanner()
+        self.host_telemetry_enabled = getattr(
+            settings, "decide_host_telemetry_enabled", False)
 
     def evaluate_request(self, request: EvaluationRequest) -> EvaluationResult:
         t_start = time.time()
@@ -113,6 +115,21 @@ class DecisionGateway:
         final_score = max(llm_score, cloud_result.risk_score)
         final_reason = cloud_result.reason if cloud_result.risk_score > llm_score else llm_reason
         final_source = f"SemanticEvaluator+{cloud_result.source}"
+
+        # Tier 3.2: Host-telemetry context. A live host anomaly (e.g. an
+        # outbound-network spike) during an exfiltration-shaped action raises the
+        # risk toward the HITL band. Additive only — it never lowers the score or
+        # denies on its own. Opt-in via DECIDE_HOST_TELEMETRY.
+        if self.host_telemetry_enabled:
+            from secureagentnet.monitoring.host_telemetry import get_host_telemetry_monitor
+            host_ctx = get_host_telemetry_monitor().assess(
+                request.action_name, request.target_resource or "",
+                request.intent_summary or "")
+            decision_log["host_context"] = host_ctx.to_dict()
+            if host_ctx.risk > final_score:
+                final_score = host_ctx.risk
+                final_reason = host_ctx.reason
+                final_source = f"{final_source}+HostTelemetry"
 
         # Tier 3.5: HITL Approval Gate for medium-risk actions
         hitl = get_hitl_gate()

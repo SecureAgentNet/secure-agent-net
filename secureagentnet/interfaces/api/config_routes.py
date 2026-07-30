@@ -1,7 +1,7 @@
 import logging
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 from secureagentnet.database.connection import get_db_session
@@ -20,8 +20,7 @@ class ITCDConfigResponse(BaseModel):
     priority: int
     active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SandboxLimitsResponse(BaseModel):

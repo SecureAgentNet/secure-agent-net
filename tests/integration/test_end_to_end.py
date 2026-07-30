@@ -100,6 +100,15 @@ def mock_sandbox(monkeypatch):
 class TestEndToEndWorkflow:
 
     def test_register_agent_through_api(self, flask_client, mock_sandbox):
+        self._register_production_agent(flask_client)
+
+    def _register_production_agent(self, flask_client):
+        """Register the standard e2e agent and return its id.
+
+        A plain helper (not a ``test_`` method) so workflow tests can reuse this
+        setup without calling one another and without pytest flagging a returned
+        value as a mistake.
+        """
         payload = {
             "name": "e2e-production-agent",
             "type": "CrewAI",
@@ -179,8 +188,6 @@ class TestEndToEndWorkflow:
 
         events = LogIndexer.query_by_agent(agent_id)
         assert len(events) >= 5
-
-        return agent_id, data["correlation_id"]
 
     def test_submit_request_blocked_by_capability(self, flask_client, mock_sandbox):
         agent = IdentityRegistry.register_agent({
@@ -265,7 +272,7 @@ class TestEndToEndWorkflow:
         assert "shadow" in data["reason"].lower()
 
     def test_register_and_execute_full_workflow(self, flask_client, mock_sandbox):
-        agent_id = self.test_register_agent_through_api(flask_client, mock_sandbox)
+        agent_id = self._register_production_agent(flask_client)
 
         response = flask_client.post(
             "/api/pipeline/execute",
@@ -290,8 +297,6 @@ class TestEndToEndWorkflow:
         assert forensic_response.status_code == 200
         forensic_data = forensic_response.get_json()
         assert forensic_data["total"] > 0
-
-        return agent_id
 
     def test_query_forensics(self, flask_client, mock_sandbox):
         agent = IdentityRegistry.register_agent({

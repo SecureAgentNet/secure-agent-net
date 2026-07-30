@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 from secureagentnet.database.connection import get_db_session
@@ -43,8 +43,7 @@ class BlogPostResponse(BaseModel):
     created_at: str
     published: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 def _serialize_post(p: BlogPost) -> dict:

@@ -175,6 +175,10 @@ class DesktopApplication:
             self.main_window._poller.stop()
         except Exception:
             pass
+        try:
+            self.main_window._host_poller.stop()
+        except Exception:
+            pass
         self.app.quit()
 
 

@@ -120,6 +120,12 @@ def reset_persistence():
     )
     for key in ("rogue_detector", "kill_switch"):
         PersistenceStore.delete(key)
+    # The RogueDetector is a process-wide singleton (get_rogue_detector); tests
+    # that tune its thresholds (e.g. _rate_limit=1) mutate that shared instance,
+    # which would otherwise leak into later tests and spuriously flag fresh
+    # agents as rogue. Re-arm it to defaults between tests.
+    from secureagentnet.identify.rogue_detector import get_rogue_detector
+    get_rogue_detector().reset()
     CircuitBreakerRepository.save_all({})
     KillSwitchRepository.save({
         "_armed": True,

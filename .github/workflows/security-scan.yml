@@ -25,7 +25,7 @@ jobs:
         run: pip install bandit
 
       - name: Run Bandit SAST
-        run: bandit -r src/ -f json -o bandit-report.json --exit-zero
+        run: bandit -r secureagentnet/ -f json -o bandit-report.json --exit-zero
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4

@@ -1,0 +1,12 @@
+{
+  "_bias": -1.9732,
+  "injection_phrase": 0.5628,
+  "exfil_keyword": 0.2813,
+  "dangerous_path": 0.4499,
+  "destructive_verb": -0.5611,
+  "encoding_trick": 0.3227,
+  "external_recipient": 0.0049,
+  "goal_mismatch": 3.8857,
+  "no_mandate": 0.0,
+  "_trained_examples": 113
+}

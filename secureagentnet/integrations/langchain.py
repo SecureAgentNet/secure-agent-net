@@ -5,7 +5,7 @@
     tools = secure_tools(my_tools)          # one line — every call goes through ITCD
     agent = create_react_agent(llm, tools)
 """
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from secureagentnet.integrations.base import (
     SecureExecutor,
@@ -21,23 +21,29 @@ def secure_tool(
     target_resource: Optional[str] = None,
     intent_summary: str = "",
     executor: Optional[SecureExecutor] = None,
+    enforce_only: bool = False,
+    target_resolver: Optional[Callable[[tuple, dict], str]] = None,
 ) -> Any:
     """Wrap a single LangChain tool so each invocation is routed through SAN.
 
     Works with both function tools (``StructuredTool`` / ``@tool`` — they expose
     ``.func``) and class tools (``BaseTool`` subclasses — they expose ``._run``).
+
+    ``enforce_only=True`` adjudicates the call and, on approval, runs the tool's
+    real body in-process (for tools with a genuine side effect like sending an
+    email — see ``secure_callable``). ``target_resolver(args, kwargs)`` derives
+    the DECIDE target from the call's arguments (e.g. the email recipient).
     """
     ex = executor or get_default_executor()
     resource = target_resource or getattr(tool, "name", None) or "tool"
     intent = intent_summary or getattr(tool, "description", "") or ""
+    kw = dict(action_name=action_name, target_resource=resource, intent_summary=intent,
+              executor=ex, enforce_only=enforce_only, target_resolver=target_resolver)
 
     # Function-style tool: rebuild it from a secured copy of its callable.
     func = getattr(tool, "func", None)
     if callable(func):
-        secured = secure_callable(
-            func, action_name=action_name, target_resource=resource,
-            intent_summary=intent, executor=ex,
-        )
+        secured = secure_callable(func, **kw)
         from langchain_core.tools import StructuredTool
 
         return StructuredTool.from_function(
@@ -50,10 +56,7 @@ def secure_tool(
     # Class-style tool: replace its private runner in place (bypass pydantic guards).
     run = getattr(tool, "_run", None)
     if callable(run):
-        secured = secure_callable(
-            run, action_name=action_name, target_resource=resource,
-            intent_summary=intent, executor=ex,
-        )
+        secured = secure_callable(run, **kw)
         try:
             object.__setattr__(tool, "_run", secured)
         except Exception:  # pragma: no cover - extremely defensive

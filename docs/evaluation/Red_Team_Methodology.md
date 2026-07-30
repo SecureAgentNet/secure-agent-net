@@ -1,11 +1,11 @@
 # Red-Team Methodology
 
-_Generated 2026-07-04T13:12:34.792300+00:00_
+_Generated 2026-07-09T12:10:14.936012+00:00_
 
 ## Corpus
 
-- **55 adversarial scenarios** mapped to the OWASP LLM Top-10 (`owasp_top10_scenarios.json`), each expected to be **blocked**. Attacking agents present under a plausible cover mandate (attacks do not announce themselves as uncommissioned).
-- **25 benign requests** (`benign_corpus.json`), each carrying its agent's production mandate, including borderline cases (legitimate mentions of credentials/payments/system paths), each expected to be **allowed**.
+- **73 adversarial scenarios** mapped to the OWASP LLM Top-10 (`owasp_top10_scenarios.json`), each expected to be **blocked**. Attacking agents present under a plausible cover mandate (attacks do not announce themselves as uncommissioned).
+- **40 benign requests** (`benign_corpus.json`), each carrying its agent's production mandate, including borderline cases (legitimate mentions of credentials/payments/system paths), each expected to be **allowed**.
 
 ## Procedure
 
@@ -20,16 +20,16 @@ Three configurations are compared (see `Ablation_and_Baselines.md`):
 
 | OWASP category | Scenarios | Detected | Rate | Scope |
 |---|---|---|---|---|
-| LLM01 - Prompt Injection | 14 | 14 | 100.0% | runtime |
-| LLM02 - Insecure Output Handling | 5 | 5 | 100.0% | runtime |
+| LLM01 - Prompt Injection | 20 | 20 | 100.0% | runtime |
+| LLM02 - Insecure Output Handling | 7 | 7 | 100.0% | runtime |
 | LLM03 - Training Data Poisoning | 3 | 3 | 100.0% | architectural* |
 | LLM04 - Model Denial of Service | 5 | 5 | 100.0% | runtime |
 | LLM05 - Supply Chain | 5 | 4 | 80.0% | architectural* |
-| LLM06 - Sensitive Information Disclosure | 5 | 4 | 80.0% | runtime |
-| LLM07 - Insecure Plugin Design | 5 | 5 | 100.0% | runtime |
-| LLM08 - Excessive Agency | 5 | 5 | 100.0% | runtime |
-| LLM09 - Overreliance | 4 | 3 | 75.0% | architectural* |
-| LLM10 - Model Theft | 4 | 4 | 100.0% | architectural* |
+| LLM06 - Sensitive Information Disclosure | 9 | 9 | 100.0% | runtime |
+| LLM07 - Insecure Plugin Design | 7 | 7 | 100.0% | runtime |
+| LLM08 - Excessive Agency | 8 | 8 | 100.0% | runtime |
+| LLM09 - Overreliance | 4 | 4 | 100.0% | architectural* |
+| LLM10 - Model Theft | 5 | 5 | 100.0% | architectural* |
 
 \* *Architectural* categories (training-data poisoning, supply chain, overreliance, model theft) are only partially addressable by a runtime request-decision gateway; SecureAgentNet mitigates these through other controls (HITL approval, agent discovery, tamper-proof audit, rate limiting) rather than the DECIDE gateway, so lower detection here is expected and not a defect.
 

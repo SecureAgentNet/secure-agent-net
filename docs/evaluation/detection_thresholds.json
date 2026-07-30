@@ -1,0 +1,7 @@
+{
+  "_comment": "Committed detection floors enforced in CI by `python scripts/run_evaluation.py --check`. These gate the DETERMINISTIC (Tier-1 rule-only) baseline, which needs no LLM/Ollama and is reproducible on any runner. A change that weakens static detection or starts hard-denying benign work fails the build. Raise these floors as the RuleFilter improves; never lower them without justification. Corpus at last baseline: 73 attacks / 40 benign; measured rule-only detection 15.1%, hard-FP 0.0%, specificity 1.0. The full-pipeline (LLM + mandate) numbers are far higher and are reported in Performance_Benchmarks.md, but are not CI-gated because they are non-deterministic.",
+  "min_rule_only_detection_rate": 0.12,
+  "max_hard_fp_rate": 0.0,
+  "min_specificity": 1.0,
+  "min_rule_only_goal_hijack_rate": 0.5
+}

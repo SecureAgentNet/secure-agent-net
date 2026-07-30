@@ -1,8 +1,8 @@
-"""Optional Windows Service wrapper for the SecureAgentNet daemon.
+r"""Optional Windows Service wrapper for the SecureAgentNet daemon.
 
 Requires pywin32. To install as a Windows service (administrator prompt):
-    python src\daemon\windows_service.py install
-    python src\daemon\windows_service.py start
+    python secureagentnet\daemon\windows_service.py install
+    python secureagentnet\daemon\windows_service.py start
 """
 from __future__ import annotations
 

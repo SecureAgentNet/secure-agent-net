@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # --- Enums ---
@@ -59,31 +59,27 @@ class Agent(AgentBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentCapability(CapabilityBase):
     id: uuid.UUID
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Policy(PolicyBase):
     id: uuid.UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuditLog(AuditLogBase):
     id: uuid.UUID
     timestamp: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- API Models (for request/response payloads) ---

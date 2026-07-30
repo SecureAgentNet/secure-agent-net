@@ -130,9 +130,13 @@ class SecureAgentClient:
         command: str,
         intent_summary: str = "",
         payload: Optional[Dict[str, Any]] = None,
+        files: Optional[list] = None,
     ) -> Dict[str, Any]:
         """
         Sends tool execution requests to the remote gateway's MCP execute API.
+
+        ``files`` optionally carries input files (each a dict with ``path`` and
+        ``content_base64``) into the sandbox workspace before the command runs.
         """
         self._ensure_authenticated()
 
@@ -140,12 +144,13 @@ class SecureAgentClient:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
-        
+
         body = {
             "action_name": action_name,
             "target_resource": target_resource,
             "intent_summary": intent_summary,
-            "payload": payload or {}
+            "payload": payload or {},
+            "files": files or [],
         }
         # In MCP, we also map parameters to payload
         if "command" not in body["payload"]:

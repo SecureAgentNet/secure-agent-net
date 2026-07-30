@@ -8,8 +8,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, List
 
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
+from collections import deque
+
+from PySide6.QtCore import (
+    Qt, QThread, Signal, QPropertyAnimation, QEasingCurve, Property, QRectF,
+)
+from PySide6.QtGui import (
+    QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen,
+)
 from PySide6.QtWidgets import (
     QButtonGroup, QComboBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton,
@@ -200,6 +206,151 @@ class PhaseCard(QFrame):
         self.stat.setText("\n".join(lines))
 
 
+class HostMonitorPoller(QThread):
+    """Samples real host telemetry (psutil) off the UI thread, ~1/second, so the
+    Host Monitor updates live without ever blocking the interface."""
+
+    sampled = Signal(dict)
+
+    def __init__(self, interval: float = 1.0, parent=None):
+        super().__init__(parent)
+        self.interval = interval
+        self._running = True
+
+    def run(self) -> None:
+        import time
+        from secureagentnet.monitoring import HostSampler
+        from secureagentnet.monitoring.host_telemetry import HostTelemetryMonitor
+        sampler = HostSampler(top_n=6)
+        telemetry = HostTelemetryMonitor()  # same spike logic DECIDE uses
+        sampler.sample()  # prime rates (first read has no delta)
+        while self._running:
+            time.sleep(self.interval)
+            if not self._running:
+                break
+            try:
+                m = sampler.sample()
+                if m.get("available"):
+                    # Flag an outbound-network spike so the UI can show the same
+                    # anomaly state that makes the gateway escalate exfil actions.
+                    m["egress_anomaly"] = telemetry.observe_egress(
+                        m["network"]["up_bps"])
+                self.sampled.emit(m)
+            except Exception:
+                pass
+
+    def stop(self) -> None:
+        self._running = False
+        self.wait(2500)
+
+
+class Sparkline(QWidget):
+    """A live, filled mini line-chart of the last N samples. This is the moving,
+    'alive' element — CPU and network history stream across it in real time."""
+
+    def __init__(self, color: str, maxlen: int = 60, y_max: float = 100.0, parent=None):
+        super().__init__(parent)
+        self._color = QColor(color)
+        self._data: deque = deque([0.0] * maxlen, maxlen=maxlen)
+        self._y_max = y_max
+        self.setMinimumHeight(56)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def push(self, value: float, y_max: float | None = None) -> None:
+        if y_max is not None and y_max > 0:
+            self._y_max = y_max
+        self._data.append(max(0.0, float(value)))
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        n = len(self._data)
+        if n < 2 or self._y_max <= 0:
+            return
+        step = w / (n - 1)
+        top = 4.0
+        usable = h - top - 2
+
+        def pt(i, v):
+            y = top + usable * (1.0 - min(v / self._y_max, 1.0))
+            return i * step, y
+
+        line = QPainterPath()
+        line.moveTo(*pt(0, self._data[0]))
+        for i in range(1, n):
+            line.lineTo(*pt(i, self._data[i]))
+
+        fill = QPainterPath(line)
+        fill.lineTo((n - 1) * step, h)
+        fill.lineTo(0, h)
+        fill.closeSubpath()
+        grad = QLinearGradient(0, 0, 0, h)
+        c0 = QColor(self._color); c0.setAlpha(70)
+        c1 = QColor(self._color); c1.setAlpha(0)
+        grad.setColorAt(0, c0); grad.setColorAt(1, c1)
+        p.fillPath(fill, QBrush(grad))
+
+        p.setPen(QPen(self._color, 2))
+        p.drawPath(line)
+        p.end()
+
+
+class MetricGauge(QFrame):
+    """A stat card with a big live value and a smoothly-animated bar that turns
+    amber/red as the metric climbs — the endpoint 'vital sign' at a glance."""
+
+    def __init__(self, title: str, unit: str = "%"):
+        super().__init__()
+        self.setObjectName("card")
+        self._value = 0.0
+        lay = QVBoxLayout(self); lay.setContentsMargins(16, 14, 16, 14); lay.setSpacing(8)
+        top = QHBoxLayout()
+        t = QLabel(title); t.setObjectName("statLabel")
+        self.value_lbl = QLabel(f"0{unit}"); self.value_lbl.setObjectName("statValue")
+        top.addWidget(t); top.addStretch(); top.addWidget(self.value_lbl)
+        lay.addLayout(top)
+        self.bar = QProgressBar(); self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(8); self.bar.setRange(0, 1000)
+        lay.addWidget(self.bar)
+        self.sub = QLabel(""); self.sub.setObjectName("pageSub"); lay.addWidget(self.sub)
+        self._unit = unit
+        self._anim = QPropertyAnimation(self, b"barValue", self)
+        self._anim.setDuration(450)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+
+    def get_bar_value(self) -> int:
+        return self.bar.value()
+
+    def set_bar_value(self, v: int) -> None:
+        self.bar.setValue(int(v))
+
+    barValue = Property(int, get_bar_value, set_bar_value)
+
+    def _bar_color(self, pct: float) -> str:
+        if pct >= 90:
+            return COLORS["red"]
+        if pct >= 70:
+            return COLORS["amber"]
+        return COLORS["green"]
+
+    def update_value(self, percent: float, value_text: str | None = None,
+                     sub_text: str = "") -> None:
+        pct = max(0.0, min(percent, 100.0))
+        self.value_lbl.setText(value_text if value_text is not None else f"{pct:.0f}{self._unit}")
+        self.sub.setText(sub_text)
+        color = self._bar_color(pct)
+        self.bar.setStyleSheet(
+            "QProgressBar{background:#eef2f7; border:none; border-radius:4px;}"
+            f"QProgressBar::chunk{{background:{color}; border-radius:4px;}}"
+        )
+        self._anim.stop()
+        self._anim.setStartValue(self.bar.value())
+        self._anim.setEndValue(int(pct * 10))
+        self._anim.start()
+
+
 class MainWindow(QMainWindow):
     def __init__(self, app: "DesktopApplication"):
         super().__init__()
@@ -221,6 +372,7 @@ class MainWindow(QMainWindow):
 
         self._pages: dict[str, int] = {}
         self._add_page("protection", self._page_protection())
+        self._add_page("host", self._page_host())
         self._add_page("agents", self._page_agents())
         self._add_page("agent_detail", self._page_agent_detail())
         self._add_page("forensics", self._page_forensics())
@@ -235,6 +387,11 @@ class MainWindow(QMainWindow):
         self._poller = StatusPoller(self.app.client)
         self._poller.updated.connect(self._apply_status)
         self._poller.start()
+
+        # Live host telemetry (psutil) — the endpoint's own vital signs, ~1/sec.
+        self._host_poller = HostMonitorPoller(interval=1.0)
+        self._host_poller.sampled.connect(self._apply_host)
+        self._host_poller.start()
 
     # ── sidebar ──────────────────────────────────────────────────
     def _build_sidebar(self) -> QWidget:
@@ -254,7 +411,8 @@ class MainWindow(QMainWindow):
 
         self._nav_group = QButtonGroup(self); self._nav_group.setExclusive(True)
         self._nav_buttons: dict[str, QPushButton] = {}
-        for key, label in (("protection", "Dashboard"), ("agents", "Agents"),
+        for key, label in (("protection", "Dashboard"), ("host", "Host Monitor"),
+                           ("agents", "Agents"),
                            ("forensics", "Forensics"), ("hitl", "HITL Queue"),
                            ("activity", "Activity"), ("commands", "Commands"),
                            ("cloud", "Cloud"), ("settings", "Settings")):
@@ -364,6 +522,125 @@ class MainWindow(QMainWindow):
             self.health_rows[svc] = (dot, state)
         holder = QWidget(); holder.setLayout(box)
         return _card(holder, title="System health")
+
+    # ── Host Monitor (live endpoint telemetry) ───────────────────
+    def _page_host(self) -> QWidget:
+        content = QWidget(); lay = QVBoxLayout(content)
+        lay.setContentsMargins(28, 24, 28, 24); lay.setSpacing(16)
+        lay.addWidget(self._page_header(
+            "Host Monitor",
+            "Live telemetry from this endpoint — the machine SecureAgentNet is protecting"))
+
+        # Anomaly banner — lights up on a live outbound-network spike (the same
+        # condition that makes DECIDE escalate exfiltration-shaped actions).
+        self.host_anomaly_banner = QLabel()
+        self.host_anomaly_banner.setWordWrap(True)
+        self.host_anomaly_banner.setVisible(False)
+        self.host_anomaly_banner.setStyleSheet(
+            "QLabel{background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;"
+            "border-radius:8px; padding:10px 14px; font-weight:600;}")
+        lay.addWidget(self.host_anomaly_banner)
+
+        # System info strip
+        self.host_sys = {}
+        info_row = QHBoxLayout(); info_row.setSpacing(24)
+        for key, label in (("hostname", "Host"), ("uptime", "Uptime"),
+                           ("cores", "CPU cores"), ("procs", "Processes"),
+                           ("conns", "Connections")):
+            col = QVBoxLayout(); col.setSpacing(1)
+            v = QLabel("–"); v.setObjectName("statValue"); v.setStyleSheet("font-size:16px;")
+            cap = QLabel(label); cap.setObjectName("statLabel")
+            col.addWidget(v); col.addWidget(cap)
+            self.host_sys[key] = v
+            info_row.addLayout(col)
+        info_row.addStretch()
+        info_w = QWidget(); info_w.setLayout(info_row)
+        lay.addWidget(_card(info_w, title="System"))
+
+        # Vital-sign gauges
+        self.gauge_cpu = MetricGauge("CPU")
+        self.gauge_mem = MetricGauge("Memory")
+        self.gauge_disk = MetricGauge("Disk (/)")
+        self.gauge_net = MetricGauge("Network", unit="")
+        grow = QHBoxLayout(); grow.setSpacing(14)
+        for g in (self.gauge_cpu, self.gauge_mem, self.gauge_disk, self.gauge_net):
+            grow.addWidget(g, 1)
+        grow_w = QWidget(); grow_w.setLayout(grow); lay.addWidget(grow_w)
+
+        # Live sparklines
+        self.spark_cpu = Sparkline(COLORS["blue"], y_max=100.0)
+        self.spark_net = Sparkline(COLORS["purple"], y_max=1.0)
+        srow = QHBoxLayout(); srow.setSpacing(14)
+        srow.addWidget(_card(self.spark_cpu, title="CPU history (last 60s)"), 1)
+        srow.addWidget(_card(self.spark_net, title="Network throughput (last 60s)"), 1)
+        srow_w = QWidget(); srow_w.setLayout(srow); lay.addWidget(srow_w)
+
+        # Top processes
+        self.host_proc_table = self._make_table(["PID", "Process", "CPU %", "MEM %"], [70, 260, 90])
+        self.host_proc_table.setMinimumHeight(200)
+        lay.addWidget(_card(self.host_proc_table, title="Top processes"))
+        lay.addStretch()
+
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(content)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea{background:transparent; border:none;}")
+        return scroll
+
+    def _apply_host(self, m: dict) -> None:
+        """Render a host telemetry sample onto the live gauges/sparklines/table."""
+        if not m.get("available"):
+            self.host_sys["hostname"].setText("psutil unavailable")
+            return
+        cpu, mem, disk, net, sysd = (m["cpu"], m["memory"], m["disk"],
+                                     m["network"], m["system"])
+
+        self.host_sys["hostname"].setText(sysd["hostname"])
+        self.host_sys["uptime"].setText(sysd["uptime"])
+        self.host_sys["cores"].setText(str(cpu["count"]))
+        self.host_sys["procs"].setText(str(sysd["process_count"]))
+        conns = net["connections"]
+        self.host_sys["conns"].setText(str(conns) if conns >= 0 else "n/a")
+
+        self.gauge_cpu.update_value(
+            cpu["percent"], f"{cpu['percent']:.0f}%",
+            f"load {cpu['load_avg'][0]} · {cpu['count']} cores")
+        self.gauge_mem.update_value(
+            mem["percent"], f"{mem['percent']:.0f}%",
+            f"{mem['used_h']} / {mem['total_h']}")
+        self.gauge_disk.update_value(
+            disk["percent"], f"{disk['percent']:.0f}%",
+            f"{disk['used_h']} / {disk['total_h']}")
+
+        # Network has no fixed ceiling; scale the bar against a rolling reference.
+        down, up = net["down_bps"], net["up_bps"]
+        self._net_peak = max(getattr(self, "_net_peak", 1.0), down, up, 1.0)
+        net_pct = min(down / self._net_peak * 100.0, 100.0)
+        anomaly = bool(m.get("egress_anomaly"))
+        # On an outbound spike, force the network gauge into the alarm band so it
+        # reads red — matching the escalation the gateway would raise.
+        self.gauge_net.update_value(
+            95.0 if anomaly else net_pct, f"↑{net['up_h']}",
+            f"↓{net['down_h']} · {net['recv_total_h']} rx")
+
+        if anomaly:
+            self.host_anomaly_banner.setText(
+                f"⚠  Outbound-network spike detected ({net['up_h']}). "
+                "DECIDE will escalate exfiltration-shaped agent actions to human "
+                "review while this persists.")
+            self.host_anomaly_banner.setVisible(True)
+        else:
+            self.host_anomaly_banner.setVisible(False)
+
+        # Sparklines: CPU on a fixed 0–100 scale; network auto-scaled to its peak.
+        self.spark_cpu.push(cpu["percent"], y_max=100.0)
+        self.spark_net.push(down, y_max=self._net_peak)
+
+        rows = m["processes"]
+        self.host_proc_table.setRowCount(len(rows))
+        for i, pr in enumerate(rows):
+            for c, val in enumerate((str(pr["pid"]), pr["name"],
+                                     f"{pr['cpu']:.1f}", f"{pr['mem']:.1f}")):
+                self.host_proc_table.setItem(i, c, QTableWidgetItem(val))
 
     # ── Agents ───────────────────────────────────────────────────
     def _page_agents(self) -> QWidget:

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional
 
 
 class ChallengeRequest(BaseModel):
@@ -26,12 +26,24 @@ class TokenResponse(BaseModel):
     expires_in: int = Field(3600, description="Token expiration in seconds.")
 
 
+class InjectedFileSpec(BaseModel):
+    """A file an MCP tool call carries into the sandbox workspace before execution."""
+    path: str = Field(..., description="Destination path in the sandbox, e.g. /workspace/msg.eml")
+    content_base64: str = Field(..., description="Base64-encoded file content")
+    executable: bool = Field(default=False)
+
+
 class ExecuteRequest(BaseModel):
     """Request to execute a tool through the ITCD pipeline."""
     action_name: str = Field(..., description="Action type (e.g., execute, read_file)")
     target_resource: str = Field("shell", description="Target resource identifier")
     intent_summary: str = Field("", description="Agent's stated intent")
     payload: dict = Field(default_factory=dict, description="Action parameters")
+    files: List[InjectedFileSpec] = Field(
+        default_factory=list,
+        description="Optional input files to place in the sandbox workspace before the "
+                    "command runs (e.g. the email an agent is asked to read).",
+    )
     server_id: Optional[str] = Field(
         None,
         description="If the tool comes from an external MCP server, its id. Triggers "

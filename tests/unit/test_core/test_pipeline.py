@@ -21,7 +21,7 @@ def reset_state():
 @pytest.fixture
 def pipeline():
     with (
-        patch("secureagentnet.decide.semantic_evaluator.requests.post") as mock_ollama,
+        patch("secureagentnet.decide.model_providers.requests.post") as mock_ollama,
         patch("secureagentnet.contain.container_provisioner.docker.from_env") as mock_docker,
         patch("hvac.Client") as mock_vault,
     ):

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 from secureagentnet.database.connection import get_db_session
@@ -26,8 +26,7 @@ class ReportEntry(BaseModel):
     status: str = "open"
     thread_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ThreadMessage(BaseModel):

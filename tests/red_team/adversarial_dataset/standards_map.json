@@ -1,0 +1,107 @@
+{
+  "description": "Cross-walk from the OWASP LLM Top 10 (2023/2025) to MITRE ATLAS techniques and to the SecureAgentNet ITCD defense tier that primarily addresses each. Used by scripts/run_evaluation.py to emit a two-standard coverage matrix (Standards_Coverage.md). Category-level mapping is how OWASP and ATLAS themselves cross-reference; per-scenario technique tags can be added under a scenario's optional 'mitre_atlas' key to override.",
+  "sources": {
+    "owasp": "OWASP Top 10 for Large Language Model Applications",
+    "atlas": "MITRE ATLAS (Adversarial Threat Landscape for AI Systems)"
+  },
+  "categories": {
+    "LLM01": {
+      "owasp_name": "Prompt Injection",
+      "atlas": [
+        {"id": "AML.T0051", "name": "LLM Prompt Injection"},
+        {"id": "AML.T0054", "name": "LLM Jailbreak"}
+      ],
+      "atlas_tactic": "Initial Access / Defense Evasion",
+      "primary_defense": "DECIDE – SemanticEvaluator (intent vs. mandate) + RuleFilter",
+      "scope": "runtime"
+    },
+    "LLM02": {
+      "owasp_name": "Insecure Output Handling",
+      "atlas": [
+        {"id": "AML.T0053", "name": "LLM Plugin Compromise"},
+        {"id": "AML.T0048", "name": "External Harms"}
+      ],
+      "atlas_tactic": "Execution / Impact",
+      "primary_defense": "DECIDE – RuleFilter + AST verifier on tool output",
+      "scope": "runtime"
+    },
+    "LLM03": {
+      "owasp_name": "Training Data Poisoning",
+      "atlas": [
+        {"id": "AML.T0020", "name": "Poison Training Data"}
+      ],
+      "atlas_tactic": "Resource Development / Persistence",
+      "primary_defense": "IDENTIFY – agent discovery + provenance (out of runtime-request scope)",
+      "scope": "architectural"
+    },
+    "LLM04": {
+      "owasp_name": "Model Denial of Service",
+      "atlas": [
+        {"id": "AML.T0029", "name": "Denial of ML Service"},
+        {"id": "AML.T0034", "name": "Cost Harvesting"}
+      ],
+      "atlas_tactic": "Impact",
+      "primary_defense": "CONTAIN – resource quotas + rate limiting",
+      "scope": "runtime"
+    },
+    "LLM05": {
+      "owasp_name": "Supply Chain Vulnerabilities",
+      "atlas": [
+        {"id": "AML.T0010", "name": "ML Supply Chain Compromise"},
+        {"id": "AML.T0016", "name": "Obtain Capabilities"}
+      ],
+      "atlas_tactic": "Initial Access / Resource Development",
+      "primary_defense": "IDENTIFY – MCP tool vetting + trust chain (rug-pull detection)",
+      "scope": "architectural"
+    },
+    "LLM06": {
+      "owasp_name": "Sensitive Information Disclosure",
+      "atlas": [
+        {"id": "AML.T0057", "name": "LLM Data Leakage"},
+        {"id": "AML.T0024", "name": "Exfiltration via ML Inference API"},
+        {"id": "AML.T0025", "name": "Exfiltration via Cyber Means"}
+      ],
+      "atlas_tactic": "Exfiltration",
+      "primary_defense": "DECIDE – PII redactor + RuleFilter (credential/secret paths)",
+      "scope": "runtime"
+    },
+    "LLM07": {
+      "owasp_name": "Insecure Plugin Design",
+      "atlas": [
+        {"id": "AML.T0053", "name": "LLM Plugin Compromise"}
+      ],
+      "atlas_tactic": "Execution",
+      "primary_defense": "IDENTIFY – MCP tool vetting; DECIDE – per-tool mandate scoping",
+      "scope": "runtime"
+    },
+    "LLM08": {
+      "owasp_name": "Excessive Agency",
+      "atlas": [
+        {"id": "AML.T0053", "name": "LLM Plugin Compromise"},
+        {"id": "AML.T0048", "name": "External Harms"}
+      ],
+      "atlas_tactic": "Impact",
+      "primary_defense": "DECIDE – mandate enforcement (action vs. commissioned goal)",
+      "scope": "runtime"
+    },
+    "LLM09": {
+      "owasp_name": "Overreliance",
+      "atlas": [
+        {"id": "AML.T0048", "name": "External Harms"}
+      ],
+      "atlas_tactic": "Impact",
+      "primary_defense": "DECIDE – HITL approval gate + circuit breaker",
+      "scope": "architectural"
+    },
+    "LLM10": {
+      "owasp_name": "Model Theft",
+      "atlas": [
+        {"id": "AML.T0044", "name": "Full ML Model Access"},
+        {"id": "AML.T0024", "name": "Exfiltration via ML Inference API"}
+      ],
+      "atlas_tactic": "Exfiltration",
+      "primary_defense": "TRACK – tamper-proof audit; CONTAIN – egress isolation",
+      "scope": "architectural"
+    }
+  }
+}

@@ -14,6 +14,7 @@ from sqlalchemy import select
 from secureagentnet.cloud import models
 from secureagentnet.cloud.db import get_session
 from secureagentnet.cloud.deps import require_endpoint
+from secureagentnet.cloud.metering import record_usage
 from secureagentnet.cloud.protocol import (AgentIn, HeartbeatRequest,
                                            HeartbeatResponse, IngestRequest,
                                            IngestResponse, CommandOut)
@@ -65,6 +66,11 @@ def ingest(req: IngestRequest, endpoint: models.Endpoint = Depends(require_endpo
         n_agents = _upsert_agents(s, ep.id, ep.tenant_id, req.agents)
         ep.last_heartbeat = now
         ep.status = "online"
+        # Meter ingested events for per-tenant billing (best-effort).
+        try:
+            record_usage(s, ep.tenant_id, events=len(req.events))
+        except Exception:  # noqa: BLE001 - metering must never block ingest
+            pass
     return IngestResponse(accepted_events=len(req.events), accepted_agents=n_agents)
 
 

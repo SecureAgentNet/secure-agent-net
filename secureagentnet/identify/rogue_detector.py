@@ -105,20 +105,36 @@ class AgentBehaviorProfile:
     resource_accesses: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
     failure_count: int = 0
     capability_escalation_attempts: int = 0
+    resource_anomaly_count: int = 0
+    egress_samples: deque = field(default_factory=lambda: deque(maxlen=20))
     anomaly_score: float = 0.0
     last_check_time: float = field(default_factory=time.time)
 
 
 class RogueDetector:
     def __init__(self):
+        self._reset_state()
+        self._load()
+        logger.info("RogueDetector initialized with Markov chain behavior graph.")
+
+    def _reset_state(self) -> None:
+        """Initialise learned profiles and tunable thresholds to their defaults."""
         self._profiles: Dict[str, AgentBehaviorProfile] = {}
         self._anomaly_threshold = 0.8
         self._failure_threshold = 10
         self._time_window = 60.0
         self._rate_limit = 100
+        # Per-agent sandbox resource-attribution thresholds.
+        self._egress_bytes_threshold = 10_000_000   # 10 MB egress in one execution
+        self._cpu_saturation = 95.0                 # sustained CPU % in the sandbox
         self._transition_graph = BehaviorTransitionGraph(history_depth=3)
-        self._load()
-        logger.info("RogueDetector initialized with Markov chain behavior graph.")
+
+    def reset(self) -> None:
+        """Re-arm the detector: drop every learned behaviour profile and restore
+        default thresholds. Used to re-baseline the fleet — and, because the
+        detector is a process-wide singleton (``get_rogue_detector``), to isolate
+        tests so one test's tuned threshold can't leak into the next."""
+        self._reset_state()
 
     def _persist(self):
         data = {}
@@ -130,6 +146,8 @@ class RogueDetector:
                 "resource_accesses": dict(profile.resource_accesses),
                 "failure_count": profile.failure_count,
                 "capability_escalation_attempts": profile.capability_escalation_attempts,
+                "resource_anomaly_count": profile.resource_anomaly_count,
+                "egress_samples": list(profile.egress_samples),
                 "anomaly_score": profile.anomaly_score,
                 "last_check_time": profile.last_check_time,
             }
@@ -146,6 +164,8 @@ class RogueDetector:
                 profile.resource_accesses = defaultdict(int, d.get("resource_accesses", {}))
                 profile.failure_count = d.get("failure_count", 0)
                 profile.capability_escalation_attempts = d.get("capability_escalation_attempts", 0)
+                profile.resource_anomaly_count = d.get("resource_anomaly_count", 0)
+                profile.egress_samples = deque(d.get("egress_samples", []), maxlen=20)
                 profile.anomaly_score = d.get("anomaly_score", 0.0)
                 profile.last_check_time = d.get("last_check_time", time.time())
                 self._profiles[agent_id] = profile
@@ -176,6 +196,50 @@ class RogueDetector:
         self._persist()
         logger.warning(f"Capability escalation attempt by agent {agent_id}")
 
+    def record_resource_usage(self, agent_id: str, resource_usage: Dict,
+                              oom_killed: bool = False) -> Tuple[bool, str]:
+        """Attribute a sandbox's actual resource usage to its agent.
+
+        Host-wide telemetry can only say "something on this host spiked"; the
+        sandbox belongs to exactly one agent, so its per-container counters let
+        us name *which* agent egressed data or burned resources. Anomalies here
+        (egress spike vs. the agent's own baseline, CPU saturation, OOM) raise
+        the agent's behavioural anomaly score — the runtime signal that turns a
+        known agent rogue. Returns (flagged, reason)."""
+        profile = self._get_profile(agent_id)
+        tx = float(resource_usage.get("network_tx_bytes") or 0)
+        cpu = float(resource_usage.get("cpu_usage_percent") or 0)
+        flags = []
+
+        # Egress: above an absolute floor AND out of line with this agent's own
+        # history (so a consistently chatty agent isn't perpetually flagged).
+        if tx > self._egress_bytes_threshold:
+            samples = profile.egress_samples
+            if len(samples) >= 6:
+                mean = sum(samples) / len(samples)
+                var = sum((s - mean) ** 2 for s in samples) / len(samples)
+                spike = tx > mean + 3 * (var ** 0.5)
+            else:
+                spike = tx > self._egress_bytes_threshold * 2
+            if spike:
+                flags.append(f"sandbox egress {tx/1e6:.1f} MB (possible exfiltration)")
+        profile.egress_samples.append(tx)
+
+        if cpu >= self._cpu_saturation:
+            flags.append(f"sandbox CPU saturated ({cpu:.0f}%) (possible DoS/mining)")
+        if oom_killed:
+            flags.append("sandbox OOM-killed (possible resource exhaustion)")
+
+        if flags:
+            profile.resource_anomaly_count += 1
+            reason = "; ".join(flags)
+            logger.warning("Resource anomaly attributed to agent %s: %s", agent_id, reason)
+            self._persist()
+            return True, reason
+
+        self._persist()
+        return False, ""
+
     def check_rate_limit(self, agent_id: str) -> bool:
         profile = self._get_profile(agent_id)
         now = time.time()
@@ -198,6 +262,10 @@ class RogueDetector:
 
         if profile.capability_escalation_attempts > 2:
             score += 0.3
+
+        # Per-agent sandbox resource anomalies (egress/CPU/OOM attribution).
+        if profile.resource_anomaly_count > 0:
+            score += min(0.4, 0.2 * profile.resource_anomaly_count)
 
         action_diversity = len(profile.action_counts)
         if action_diversity > 20 and request_rate > 10:

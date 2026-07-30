@@ -16,18 +16,18 @@ test-redteam:
 	pytest tests/red_team/ -v --timeout=30
 
 test-coverage:
-	pytest tests/unit/ tests/red_team/ -v --timeout=30 --cov=src --cov-report=term-missing
+	pytest tests/unit/ tests/red_team/ -v --timeout=30 --cov=secureagentnet --cov-report=term-missing
 
 lint:
-	flake8 src/ tests/
-	pylint src/ || true
+	flake8 secureagentnet/ tests/
+	pylint secureagentnet/ || true
 
 format:
-	black src/ tests/
-	isort src/ tests/
+	black secureagentnet/ tests/
+	isort secureagentnet/ tests/
 
 typecheck:
-	mypy src/
+	mypy secureagentnet/
 
 doctor:
 	secureagentnet doctor
