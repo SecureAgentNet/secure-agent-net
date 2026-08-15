@@ -26,8 +26,18 @@ format:
 	black secureagentnet/ tests/
 	isort secureagentnet/ tests/
 
-typecheck:
+# Enforced-core typing gate (ratchet — see docs/engineering/TYPING.md). These
+# security-critical modules must stay mypy-clean; CI fails if they regress.
+# --follow-imports=silent checks these files fully while suppressing noise from
+# imported-but-not-yet-enforced modules. Grow this list as more modules are typed.
+MYPY_ENFORCED = secureagentnet/decide secureagentnet/integrations \
+	secureagentnet/monitoring secureagentnet/cloud
+
+typecheck:            ## advisory: type-check the whole package (does not gate)
 	mypy secureagentnet/
+
+typecheck-strict:     ## gating: the enforced core must be mypy-clean
+	mypy --follow-imports=silent $(MYPY_ENFORCED)
 
 doctor:
 	secureagentnet doctor

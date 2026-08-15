@@ -25,7 +25,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import requests
 
@@ -235,7 +235,14 @@ class OllamaProvider(ModelProvider):
                 response = requests.post(
                     self.settings.ollama_api_url,
                     json={"model": self.settings.ollama_model, "prompt": prompt,
-                          "format": "json", "stream": False},
+                          "format": "json", "stream": False,
+                          # Deterministic decoding: greedy (temperature 0) + fixed
+                          # seed so a given action always gets the same verdict.
+                          "options": {
+                              "temperature": getattr(self.settings, "decide_temperature", 0.0),
+                              "seed": getattr(self.settings, "decide_seed", 42),
+                              "top_p": 1.0,
+                          }},
                     timeout=self.settings.ollama_timeout,
                 )
                 response.raise_for_status()
@@ -286,6 +293,9 @@ class HostedAPIProvider(ModelProvider):
                         {"role": "user", "content": prompt},
                     ],
                     "temperature": 0,
+                    # Fixed seed → reproducible verdicts (honoured by OpenAI,
+                    # vLLM, Together, … ; ignored harmlessly by others).
+                    "seed": getattr(self.settings, "decide_seed", 42),
                     "response_format": {"type": "json_object"},
                 },
                 timeout=self.settings.hosted_api_timeout,
@@ -380,7 +390,9 @@ def _parse_legacy_score(text: str) -> Tuple[float, str]:
     return max(0.0, min(1.0, score)), reason
 
 
-_PROVIDERS = {
+# Typed as factories (not `type[ModelProvider]`) so mypy allows instantiation —
+# the base is abstract, but every value here is a concrete subclass.
+_PROVIDERS: Dict[str, Callable[[Any], ModelProvider]] = {
     "ollama": OllamaProvider,
     "hosted_api": HostedAPIProvider,
     "classifier": ClassifierProvider,

@@ -81,6 +81,10 @@ prod = [
     "gunicorn>=21.0",
     "a2wsgi>=1.10",
 ]
+agents = [
+    "langchain>=1.0",
+    "langchain-ollama>=1.0",
+]
 
 [project.scripts]
 secureagentnet = "secureagentnet.interfaces.cli.terminal:cli"
@@ -126,6 +130,21 @@ line_length = 100
 python_version = "3.10"
 strict = false
 ignore_missing_imports = true
+
+# Typing ratchet (see docs/engineering/TYPING.md): the whole tree is checked for
+# signal but only an *enforced core* gates CI (the `typecheck-strict` target runs
+# mypy --follow-imports=silent over the security-critical modules and must pass).
+# The modules below are exempted from the gate because their mypy errors come from
+# third-party abstract-base conformance, GUI dynamic attributes, or ORM
+# declarative typing — high-noise, low-value to annotate. Shrink this list over time.
+[[tool.mypy.overrides]]
+module = [
+    "secureagentnet.decide.pii_redactor",   # Presidio NlpEngine override signatures
+    "secureagentnet.cloud.models",          # SQLAlchemy declarative Columns
+    "secureagentnet.database.models",       # SQLAlchemy declarative Columns
+    "secureagentnet.desktop.*",             # PySide/Qt dynamic attributes
+]
+ignore_errors = true
 
 [tool.coverage.run]
 source = ["src"]

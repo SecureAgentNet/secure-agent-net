@@ -113,6 +113,10 @@ class RemoteExecutor:
         if client is None:
             from secureagentnet.client import SecureAgentClient
 
+            if not (gateway_url and agent_id and private_key_pem):
+                raise ValueError(
+                    "RemoteExecutor requires gateway_url, agent_id and "
+                    "private_key_pem when no client is supplied.")
             client = SecureAgentClient(
                 gateway_url=gateway_url,
                 agent_id=agent_id,
@@ -282,7 +286,7 @@ def secure_callable(
 
     wrapper.__name__ = name
     wrapper.__doc__ = getattr(fn, "__doc__", None)
-    wrapper.__wrapped__ = fn
+    setattr(wrapper, "__wrapped__", fn)  # expose the original for introspection
     return wrapper
 
 

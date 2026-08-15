@@ -70,8 +70,8 @@ class HostTelemetryMonitor:
 
     def __init__(self, window: int = 30, sigma: float = 4.0,
                  egress_floor_bps: float = 5_000_000.0, cpu_ceiling: float = 96.0):
-        self._egress = deque(maxlen=window)
-        self._prev_sent = None
+        self._egress: deque = deque(maxlen=window)
+        self._prev_sent: Optional[float] = None
         self._prev_t = 0.0
         self._sigma = sigma
         self._egress_floor = egress_floor_bps

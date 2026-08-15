@@ -35,11 +35,13 @@ def build_gateway_tools(mailbox: Mailbox, executor: SecureExecutor) -> List:
         return "\n".join(f"[{r['id']}] from {r['from']} — {r['subject']}" for r in rows)
 
     @tool
-    def read_email(email_id: str) -> str:
-        """Read the full text of one inbox email by its id (e.g. '01_refund')."""
-        m = mailbox.read(email_id)
+    def read_email(email_id: str = "", id: str = "") -> str:
+        """Read the full text of one inbox email by its id (e.g. '01_refund').
+        Pass the id as `email_id` (`id` is accepted as an alias)."""
+        eid = email_id or id
+        m = mailbox.read(eid)
         if not m:
-            return f"No email with id {email_id!r}."
+            return f"No email with id {eid!r}."
         return f"From: {m['from']}\nSubject: {m['subject']}\n\n{m['body']}"
 
     @tool

@@ -27,7 +27,7 @@ def secure_function(
     The returned callable has the same name/docstring, so AutoGen's function
     registration (which reads those) keeps working.
     """
-    resource = target_resource or getattr(fn, "__name__", "tool")
+    resource: str = target_resource or getattr(fn, "__name__", "tool") or "tool"
     return secure_callable(
         fn,
         action_name=action_name,

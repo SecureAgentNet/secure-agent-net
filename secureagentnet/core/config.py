@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     ollama_model: str = Field(default="llama3.2:7b", alias="OLLAMA_MODEL")
     ollama_timeout: int = Field(default=30, alias="OLLAMA_TIMEOUT")
     ollama_retry_count: int = Field(default=2, alias="OLLAMA_RETRY_COUNT")
+    # Deterministic decoding for the security verdict: temperature 0 is greedy
+    # decoding and a fixed seed pins the sampler, so the same request yields the
+    # same verdict run-to-run (a security decision must be reproducible, not
+    # sampled). Raise the temperature only for experiments, never in enforcement.
+    decide_temperature: float = Field(default=0.0, alias="DECIDE_TEMPERATURE")
+    decide_seed: int = Field(default=42, alias="DECIDE_SEED")
 
     # Hosted-API provider (OpenAI-compatible: OpenAI, vLLM, Together, Groq, …).
     hosted_api_base_url: str = Field(default="https://api.openai.com/v1", alias="HOSTED_API_BASE_URL")

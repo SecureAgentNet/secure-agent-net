@@ -75,7 +75,7 @@ class CloudScanner:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        body = {
+        body: Dict[str, Any] = {
             "agent_id": agent_id,
             "action_name": action_name,
             "intent": intent,

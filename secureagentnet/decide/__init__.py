@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 from .models import EvaluationRequest, EvaluationResult
 from .rule_filter import RuleFilter
@@ -29,9 +30,9 @@ class DecisionGateway:
         t_start = time.time()
         tier1_result = None
         tier2_pii_count = 0
-        tier2_entities = []
+        tier2_entities: List[Any] = []
         tier3_confidence = None
-        decision_log = {
+        decision_log: Dict[str, Any] = {
             "decision_id": str(uuid.uuid4()),
             "agent_id": request.agent_id,
             "session_id": str(uuid.uuid4()),

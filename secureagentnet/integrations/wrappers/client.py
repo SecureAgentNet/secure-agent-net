@@ -32,7 +32,7 @@ class InterceptClient:
         payload: Optional[Dict[str, Any]] = None,
         command: Optional[str] = None,
     ) -> Dict[str, Any]:
-        body = {
+        body: Dict[str, Any] = {
             "agent_id": agent_id,
             "action_name": action_name,
             "target_resource": target_resource,

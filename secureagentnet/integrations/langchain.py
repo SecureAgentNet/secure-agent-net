@@ -37,13 +37,17 @@ def secure_tool(
     ex = executor or get_default_executor()
     resource = target_resource or getattr(tool, "name", None) or "tool"
     intent = intent_summary or getattr(tool, "description", "") or ""
-    kw = dict(action_name=action_name, target_resource=resource, intent_summary=intent,
-              executor=ex, enforce_only=enforce_only, target_resolver=target_resolver)
+
+    def _secure(fn: Callable[..., Any]) -> Callable[..., Any]:
+        return secure_callable(
+            fn, action_name=action_name, target_resource=resource,
+            intent_summary=intent, executor=ex, enforce_only=enforce_only,
+            target_resolver=target_resolver)
 
     # Function-style tool: rebuild it from a secured copy of its callable.
     func = getattr(tool, "func", None)
     if callable(func):
-        secured = secure_callable(func, **kw)
+        secured = _secure(func)
         from langchain_core.tools import StructuredTool
 
         return StructuredTool.from_function(
@@ -56,7 +60,7 @@ def secure_tool(
     # Class-style tool: replace its private runner in place (bypass pydantic guards).
     run = getattr(tool, "_run", None)
     if callable(run):
-        secured = secure_callable(run, **kw)
+        secured = _secure(run)
         try:
             object.__setattr__(tool, "_run", secured)
         except Exception:  # pragma: no cover - extremely defensive

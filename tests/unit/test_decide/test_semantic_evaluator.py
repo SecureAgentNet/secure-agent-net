@@ -92,6 +92,27 @@ class TestSemanticEvaluator:
             assert score == 0.1
             assert "Safe request" in reason
 
+    def test_evaluate_uses_deterministic_decoding(self, evaluator):
+        """A security verdict must be reproducible, so the LLM call pins greedy
+        decoding (temperature 0) and a fixed seed rather than sampling."""
+        evaluator.provider.settings.decide_temperature = 0.0
+        evaluator.provider.settings.decide_seed = 42
+        # Unique request so the Tier-3 verdict cache can't serve a prior result.
+        req = EvaluationRequest(
+            agent_id="agent-det", action_name="read_file",
+            target_resource="/tmp/unique-determinism-probe.txt",
+            intent_summary="deterministic decoding probe",
+            payload={"path": "/tmp/unique-determinism-probe.txt"})
+        with patch("requests.post") as mock_post:
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = {"response": '{"verdict":"SAFE","confidence":0.9,"reason":"ok"}'}
+            mock_post.return_value = resp
+            evaluator.evaluate(req, {"path": "/tmp/unique-determinism-probe.txt"})
+            options = mock_post.call_args.kwargs["json"]["options"]
+            assert options["temperature"] == 0.0
+            assert options["seed"] == 42
+
     def test_evaluate_fail_closes(self, evaluator, sample_request):
         import requests
         with patch("requests.post") as mock_post:

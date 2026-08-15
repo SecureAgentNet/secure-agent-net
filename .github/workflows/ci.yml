@@ -23,16 +23,19 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    # Gradual typing: mypy runs for signal but does not gate the build yet.
-    # ~119 pre-existing errors are being paid down; flip continue-on-error to
-    # false once the count reaches zero (see docs/engineering/TYPING.md).
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install -e ".[dev]"
-      - run: mypy secureagentnet/ --ignore-missing-imports
+      # GATING: the enforced security-critical core must stay mypy-clean.
+      # This ratchet grows over time (see docs/engineering/TYPING.md).
+      - name: mypy (enforced core — gates the build)
+        run: make typecheck-strict
+      # ADVISORY: full-package signal while the rest of the tree is paid down.
+      - name: mypy (full package — advisory)
+        continue-on-error: true
+        run: mypy secureagentnet/ --ignore-missing-imports
 
   unit-tests:
     runs-on: ubuntu-latest

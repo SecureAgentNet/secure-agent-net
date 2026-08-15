@@ -1,6 +1,6 @@
 import ast
 import logging
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Optional, Tuple, Set
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class ASTSemanticVerifier:
         cls,
         code: str,
         declared_intent: str = "",
-        allowed_capabilities: List[str] = None,
+        allowed_capabilities: Optional[List[str]] = None,
     ) -> Tuple[bool, float, str]:
         """Analyze code AST and return (safe, risk_score, reason)."""
         if not code or not code.strip():
