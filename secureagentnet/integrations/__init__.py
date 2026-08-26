@@ -21,6 +21,11 @@ from secureagentnet.integrations.base import (
     get_default_executor,
     secure_callable,
 )
+from secureagentnet.integrations.contract import (
+    AgentContract,
+    ContractBoundExecutor,
+    bind_executor,
+)
 
 __all__ = [
     "secure_callable",
@@ -30,4 +35,7 @@ __all__ = [
     "RemoteExecutor",
     "BLOCKED_PREFIX",
     "ESCALATED_PREFIX",
+    "AgentContract",
+    "ContractBoundExecutor",
+    "bind_executor",
 ]

@@ -165,7 +165,7 @@ The Use Case Diagram below illustrates the interactions between the two primary 
 | Use Case | Description |
 |---|---|
 | Commission Agent | The administrator assigns an agent its Intent Capsule: the sanctioned goal and approved actions against which all of its behaviour will be judged. |
-| Monitor Agent Activity | The administrator views live agent activity, blocked actions, and kill-switch events via the terminal interface or the web operator console. |
+| Monitor Agent Activity | The administrator views live agent activity, blocked actions, and kill-switch events via the desktop application or CLI. |
 | Resolve Escalations | The administrator approves or rejects medium-risk actions that the gateway has escalated for human review. |
 | View Audit Logs | The administrator queries the Vault-backed forensic log for post-incident analysis and compliance auditing. |
 | Revoke Agent Access | The administrator deregisters an agent from the identity registry and terminates its container session. |
@@ -210,7 +210,7 @@ The Sequence Diagram below illustrates the message flows between the five primar
 ### Usability
 
 - The system shall provide a terminal interface displaying live security events, resource utilization, and kill-switch activations without requiring a web browser.
-- The system shall additionally provide a web operator console for the human-in-the-loop approval queue and kill-switch control.
+- The desktop application shall provide the human-in-the-loop approval queue and kill-switch control; multi-host web management is reserved for future work.
 - The system shall emit push alerts for critical security events to operators not actively monitoring either interface.
 
 ## Candidate Classes and UML Class Diagram
@@ -509,7 +509,7 @@ Through short development cycles, each sprint focuses on a specific module, such
 
 **Microsoft Presidio.** Presidio provides the named-entity and pattern analyzers behind the Tier 2 PII redaction module.
 
-**FastAPI and Uvicorn.** FastAPI serves the gateway API, the operator console, and the human-in-the-loop approval endpoints; Uvicorn is the ASGI server.
+**FastAPI and Uvicorn.** FastAPI serves the gateway API and human-in-the-loop endpoints consumed by the desktop application and integrations; Uvicorn is the ASGI server.
 
 **SQLAlchemy with MariaDB/SQLite, and Redis.** SQLAlchemy provides the persistence layer for the identity registry, decision records, and audit log index (SQLite in development, MariaDB in deployment). Redis supports shared runtime state.
 

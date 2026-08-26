@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from secureagentnet.interfaces.api.auth import get_current_operator
 
 router = APIRouter(prefix="/api/v1/hitl", tags=["HITL Console"])
 
 
 @router.get("/pending")
-async def list_pending_requests():
+async def list_pending_requests(_operator: dict = Depends(get_current_operator)):
     from secureagentnet.decide.hitl import get_hitl_gate
 
     gate = get_hitl_gate()
@@ -16,11 +17,11 @@ async def list_pending_requests():
 
 
 @router.post("/approve/{request_id}")
-async def approve_request(request_id: str):
+async def approve_request(request_id: str, operator: dict = Depends(get_current_operator)):
     from secureagentnet.decide.hitl import get_hitl_gate, HITLDecision
 
     gate = get_hitl_gate()
-    decision = gate.approve(request_id, operator="api")
+    decision = gate.approve(request_id, operator=operator.get("username", "operator"))
 
     if decision == HITLDecision.TIMED_OUT:
         raise HTTPException(
@@ -36,11 +37,11 @@ async def approve_request(request_id: str):
 
 
 @router.post("/deny/{request_id}")
-async def deny_request(request_id: str):
+async def deny_request(request_id: str, operator: dict = Depends(get_current_operator)):
     from secureagentnet.decide.hitl import get_hitl_gate, HITLDecision
 
     gate = get_hitl_gate()
-    decision = gate.deny(request_id, operator="api")
+    decision = gate.deny(request_id, operator=operator.get("username", "operator"))
 
     if decision == HITLDecision.TIMED_OUT:
         raise HTTPException(
@@ -56,7 +57,7 @@ async def deny_request(request_id: str):
 
 
 @router.get("/summary")
-async def hitl_summary():
+async def hitl_summary(_operator: dict = Depends(get_current_operator)):
     from secureagentnet.decide.hitl import get_hitl_gate
 
     gate = get_hitl_gate()

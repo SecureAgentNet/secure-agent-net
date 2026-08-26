@@ -1,86 +1,63 @@
 #!/usr/bin/env node
-/**
- * SecureAgentNet CLI — npm wrapper
- *
- * This is a thin Node.js wrapper that delegates to the Python CLI.
- * The Python runtime is installed via postinstall hook.
- *
- * Usage: npx secureagentnet --help
- *        npm install -g secureagentnet
- *        secureagentnet agent list
- */
+/** Thin npm launcher for the SecureAgentNet Python CLI. */
 
-const { spawn, execSync } = require("child_process");
-const path = require("path");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
+const path = require("path");
 
-const PYTHON = process.env.SECUREAGENTNET_PYTHON || "python3";
-const INSTALL_DIR = path.join(
-  process.env.HOME || process.env.USERPROFILE || "/tmp",
-  ".secureagentnet"
+function pythonCandidates() {
+  const candidates = [];
+  if (process.env.SECUREAGENTNET_PYTHON) {
+    candidates.push(process.env.SECUREAGENTNET_PYTHON);
+  }
+
+  const projectRoot = path.resolve(__dirname, "..");
+  const home = process.env.HOME || process.env.USERPROFILE || "/tmp";
+  if (process.platform === "win32") {
+    candidates.push(
+      path.join(projectRoot, "venv", "Scripts", "python.exe"),
+      path.join(home, ".secureagentnet", "venv", "Scripts", "python.exe")
+    );
+  } else {
+    candidates.push(
+      path.join(projectRoot, "venv", "bin", "python"),
+      path.join(home, ".secureagentnet", "venv", "bin", "python")
+    );
+  }
+  candidates.push("python3", "python");
+  return [...new Set(candidates)];
+}
+
+function supportsSecureAgentNet(python) {
+  if ((python.includes(path.sep) || path.isAbsolute(python)) && !fs.existsSync(python)) {
+    return false;
+  }
+  const check = spawnSync(
+    python,
+    ["-c", "import secureagentnet.interfaces.cli.terminal"],
+    { stdio: "ignore" }
+  );
+  return !check.error && check.status === 0;
+}
+
+const python = pythonCandidates().find(supportsSecureAgentNet);
+if (!python) {
+  console.error(
+    "SecureAgentNet's Python package is not installed.\n" +
+    "From the repository run: python3 -m venv venv && venv/bin/pip install -e .\n" +
+    "Then activate it with: source venv/bin/activate"
+  );
+  process.exit(1);
+}
+
+const result = spawnSync(
+  python,
+  ["-m", "secureagentnet.interfaces.cli.terminal", ...process.argv.slice(2)],
+  { stdio: "inherit", env: process.env }
 );
 
-function findPython() {
-  const candidates = ["python3", "python3.11", "python3.12", "python3.10", "python"];
-  for (const cmd of candidates) {
-    try {
-      execSync(`${cmd} --version`, { stdio: "ignore" });
-      return cmd;
-    } catch {
-      continue;
-    }
-  }
-  return null;
+if (result.error) {
+  console.error(`Failed to start SecureAgentNet: ${result.error.message}`);
+  process.exit(1);
 }
-
-function runCLI() {
-  const python = findPython();
-  if (!python) {
-    console.error(
-      "SecureAgentNet requires Python 3.10+.\n" +
-      "Install: https://www.python.org/downloads/\n" +
-      "Or use:  pip install secureagentnet"
-    );
-    process.exit(1);
-  }
-
-  const cliPath = path.join(INSTALL_DIR, "src", "interfaces", "cli", "terminal.py");
-  const wrapperPath = path.join(INSTALL_DIR, "bin", "secureagentnet");
-
-  let scriptPath;
-  if (fs.existsSync(wrapperPath)) {
-    scriptPath = wrapperPath;
-  } else if (fs.existsSync(cliPath)) {
-    scriptPath = cliPath;
-  } else {
-    // Try pip-installed version
-    try {
-      execSync(`${python} -m secureagentnet --version 2>/dev/null || ${python} -c "from src.interfaces.cli.terminal import cli; cli()" --help`, {
-        cwd: __dirname,
-        stdio: "inherit",
-      });
-      return;
-    } catch {
-      console.error(
-        "SecureAgentNet not found.\n" +
-        "Install: curl -fsSL https://secureagentnet.dev/install.sh | sh\n" +
-        "   or:   pip install secureagentnet"
-      );
-      process.exit(1);
-    }
-  }
-
-  const args = process.argv.slice(2);
-  const child = spawn(python, [scriptPath, ...args], {
-    stdio: "inherit",
-    env: { ...process.env, INSTALL_DIR },
-  });
-
-  child.on("exit", (code) => process.exit(code));
-  child.on("error", (err) => {
-    console.error(`Failed to start SecureAgentNet: ${err.message}`);
-    process.exit(1);
-  });
-}
-
-runCLI();
+process.exit(result.status === null ? 1 : result.status);

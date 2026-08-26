@@ -269,15 +269,38 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
     async def registered_agents() -> List[Dict[str, Any]]:
         """All agents known to the identity registry (registered + discovered),
         not just those currently running as live processes."""
+        # Framework gateways may run in a separate process while the Desktop is
+        # open. Refresh persisted identity state before building the inventory.
+        IdentityRegistry.initialize()
         live = set()
         state = get_state()
         if state.discovery_scheduler:
             for d in state.discovery_scheduler.last_results:
                 live.add(str(d.get("agent_id") or d.get("name", "")))
         out: List[Dict[str, Any]] = []
+        from secureagentnet.contain.resource_manager import ContainerResourceManager
         for a in IdentityRegistry.list_agents():
             aid = str(a.get("agent_id", ""))
             is_live = aid in live or a.get("name", "") in live
+            container_info: Dict[str, Any] = {"status": "none"}
+            try:
+                containers = ContainerResourceManager.get_agent_containers(aid)
+                container = next((c for c in containers if c.get("status") in ("running", "creating")), None)
+                container = container or (containers[-1] if containers else None)
+                if container:
+                    quota = container.get("quota", {}) or {}
+                    container_info = {
+                        "status": container.get("status", "unknown"),
+                        "container_id": container.get("container_id"),
+                        "cpu_limit_cores": quota.get("cpu_limit"),
+                        "memory_limit_mb": quota.get("memory_limit_mb"),
+                    }
+                    if container.get("status") == "running":
+                        live_stats = _live_container_stats(container.get("container_id"))
+                        if live_stats:
+                            container_info["live"] = live_stats
+            except Exception:
+                pass
             out.append({
                 "agent_id": aid,
                 "name": a.get("name", ""),
@@ -288,13 +311,24 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
                 "trust_score": a.get("trust_score"),
                 "capabilities": a.get("capabilities", {}),
                 "live": is_live,
+                "container": container_info,
             })
         return out
+
+    @app.get("/v1/agent-contracts")
+    async def agent_contracts() -> List[Dict[str, Any]]:
+        """Framework-neutral contracts observed on governed agent actions."""
+        from secureagentnet.integrations.events import summarize_agent_contracts
+
+        LogIndexer._load()
+        return summarize_agent_contracts(LogIndexer._events)
 
     @app.get("/v1/agents/{agent_id}")
     async def agent_detail(agent_id: str) -> Dict[str, Any]:
         """Full detail for one agent: identity, capabilities, container resources,
         the enforced security profile, and a timestamped ITCD activity timeline."""
+        IdentityRegistry.initialize()
+        LogIndexer._load()
         a = IdentityRegistry.get_agent(agent_id)
         if not a:
             raise HTTPException(status_code=404, detail="Agent not found")
@@ -320,6 +354,9 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
 
         from secureagentnet.track.log_indexer import LogIndexer
         events = LogIndexer.query_by_agent(agent_id, limit=8)
+        from secureagentnet.integrations.events import summarize_agent_contracts
+        contracts = summarize_agent_contracts(LogIndexer._events)
+        contract = next((item for item in contracts if item["agent_id"] == agent_id), None)
         timeline = [{
             "time": e.get("timestamp", ""),
             "phase": str(e.get("phase", "") or ""),
@@ -359,6 +396,7 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
                 "Capabilities dropped": "ALL",
             },
             "timeline": timeline,
+            "agent_contract": contract,
         }
 
     @app.websocket("/v1/alerts")

@@ -17,7 +17,6 @@ from rich.syntax import Syntax
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import box
 
-from secureagentnet.core.pipeline import ITCDPipeline
 from secureagentnet.track.models import AgentActionRequest
 from secureagentnet.identify.identity_registry import IdentityRegistry
 from secureagentnet.identify.capability_profiler import CapabilityProfiler
@@ -45,11 +44,38 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 console = Console()
 
-pipeline = ITCDPipeline()
-rogue_detector = RogueDetector()
-circuit_breaker = CircuitBreaker(failure_threshold=3, time_window_seconds=60, reset_timeout_seconds=120)
 IdentityRegistry.initialize()
 LogIndexer.initialize()
+
+_pipeline = None
+_rogue_detector: Optional[RogueDetector] = None
+_circuit_breaker: Optional[CircuitBreaker] = None
+
+
+def _get_pipeline():
+    global _pipeline
+    if _pipeline is None:
+        from secureagentnet.core.pipeline import ITCDPipeline
+        _pipeline = ITCDPipeline()
+    return _pipeline
+
+
+def _get_rogue_detector() -> RogueDetector:
+    global _rogue_detector
+    if _rogue_detector is None:
+        _rogue_detector = RogueDetector()
+    return _rogue_detector
+
+
+def _get_circuit_breaker() -> CircuitBreaker:
+    global _circuit_breaker
+    if _circuit_breaker is None:
+        _circuit_breaker = CircuitBreaker(
+            failure_threshold=3,
+            time_window_seconds=60,
+            reset_timeout_seconds=120,
+        )
+    return _circuit_breaker
 
 
 # ============================================================
@@ -189,7 +215,7 @@ def list_agents(status: Optional[str], agent_type: Optional[str], json_output: b
 
     rows = []
     for a in agents:
-        anomaly = rogue_detector.compute_anomaly_score(a["agent_id"])
+        anomaly = _get_rogue_detector().compute_anomaly_score(a["agent_id"])
         rows.append([
             _status_icon(a["status"]),
             a["name"], a["type"], a["status"],
@@ -203,6 +229,37 @@ def list_agents(status: Optional[str], agent_type: Optional[str], json_output: b
         ["", "Name", "Type", "Status", "Trust", "Anomaly", "ID"],
         rows,
         caption=f"Total: {len(agents)} agents"
+    )
+
+
+@agent.command(name="contracts")
+@click.option("--framework", default=None, help="Filter by framework (LangChain, AutoGen, CrewAI, custom-python)")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def agent_contracts(framework: Optional[str], json_output: bool):
+    """Show framework contracts observed in governed agent events."""
+    from secureagentnet.integrations.events import summarize_agent_contracts
+
+    LogIndexer.initialize()
+    contracts = summarize_agent_contracts(LogIndexer._events)
+    if framework:
+        contracts = [c for c in contracts
+                     if str(c.get("framework", "")).lower() == framework.lower()]
+    if json_output:
+        _print_json(contracts)
+        return
+    if not contracts:
+        _print_info("No framework contracts observed yet")
+        return
+    rows = [[
+        c.get("agent_id", "")[:12], c.get("agent_name", ""),
+        c.get("framework", ""), c.get("project_name", ""),
+        c.get("role", ""), str(c.get("event_count", 0)),
+    ] for c in contracts]
+    _print_table(
+        "Observed Agent Contracts",
+        ["Agent ID", "Agent", "Framework", "Project", "Role", "Events"],
+        rows,
+        caption="Contract metadata captured from ITCD audit events",
     )
 
 
@@ -229,7 +286,7 @@ def get(agent_id: str, json_output: bool):
         f"[bold]Type:[/] {agent['type']}\n"
         f"[bold]Status:[/] {_status_icon(agent['status'])} {agent['status']}\n"
         f"[bold]Trust Score:[/] {agent['trust_score']:.1f}/100\n"
-        f"[bold]Anomaly Score:[/] {rogue_detector.compute_anomaly_score(agent['agent_id']):.2f}\n"
+        f"[bold]Anomaly Score:[/] {_get_rogue_detector().compute_anomaly_score(agent['agent_id']):.2f}\n"
         f"[bold]Capabilities:[/] {', '.join(agent.get('capabilities', {}).keys()) or 'none'}\n"
         f"[bold]Registered:[/] {agent['registered_at']}\n"
         f"[bold]Last Seen:[/] {agent.get('last_seen', 'never')}",
@@ -245,7 +302,12 @@ def get(agent_id: str, json_output: bool):
 @click.option("--name", help="New name")
 def update(agent_id: str, status: Optional[str], trust: Optional[float], name: Optional[str]):
     """Update agent properties"""
-    agent = IdentityRegistry.get_agent(agent_id) or IdentityRegistry.get_agent_by_name(agent_id)
+    IdentityRegistry.initialize()
+    agent = (
+        IdentityRegistry.get_agent(agent_id)
+        or IdentityRegistry.get_agent_by_name(agent_id)
+        or IdentityRegistry.get_agent_by_prefix(agent_id)
+    )
     if not agent:
         _print_error(f"Agent '{agent_id}' not found")
         return
@@ -485,7 +547,12 @@ def run(agent_id: str, command_str: str, action: str, resource: str, intent: str
     AGENT_ID: Agent name or ID to run as
     COMMAND_STR: The command to execute in the sandbox
     """
-    agent = IdentityRegistry.get_agent(agent_id) or IdentityRegistry.get_agent_by_name(agent_id)
+    IdentityRegistry.initialize()
+    agent = (
+        IdentityRegistry.get_agent(agent_id)
+        or IdentityRegistry.get_agent_by_name(agent_id)
+        or IdentityRegistry.get_agent_by_prefix(agent_id)
+    )
     if agent:
         agent_id = agent["agent_id"]
 
@@ -498,7 +565,7 @@ def run(agent_id: str, command_str: str, action: str, resource: str, intent: str
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
         progress.add_task(description="[bold cyan]ITCD Pipeline:[/] Identify → Track → Contain → Decide", total=None)
-        result = asyncio.run(pipeline.execute_agent_action(agent_id, request, command_str))
+        result = asyncio.run(_get_pipeline().execute_agent_action(agent_id, request, command_str))
 
     if json_output:
         _print_json(result)
@@ -796,8 +863,8 @@ def security():
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def status(json_output: bool):
     """Show overall security status"""
-    ks_status = pipeline.kill_switch.get_status()
-    anomaly_scores = rogue_detector.get_all_anomaly_scores()
+    ks_status = _get_pipeline().kill_switch.get_status()
+    anomaly_scores = _get_rogue_detector().get_all_anomaly_scores()
 
     if json_output:
         _print_json({"kill_switch": ks_status, "anomaly_scores": anomaly_scores})
@@ -825,7 +892,7 @@ def kill_switch():
 @kill_switch.command()
 def active():
     """Check if kill-switch is active"""
-    if pipeline.kill_switch.is_active:
+    if _get_pipeline().kill_switch.is_active:
         _print_error("Kill-switch is ACTIVE — all operations halted")
     else:
         _print_success("Kill-switch is inactive")
@@ -835,7 +902,7 @@ def active():
 @click.confirmation_option(prompt="Activate kill-switch? This halts ALL agent operations")
 def activate():
     """Activate the kill-switch (halts all agents)"""
-    pipeline.kill_switch.activate("cli-manual")
+    _get_pipeline().kill_switch.activate("cli-manual")
     _print_error("Kill-switch ACTIVATED — all agent operations halted")
 
 
@@ -843,7 +910,7 @@ def activate():
 @click.confirmation_option(prompt="Deactivate kill-switch?")
 def deactivate():
     """Deactivate the kill-switch"""
-    pipeline.kill_switch.deactivate("cli")
+    _get_pipeline().kill_switch.deactivate("cli")
     _print_success("Kill-switch deactivated — operations may resume")
 
 
@@ -858,9 +925,9 @@ def circuit_breaker_group():
 def status(json_output: bool):
     """Show circuit breaker states"""
     if json_output:
-        _print_json(circuit_breaker._state_store)
+        _print_json(_get_circuit_breaker()._state_store)
         return
-    states = circuit_breaker._state_store
+    states = _get_circuit_breaker()._state_store
     if not states:
         _print_info("No agents tracked by circuit breaker")
         return
@@ -1281,7 +1348,7 @@ def audit(json_output: bool):
         time.sleep(0.5)
 
     summary = ForensicQueryEngine.get_system_summary()
-    anomaly_scores = rogue_detector.get_all_anomaly_scores()
+    anomaly_scores = _get_rogue_detector().get_all_anomaly_scores()
     phase_counts = LogIndexer.count_by_phase()
     severity_counts = LogIndexer.count_by_severity()
     agents = IdentityRegistry.list_agents()
@@ -1294,8 +1361,8 @@ def audit(json_output: bool):
         "version": "2.0.0",
         "system": summary,
         "security": {
-            "kill_switch_active": pipeline.kill_switch.is_active,
-            "kill_switch_armed": pipeline.kill_switch.is_armed,
+            "kill_switch_active": _get_pipeline().kill_switch.is_active,
+            "kill_switch_armed": _get_pipeline().kill_switch.is_armed,
             "suspicious_agents": len(suspicious_agents),
             "high_anomaly_agents": len(high_anomaly),
         },
@@ -1407,7 +1474,7 @@ def metrics(json_output: bool, watch: bool):
 def _display_metrics(json_output: bool):
     summary = ForensicQueryEngine.get_system_summary()
     containers_info = ContainerResourceManager.get_resource_usage_summary()
-    anomaly_scores = rogue_detector.get_all_anomaly_scores()
+    anomaly_scores = _get_rogue_detector().get_all_anomaly_scores()
 
     if json_output:
         _print_json({
@@ -1487,7 +1554,7 @@ def version(json_output: bool):
 
 @click.group()
 def server():
-    """Manage the optional web dashboard server"""
+    """Manage the SecureAgentNet API gateway"""
     pass
 
 
@@ -1496,14 +1563,14 @@ def server():
 @click.option("--host", default="0.0.0.0", help="Server host")
 @click.option("--daemon", is_flag=True, help="Run in background")
 def start(port: int, host: str, daemon: bool):
-    """Start the web dashboard server"""
+    """Start the API gateway server"""
     from pathlib import Path
 
     _print_info(f"Starting server on {host}:{port}...")
     if daemon:
         _print_info("Running in background (use 'server stop' to terminate)")
-    console.print(f"  Dashboard: [bold]http://{host}:{port}/dashboard[/]")
-    console.print(f"  API:       [bold]http://{host}:{port}/health[/]")
+    console.print(f"  API health: [bold]http://{host}:{port}/health[/]")
+    console.print(f"  API docs:   [bold]http://{host}:{port}/docs[/]")
 
     cmd = [
         sys.executable, "-m", "uvicorn",
@@ -1635,10 +1702,24 @@ def status():
 #  DESKTOP COMMANDS
 # ============================================================
 
-@click.command()
-def desktop():
-    """Launch the SecureAgentNet desktop application"""
+@click.command(context_settings={"ignore_unknown_options": False})
+@click.argument("action", required=False, type=click.Choice(["start"], case_sensitive=False))
+@click.option("--daemonize", is_flag=True, help="Start the background daemon before opening Desktop")
+def desktop(action: Optional[str], daemonize: bool):
+    """Launch Desktop; ``san desktop start --daemonize`` is also supported."""
     try:
+        if action or daemonize:
+            from secureagentnet.daemon.process import start_daemon, daemon_status
+
+            running, msg = daemon_status()
+            if running:
+                _print_info(msg)
+            else:
+                ok, msg = start_daemon(daemonize=daemonize)
+                if not ok:
+                    _print_error(msg)
+                    return
+                _print_success(msg)
         from secureagentnet.desktop.app import main
         main()
     except Exception as exc:

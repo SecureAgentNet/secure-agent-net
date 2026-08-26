@@ -30,9 +30,10 @@ try {
     fs.mkdirSync(INSTALL_DIR, { recursive: true });
   }
 
-  // Install Python packages
+  // Install the Python package that provides the real CLI, not just a partial
+  // dependency list. SECUREAGENTNET_PYTHON lets users select a virtualenv.
   execSync(
-    `${process.env.SECUREAGENTNET_PYTHON || "python3"} -m pip install rich click fastapi uvicorn docker hvac cryptography pyjwt requests flask flask-cors flask-limiter pydantic pydantic-settings sqlalchemy psycopg2-binary python-dotenv pyyaml structlog prometheus-client -q 2>&1`,
+    `${process.env.SECUREAGENTNET_PYTHON || "python3"} -m pip install "secureagentnet>=2.0.0" -q 2>&1`,
     { stdio: "inherit" }
   );
 

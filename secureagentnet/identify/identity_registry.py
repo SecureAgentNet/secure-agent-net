@@ -117,6 +117,16 @@ class IdentityRegistry:
         return cls._agents.get(agent_id)
 
     @classmethod
+    def get_agent_by_prefix(cls, prefix: str) -> Optional[Dict[str, Any]]:
+        """Resolve a unique displayed ID prefix, such as the first 8 UUID chars."""
+        needle = str(prefix).strip().lower()
+        if not needle:
+            return None
+        matches = [agent for agent_id, agent in cls._agents.items()
+                   if str(agent_id).lower().startswith(needle)]
+        return matches[0] if len(matches) == 1 else None
+
+    @classmethod
     def get_agent_by_name(cls, name: str) -> Optional[Dict[str, Any]]:
         for agent in cls._agents.values():
             if agent["name"] == name:

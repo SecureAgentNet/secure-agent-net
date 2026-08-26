@@ -23,6 +23,14 @@ def read_pid(pid_file: Path) -> Optional[int]:
         return None
 
 
+def remove_pid_file(pid_file: Path) -> None:
+    """Best-effort cleanup; status must still work on read-only installs."""
+    try:
+        pid_file.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def is_running(pid: Optional[int]) -> bool:
     if pid is None:
         return False
@@ -118,6 +126,6 @@ def daemon_status(settings: Optional[DaemonSettings] = None) -> Tuple[bool, str]
     if is_running(pid):
         return True, f"Daemon running (PID: {pid})"
     if pid is not None:
-        settings.pid_file.unlink(missing_ok=True)
-        return False, "Daemon not running (stale PID file removed)"
+        remove_pid_file(settings.pid_file)
+        return False, "Daemon not running (stale PID file detected)"
     return False, "Daemon not running"

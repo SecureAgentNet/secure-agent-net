@@ -22,12 +22,31 @@ def client(mock_settings, reset_identity_registry, reset_log_indexer, reset_pers
 
 
 class TestOperatorLogin:
+    def test_password_hash_is_salted_and_verifiable(self):
+        from secureagentnet.interfaces.api.auth import (
+            hash_operator_password,
+            verify_operator_password,
+        )
+
+        first = hash_operator_password("correct horse battery staple")
+        second = hash_operator_password("correct horse battery staple")
+        assert first != second
+        assert verify_operator_password("correct horse battery staple", first) == (True, False)
+        assert verify_operator_password("wrong", first) == (False, False)
+
+    def test_legacy_password_hash_requests_upgrade(self):
+        import hashlib
+        from secureagentnet.interfaces.api.auth import verify_operator_password
+
+        legacy = hashlib.sha256(b"admin123").hexdigest()
+        assert verify_operator_password("admin123", legacy) == (True, True)
+
     def test_login_invalid_returns_401(self, client):
-        res = client.post("/api/v1/auth/operator-login", params={"username": "nobody", "password": "wrong"})
+        res = client.post("/api/v1/auth/operator-login", json={"username": "nobody", "password": "wrong"})
         assert res.status_code == 401
 
     def test_login_success_returns_token(self, client):
-        res = client.post("/api/v1/auth/operator-login", params={"username": "admin", "password": "admin123"})
+        res = client.post("/api/v1/auth/operator-login", json={"username": "admin", "password": "admin123"})
         assert res.status_code == 200
         body = res.json()
         assert body["access_token"]
@@ -126,6 +145,11 @@ class TestReportRoutes:
 
 
 class TestDashboardRoutes:
+    def test_dashboard_reads_require_operator_auth(self, client, monkeypatch):
+        monkeypatch.setenv("SAN_TESTING", "0")
+        assert client.get("/api/v1/agents").status_code == 401
+        assert client.get("/api/v1/security/status").status_code == 401
+
     def test_list_agents(self, client):
         res = client.get("/api/v1/agents")
         assert res.status_code == 200

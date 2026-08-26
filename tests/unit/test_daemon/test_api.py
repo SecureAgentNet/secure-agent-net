@@ -46,6 +46,27 @@ def test_registered_agents_lists_registry(client):
     assert row["framework"] == "LangChain"
     assert row["status"] == "active"
     assert row["live"] is False
+    assert row["container"]["status"] == "none"
+
+
+def test_agent_contracts_are_exposed_from_audit_events(client):
+    LogIndexer.index_event({
+        "agent_id": "finance-001",
+        "phase": "IDENTIFY",
+        "event_type": "pipeline_started",
+        "severity": "INFO",
+        "details": {"security_context": {
+            "agent_name": "finance-agent", "project_name": "FinanceOps",
+            "framework": "langchain", "role": "payment-review",
+            "mandate": "Review approved payments",
+            "capabilities": ["read_payroll", "transfer_funds"],
+        }},
+    })
+
+    resp = client.get("/v1/agent-contracts")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["framework"] == "langchain"
 
 
 def test_agent_detail_enriched(client):

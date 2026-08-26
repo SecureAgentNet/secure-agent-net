@@ -41,11 +41,14 @@ class SecureAgentNetLangChainTool(BaseTool):
         kwargs.setdefault("description", tool.description)
         if hasattr(tool, "args_schema"):
             kwargs.setdefault("args_schema", tool.args_schema)
+        # These are Pydantic model fields on BaseTool.  They must be supplied
+        # to BaseTool's constructor (rather than assigned after super()),
+        # otherwise LangChain 1.x/Pydantic v2 reports them as missing.
+        kwargs.setdefault("agent_id", agent_id)
+        kwargs.setdefault("wrapped_tool", tool)
+        kwargs.setdefault("target_resource", target_resource)
+        kwargs.setdefault("client", client or InterceptClient())
         super().__init__(**kwargs)
-        self.agent_id = agent_id
-        self.wrapped_tool = tool
-        self.target_resource = target_resource
-        self.client = client or InterceptClient()
 
     def _run(self, *args: Any, **kwargs: Any) -> str:
         intent = kwargs.get("intent", f"Run {self.name}")
@@ -69,7 +72,21 @@ class SecureAgentNetLangChainTool(BaseTool):
 
         # Allowed: execute the underlying tool.
         try:
-            return self.wrapped_tool._run(*args, **kwargs)
+            # Use LangChain's public execution API. StructuredTool._run is an
+            # internal method whose signature now requires a keyword-only
+            # RunnableConfig in LangChain 1.x.
+            tool_input: Any
+            if kwargs:
+                tool_input = dict(kwargs)
+                # Wrapper-only context is evaluated by SAN but is not part of
+                # the underlying tool's declared input schema.
+                tool_input.pop("intent", None)
+                tool_input.pop("command", None)
+            elif len(args) == 1:
+                tool_input = args[0]
+            else:
+                tool_input = args
+            return self.wrapped_tool.invoke(tool_input)
         except Exception as exc:
             return f"[ERROR] underlying tool failed: {exc}"
 

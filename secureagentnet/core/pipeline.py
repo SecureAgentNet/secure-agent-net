@@ -76,7 +76,16 @@ class ITCDPipeline:
         correlation_id = generate_correlation_id()
         start_time = time.time()
         self.rogue_detector.record_request(agent_id, request.action_name, request.target_resource)
-        self._log_event(agent_id, "pipeline_started", PipelinePhase.IDENTIFY, correlation_id=correlation_id)
+        security_context = request.payload.get("security_context")
+        action_payload = dict(request.payload)
+        action_payload.pop("security_context", None)
+        start_details = {"action": request.action_name, "target_resource": request.target_resource}
+        if isinstance(security_context, dict):
+            start_details["security_context"] = security_context
+        self._log_event(
+            agent_id, "pipeline_started", PipelinePhase.IDENTIFY,
+            details=start_details, correlation_id=correlation_id,
+        )
 
         # === IDENTIFY PHASE ===
         is_suspicious, score, reason = self.rogue_detector.is_suspicious(agent_id)
@@ -198,7 +207,7 @@ class ITCDPipeline:
                     action_name=request.action_name,
                     target_resource=request.target_resource,
                     intent_summary=request.intent_summary,
-                    payload=request.payload,
+                    payload=action_payload,
                     commissioned_goal=mandate.original_goal,
                 )
                 # Tier 3 makes a blocking multi-second LLM call; run it in a

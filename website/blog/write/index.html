@@ -234,8 +234,10 @@ Markdown Source
 
             try {
                 // Try local FastAPI auth first (for dev); fallback to skip gate
-                const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/operator-login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
-                    method: 'POST'
+                const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/operator-login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
                 });
 
                 if (res.ok) {

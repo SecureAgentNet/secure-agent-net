@@ -5,7 +5,7 @@ from typing import Optional
 
 from secureagentnet.database.connection import get_db_session
 from secureagentnet.database.models import User
-from secureagentnet.interfaces.api.auth import get_current_operator
+from secureagentnet.interfaces.api.auth import get_current_operator, hash_operator_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/team", tags=["Team"])
@@ -55,7 +55,6 @@ def list_operators(_operator: dict = Depends(get_current_operator)):
 
 @router.post("", response_model=OperatorResponse, status_code=201)
 def create_operator(body: CreateOperatorRequest, _operator: dict = Depends(get_current_operator)):
-    import hashlib
     import uuid as _uuid
     with get_db_session() as session:
         existing = session.query(User).filter(
@@ -68,7 +67,7 @@ def create_operator(body: CreateOperatorRequest, _operator: dict = Depends(get_c
             user_id=_uuid.uuid4(),
             username=body.username,
             email=body.email,
-            password_hash=hashlib.sha256(body.password.encode()).hexdigest(),
+            password_hash=hash_operator_password(body.password),
             role=body.role,
         )
         session.add(user)

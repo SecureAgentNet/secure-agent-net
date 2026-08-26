@@ -8,14 +8,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import uvicorn
 from fastapi import FastAPI
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from secureagentnet.identify.mcp_gateway import router as auth_router, mcp_router
-# Flask dashboard disabled (requires Docker/Redis) — use FastAPI + static site instead
-# from secureagentnet.interfaces.web_dashboard.app import app as dashboard_app
 from secureagentnet.interfaces.api import hitl_router, behavior_router, team_router, key_router, config_router, report_router, blog_router, dashboard_router
 from secureagentnet.interfaces.api.metrics import refresh_metrics, generate_latest, init_metrics
 from prometheus_client import REGISTRY
@@ -37,6 +36,11 @@ CORS_ORIGINS = os.environ.get(
 ).split(",")
 
 
+class OperatorLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 def initialize_system():
     from secureagentnet.database.connection import init_database
     init_database()
@@ -49,8 +53,8 @@ def initialize_system():
     if get_settings().environment == "development":
         from secureagentnet.database.connection import get_db_session
         from secureagentnet.database.models import User
-        import hashlib
         from uuid import uuid4
+        from secureagentnet.interfaces.api.auth import hash_operator_password
 
         with get_db_session() as session:
             admin_user = session.query(User).filter(User.username == "admin").first()
@@ -62,7 +66,7 @@ def initialize_system():
                     user_id=uuid4(),
                     username="admin",
                     email="admin@secureagentnet.dev",
-                    password_hash=hashlib.sha256(admin_password.encode()).hexdigest(),
+                    password_hash=hash_operator_password(admin_password),
                     role="admin",
                     active=True
                 )
@@ -129,10 +133,6 @@ app.include_router(config_router)
 app.include_router(report_router)
 app.include_router(blog_router)
 app.include_router(dashboard_router)
-
-# Flask dashboard disabled — requires Docker/Redis on host
-# app.mount("/dashboard", WSGIMiddleware(dashboard_app))
-
 
 @app.get("/health")
 async def health_check():
@@ -201,23 +201,33 @@ async def prometheus_metrics():
 
 
 @app.post("/api/v1/auth/operator-login")
-async def operator_login(username: str, password: str):
+async def operator_login(credentials: OperatorLoginRequest):
     from secureagentnet.database.connection import get_db_session
     from secureagentnet.database.models import User
     from secureagentnet.utils.crypto import create_access_token
-    import hashlib
     from datetime import datetime, timezone, timedelta
     from fastapi import HTTPException
+    from secureagentnet.interfaces.api.auth import (
+        hash_operator_password,
+        verify_operator_password,
+    )
 
     settings = get_settings()
     with get_db_session() as session:
-        user = session.query(User).filter(User.username == username, User.active == True).first()
+        user = session.query(User).filter(
+            User.username == credentials.username, User.active == True
+        ).first()
         if not user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        pw_hash = hashlib.sha256(password.encode()).hexdigest()
-        if pw_hash != user.password_hash:
+        valid_password, needs_upgrade = verify_operator_password(
+            credentials.password, user.password_hash
+        )
+        if not valid_password:
             raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        if needs_upgrade:
+            user.password_hash = hash_operator_password(credentials.password)
 
         user.last_login = datetime.now(timezone.utc)
         session.commit()
@@ -267,12 +277,6 @@ uploads_path = Path(__file__).parent.parent / "uploads"
 uploads_path.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 logger.info("Mounted uploads directory from %s", uploads_path)
-
-# Operator console (must be mounted before the catch-all "/" website mount).
-console_path = Path(__file__).parent / "interfaces" / "console"
-if console_path.exists():
-    app.mount("/console", StaticFiles(directory=str(console_path), html=True), name="console")
-    logger.info("Mounted operator console from %s", console_path)
 
 website_path = Path(__file__).parent.parent / "website"
 if website_path.exists():

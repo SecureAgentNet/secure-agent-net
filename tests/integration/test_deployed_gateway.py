@@ -37,7 +37,7 @@ def test_deployed_auth_and_execute_flow():
 
     # 1) operator login
     r = s.post(f"{BASE}/api/v1/auth/operator-login",
-               params={"username": "admin", "password": ADMIN_PW}, timeout=10)
+               json={"username": "admin", "password": ADMIN_PW}, timeout=10)
     assert r.status_code == 200, r.text
     operator_token = r.json()["access_token"]
     op_headers = {"Authorization": f"Bearer {operator_token}"}

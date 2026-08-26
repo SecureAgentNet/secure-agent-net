@@ -24,6 +24,20 @@ def test_status(client, monkeypatch):
     assert status["threats_blocked"] == 1
 
 
+def test_agent_contracts(client, monkeypatch):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = [{
+        "agent_id": "finance-001", "framework": "langchain",
+        "project_name": "FinanceOps",
+    }]
+    mock_resp.raise_for_status.return_value = None
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: mock_resp)
+
+    contracts = client.agent_contracts()
+
+    assert contracts[0]["project_name"] == "FinanceOps"
+
+
 def test_intercept_success(client, monkeypatch):
     mock_resp = MagicMock()
     mock_resp.status_code = 200

@@ -49,6 +49,14 @@ class DaemonClient:
         except Exception:
             return []
 
+    def agent_contracts(self) -> List[Dict[str, Any]]:
+        try:
+            resp = requests.get(self._url("/v1/agent-contracts"), timeout=self.timeout)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            return []
+
     def agent_detail(self, agent_id: str) -> Optional[Dict[str, Any]]:
         try:
             resp = requests.get(self._url(f"/v1/agents/{agent_id}"), timeout=self.timeout)

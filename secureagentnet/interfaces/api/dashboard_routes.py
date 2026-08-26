@@ -1,7 +1,6 @@
 """Operator-console support endpoints: agent inventory + kill-switch control.
 
-Read endpoints are open (consistent with the existing /health and /hitl reads);
-the kill-switch mutations are guarded by ``get_current_operator``.
+All console data and control endpoints require an authenticated operator.
 """
 from fastapi import APIRouter, Depends
 
@@ -11,7 +10,7 @@ router = APIRouter(prefix="/api/v1", tags=["Operator Console"])
 
 
 @router.get("/agents")
-async def list_agents():
+async def list_agents(_operator: dict = Depends(get_current_operator)):
     from secureagentnet.identify.identity_registry import IdentityRegistry
 
     agents = IdentityRegistry.list_agents()
@@ -33,7 +32,7 @@ async def list_agents():
 
 
 @router.get("/security/status")
-async def security_status():
+async def security_status(_operator: dict = Depends(get_current_operator)):
     from secureagentnet.decide.kill_switch import KillSwitchController
     from secureagentnet.identify.identity_registry import IdentityRegistry
     from secureagentnet.track.log_indexer import LogIndexer

@@ -1,8 +1,7 @@
 """Primary window for the SecureAgentNet desktop app.
 
-An endpoint-security console: a dark sidebar nav, a protection-status centrepiece,
-and pages for Agents, Activity, Commands (action panels + an embedded `san`
-console), Cloud enrollment and Settings.
+An endpoint-security console with pages for host protection, agents, forensics,
+HITL review, activity, commands and settings.
 """
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QButtonGroup, QComboBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton,
+    QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget,
 )
@@ -96,6 +95,9 @@ class StatusPoller(QThread):
                     agents = self.client.registered_agents()
                     if not agents:
                         agents = self.client.discovered_agents()
+                    contracts = {c.get("agent_id"): c for c in self.client.agent_contracts()}
+                    agents = [{**a, "agent_contract": contracts.get(a.get("agent_id"))}
+                              for a in (agents or [])]
                     data["agents"] = agents or []
                     data["health"] = self.client.service_health() or {}
                     data["hitl"] = self.client.hitl_pending() or []
@@ -368,6 +370,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.stack, 1)
 
         self._agents_cache: list = []     # row-index → agent dict, for the detail view
+        self._agent_selectors: list[QComboBox] = []
         self._event_buffer: list = []     # recent events, fed to the Forensics table
 
         self._pages: dict[str, int] = {}
@@ -379,7 +382,6 @@ class MainWindow(QMainWindow):
         self._add_page("hitl", self._page_hitl())
         self._add_page("activity", self._page_activity())
         self._add_page("commands", self._page_commands())
-        self._add_page("cloud", self._page_cloud())
         self._add_page("settings", self._page_settings())
         self._select("protection")
 
@@ -415,7 +417,7 @@ class MainWindow(QMainWindow):
                            ("agents", "Agents"),
                            ("forensics", "Forensics"), ("hitl", "HITL Queue"),
                            ("activity", "Activity"), ("commands", "Commands"),
-                           ("cloud", "Cloud"), ("settings", "Settings")):
+                           ("settings", "Settings")):
             b = QPushButton(label); b.setObjectName("nav"); b.setCheckable(True)
             b.clicked.connect(lambda _=False, k=key: self._select(k))
             b._key = key; b._label = label
@@ -646,7 +648,10 @@ class MainWindow(QMainWindow):
     def _page_agents(self) -> QWidget:
         page, lay = self._page_shell()
         lay.addWidget(self._page_header("Agents", "AI agents discovered and monitored on this host"))
-        self.agents_table = self._make_table(["Name", "Framework", "Source", "Status", "ID"], [220, 120, 110, 90])
+        self.agents_table = self._make_table(
+            ["Name", "Framework", "Project", "CPU", "Memory", "Container", "Status", "ID"],
+            [150, 95, 135, 60, 90, 90, 70],
+        )
         self.agents_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.agents_table.cellDoubleClicked.connect(self._open_agent_detail)
         hint = QLabel("Double-click an agent to open its detail view."); hint.setObjectName("pageSub")
@@ -767,6 +772,9 @@ class MainWindow(QMainWindow):
         elif isinstance(caps, (list, tuple)):
             caps = ", ".join(map(str, caps))
         caps = caps or "—"
+        contract = d.get("agent_contract") or {}
+        if contract:
+            fw = contract.get("framework") or fw
 
         self.detail_title.setText(f"Agent details: {name}")
         _set_badge(self.detail_badge, status, status)
@@ -778,13 +786,16 @@ class MainWindow(QMainWindow):
             f"Agent ID       {aid[:18] or '—'}\n"
             f"Name           {name}\n"
             f"Type           {fw}\n"
+            f"Project        {contract.get('project_name') or '—'}\n"
+            f"Agent role     {contract.get('role') or '—'}\n"
             f"Status         {status}\n"
             f"Trust score    {trust_txt}\n"
             f"Current phase  {d.get('current_phase') or '—'}\n"
             f"Registered     {str(d.get('registered_at', '') or '')[:19] or '—'}\n"
             f"Last seen      {str(d.get('last_seen', '') or '')[:19] or '—'}\n"
             f"Container ID   {str(cid)[:18]}\n"
-            f"Capabilities   {caps}")
+            f"Capabilities   {', '.join(contract.get('capabilities') or []) or caps}\n"
+            f"Mandate        {contract.get('mandate') or '—'}")
 
         # ── container resources ──
         live = d.get("live")
@@ -1064,8 +1075,12 @@ class MainWindow(QMainWindow):
         # quick, no-argument actions
         quick = QHBoxLayout(); quick.setSpacing(8)
         for label, args in (("Doctor", ["doctor"]), ("List agents", ["agent", "list"]),
+                            ("Contracts", ["agent", "contracts"]),
                             ("Audit log", ["view-logs"]), ("Metrics", ["metrics"]),
-                            ("Cloud status", ["cloud", "status"])):
+                            ("Security status", ["security", "status"]),
+                            ("Containers", ["contain", "list"]),
+                            ("MCP tools", ["mcp", "list"]),
+                            ("Trust root", ["trust", "root"])):
             b = QPushButton(label); b.setObjectName("ghost")
             b.clicked.connect(lambda _=False, a=args: self.console.run(a))
             quick.addWidget(b)
@@ -1074,11 +1089,12 @@ class MainWindow(QMainWindow):
         lay.addWidget(_card(quick_w, title="Quick actions"))
 
         # parameterised action forms
-        forms = QGridLayout(); forms.setSpacing(10)
+        forms = QGridLayout(); forms.setSpacing(14)
+        forms.setColumnStretch(0, 1); forms.setColumnStretch(1, 1)
         forms.addWidget(self._form_register(), 0, 0)
         forms.addWidget(self._form_commission(), 0, 1)
         forms.addWidget(self._form_run(), 1, 0)
-        forms.addWidget(self._form_cloud_enroll(), 1, 1)
+        forms.addWidget(self._form_agent_controls(), 1, 1)
         forms_w = QWidget(); forms_w.setLayout(forms)
         lay.addWidget(forms_w)
 
@@ -1094,14 +1110,24 @@ class MainWindow(QMainWindow):
             lab = QLabel(placeholder); lab.setObjectName("fieldLabel")
             if kind == "combo":
                 w = QComboBox(); w.addItems(["Custom", "LangChain", "CrewAI", "AutoGen"])
+            elif kind == "agent":
+                w = QComboBox(); w.addItem("Select registered agent", "")
+                for agent in self._agents_cache:
+                    w.addItem(f"{agent.get('name', 'Unnamed')} · {str(agent.get('agent_id', ''))[:12]}", agent.get('agent_id', ''))
+                w.setMinimumWidth(300)
+                w.setProperty("agent_selector", True)
+                self._agent_selectors.append(w)
+            elif kind == "multiline":
+                w = QPlainTextEdit(); w.setPlaceholderText(placeholder); w.setMinimumHeight(72)
             else:
-                w = QLineEdit(); w.setPlaceholderText(placeholder)
+                w = QLineEdit(); w.setPlaceholderText(placeholder); w.setMinimumWidth(300)
             inputs[key] = w
             rows.addWidget(lab); rows.addWidget(w)
         btn = QPushButton(run_label); btn.setObjectName("primary")
 
         def _go():
-            vals = {k: (w.currentText() if isinstance(w, QComboBox) else w.text().strip())
+            vals = {k: (w.currentData() if w.property("agent_selector") else w.currentText()) if isinstance(w, QComboBox)
+                    else w.toPlainText().strip() if isinstance(w, QPlainTextEdit) else w.text().strip()
                     for k, w in inputs.items()}
             args = build_args(vals)
             if args is None:
@@ -1111,29 +1137,52 @@ class MainWindow(QMainWindow):
             self.console.run(args)
         btn.clicked.connect(_go)
         rows.addWidget(btn)
-        wrap = QWidget(); wrap.setLayout(rows)
+        wrap = QWidget(); wrap.setLayout(rows); wrap.setMinimumWidth(430)
         return _card(wrap, title=title)
 
     def _form_register(self) -> QWidget:
         return self._form("Register agent",
-                          [("name", "Agent name", "text"), ("type", "Framework", "combo")],
+                          [("name", "Agent name", "text"), ("type", "Framework", "combo"),
+                           ("capabilities", "Capabilities (comma-separated)", "text"),
+                           ("description", "Description (optional)", "text")],
                           "Register",
-                          lambda v: ["agent", "register", v["name"] or "new-agent", "--type", v["type"]])
+                          lambda v: (["agent", "register", v["name"] or "new-agent", "--type", v["type"]]
+                                    + (["--capabilities", v["capabilities"]] if v["capabilities"] else [])
+                                    + (["--desc", v["description"]] if v["description"] else [])))
 
     def _form_commission(self) -> QWidget:
         return self._form("Commission (set mandate)",
-                          [("agent", "Agent name or id", "text"),
-                           ("goal", "Commissioned goal", "text"),
-                           ("approve", "Approved actions (comma)", "text")],
+                          [("agent", "Registered agent", "agent"),
+                           ("goal", "Commissioned goal", "multiline"),
+                           ("approve", "Approved actions (comma)", "text"),
+                           ("forbid", "Forbidden actions (comma)", "text"),
+                           ("expires", "Expires in minutes (optional)", "text")],
                           "Commission",
                           lambda v: ["agent", "commission", v["agent"], "--goal", v["goal"]]
-                                    + (["--approve-actions", v["approve"]] if v["approve"] else []))
+                                    + (["--approve-actions", v["approve"]] if v["approve"] else [])
+                                    + (["--forbid-actions", v["forbid"]] if v["forbid"] else [])
+                                    + (["--expires-minutes", v["expires"]] if v["expires"] else []))
+
+    def _form_agent_controls(self) -> QWidget:
+        return self._form("Agent controls",
+                          [("agent", "Registered agent", "agent"),
+                           ("capability", "Capability to add (optional)", "text")],
+                          "Add capability",
+                          lambda v: ["agent", "add-cap", v["agent"], v["capability"]]
+                                    if v["agent"] and v["capability"] else None)
 
     def _form_run(self) -> QWidget:
         return self._form("Run an action through ITCD",
-                          [("agent", "Agent name or id", "text"), ("cmd", "Command", "text")],
+                          [("agent", "Registered agent", "agent"),
+                           ("action", "Action name", "text"),
+                           ("resource", "Target resource", "text"),
+                           ("intent", "Why is the agent doing this?", "multiline"),
+                           ("cmd", "Command to execute", "multiline")],
                           "Run",
-                          lambda v: ["run", v["agent"], v["cmd"]])
+                          lambda v: (["run", v["agent"], "--action", v["action"] or "execute",
+                                      "--resource", v["resource"] or "shell",
+                                      "--intent", v["intent"] or "Execute command", v["cmd"]]
+                                     if v["agent"] and v["cmd"] else None))
 
     def _form_cloud_enroll(self) -> QWidget:
         return self._form("Enroll with cloud console",
@@ -1254,18 +1303,44 @@ class MainWindow(QMainWindow):
 
     def _fill_agents_table(self, agents: list) -> None:
         self._agents_cache = agents
+        for selector in getattr(self, "_agent_selectors", []):
+            selected = selector.currentData()
+            selector.blockSignals(True)
+            selector.clear(); selector.addItem("Select registered agent", "")
+            for agent in agents:
+                selector.addItem(f"{agent.get('name', 'Unnamed')} · {str(agent.get('agent_id', ''))[:12]}", agent.get('agent_id', ''))
+            if selected:
+                idx = selector.findData(selected)
+                if idx >= 0: selector.setCurrentIndex(idx)
+            selector.blockSignals(False)
         self.agents_table.setRowCount(len(agents))
         for row, a in enumerate(agents):
+            contract = a.get("agent_contract") or {}
+            container = a.get("container") or {}
+            live = container.get("live") or {}
+            cpu = live.get("cpu_percent")
+            memory = live.get("memory_mb")
+            memory_limit = live.get("memory_limit_mb") or container.get("memory_limit_mb")
+            cpu_text = f"{cpu:.1f}%" if isinstance(cpu, (int, float)) else "—"
+            memory_text = (f"{memory:.0f}/{memory_limit:.0f} MB"
+                           if isinstance(memory, (int, float)) and isinstance(memory_limit, (int, float))
+                           else "—")
             self.agents_table.setItem(row, 0, QTableWidgetItem(str(a.get("name", ""))))
-            self.agents_table.setItem(row, 1, QTableWidgetItem(str(a.get("framework", "") or a.get("type", ""))))
-            self.agents_table.setItem(row, 2, QTableWidgetItem(str(a.get("source", ""))))
-            self.agents_table.setItem(row, 3, QTableWidgetItem(str(a.get("status", ""))))
-            self.agents_table.setItem(row, 4, QTableWidgetItem(str(a.get("agent_id", ""))[:12]))
+            self.agents_table.setItem(row, 1, QTableWidgetItem(str(contract.get("framework") or a.get("framework", "") or a.get("type", ""))))
+            self.agents_table.setItem(row, 2, QTableWidgetItem(str(contract.get("project_name", "—"))))
+            self.agents_table.setItem(row, 3, QTableWidgetItem(cpu_text))
+            self.agents_table.setItem(row, 4, QTableWidgetItem(memory_text))
+            self.agents_table.setItem(row, 5, QTableWidgetItem(str(container.get("status", "none"))))
+            self.agents_table.setItem(row, 6, QTableWidgetItem(str(a.get("status", ""))))
+            self.agents_table.setItem(row, 7, QTableWidgetItem(str(a.get("agent_id", ""))[:12]))
 
     def _load_discovered_agents(self) -> None:
         # Manual refresh button (Agents page) — registered inventory, with a
         # fall-back to the live discovery scan on older daemons.
         agents = self.app.client.registered_agents() or self.app.client.discovered_agents() or []
+        contracts = {c.get("agent_id"): c for c in self.app.client.agent_contracts()}
+        agents = [{**a, "agent_contract": contracts.get(a.get("agent_id"))}
+                  for a in agents]
         self._fill_agents_table(agents)
 
     def handle_alert(self, alert: dict) -> None:
