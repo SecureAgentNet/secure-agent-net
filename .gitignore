@@ -39,3 +39,5 @@ backups/
 .idea/
 .vscode/
 .DS_Store
+# Email agent runtime output — not source code, don't commit
+examples/email_agent/drafts/
