@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from secureagentnet.integrations.wrappers.client import InterceptClient, format_denial
+from secureagentnet.integrations.wrappers.client import InterceptClient, format_denial, is_allowed
 
 
 try:
@@ -55,10 +55,9 @@ class SecureAgentNetCrewAITool(CrewAIBaseTool):
             payload=kwargs,
         )
 
-        if result.get("status") == "blocked":
+        # Default-deny: run the real tool only on an explicit approval.
+        if not is_allowed(result):
             return format_denial(result)
-        if result.get("status") == "error":
-            return f"[ERROR] {result.get('reason', 'unknown error')}"
 
         try:
             return str(self.wrapped_callable(*args, **kwargs))

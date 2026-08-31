@@ -11,13 +11,45 @@ from secureagentnet.daemon.config import get_daemon_settings
 logger = logging.getLogger("SecureAgentNet.SDK")
 
 
-def format_denial(result: dict) -> str:
-    """Render a gateway denial for an agent's tool output.
+# The one verdict that permits a governed tool to run. Everything else — a block,
+# an escalation to human review, an infrastructure error, or any status added to
+# the pipeline later — must not execute.
+ALLOWED_STATUS = "success"
 
-    Includes the pipeline's remediation lines when it supplied them, so a blocked
-    call tells the developer how to authorise it instead of just refusing.
+
+def is_allowed(result: dict) -> bool:
+    """True only for an explicit approval.
+
+    Deliberately an allow-list. The wrappers used to test for the two refusal
+    statuses they knew about and execute otherwise, so ``escalated`` — the verdict
+    DECIDE returns when it parks an action for human approval — matched neither
+    branch and the tool ran anyway. The pipeline had already denied the action and
+    torn down its sandbox unexecuted; the tool body then ran locally regardless.
+    Any status this function does not recognise now refuses.
     """
-    message = f"[BLOCKED by SecureAgentNet] {result.get('reason', 'blocked by security policy')}"
+    return result.get("status") == ALLOWED_STATUS
+
+
+def format_denial(result: dict) -> str:
+    """Render a non-approval for an agent's tool output.
+
+    Includes the pipeline's remediation lines when it supplied them, so a refusal
+    tells the developer how to authorise the call instead of just saying no.
+    """
+    status = str(result.get("status") or "unknown")
+    reason = result.get("reason") or "refused by security policy"
+
+    if status == "escalated":
+        request_id = (result.get("metadata") or {}).get("hitl_request_id", "")
+        message = f"[HELD by SecureAgentNet — awaiting human approval] {reason}"
+        if request_id:
+            message += (f"\nReview it with:\n  san hitl approve {request_id}"
+                        f"\n  san hitl deny {request_id}")
+    elif status == "error":
+        message = f"[ERROR] {reason}"
+    else:
+        message = f"[BLOCKED by SecureAgentNet] {reason}"
+
     remediation = result.get("remediation") or []
     if remediation:
         message += "\n" + "\n".join(str(line) for line in remediation)
