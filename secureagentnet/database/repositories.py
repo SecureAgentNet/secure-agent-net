@@ -462,6 +462,133 @@ class MandateRepository:
         return dt
 
 
+class HITLRepository:
+    """DB-backed repository for human-in-the-loop approval requests.
+
+    Escalations are raised in one process and resolved in another, so the queue
+    has to outlive the process that created it.
+    """
+
+    @classmethod
+    def _row_to_dict(cls, r) -> dict:
+        return {
+            "request_id": str(r.request_id),
+            "agent_id": str(r.agent_id) if r.agent_id else None,
+            "action_name": r.action_name,
+            "target_resource": r.target_resource,
+            "intent_summary": r.intent_summary,
+            "risk_score": r.risk_score,
+            "reason": r.reason,
+            "status": r.status,
+            "created_at": _iso(r.created_at),
+            "decision_at": _iso(r.decision_at),
+            "decided_by": r.decided_by,
+        }
+
+    @classmethod
+    def save(cls, req: dict) -> bool:
+        """Insert or update a request row keyed by request_id."""
+        try:
+            with get_db_session() as session:
+                rid = uuid.UUID(str(req["request_id"]))
+                row = session.get(models.HITLRequest, rid)
+                agent_id = req.get("agent_id")
+                agent_uuid = uuid.UUID(agent_id) if _is_uuid(agent_id) else None
+                if row is None:
+                    session.add(models.HITLRequest(
+                        request_id=rid,
+                        agent_id=agent_uuid,
+                        action_name=req["action_name"],
+                        target_resource=req.get("target_resource"),
+                        intent_summary=req.get("intent_summary"),
+                        risk_score=req.get("risk_score"),
+                        reason=req.get("reason"),
+                        status=req.get("status", "pending"),
+                        created_at=_parse_dt(req.get("created_at")) or datetime.now(timezone.utc),
+                        decision_at=_parse_dt(req.get("decision_at")),
+                        decided_by=req.get("decided_by"),
+                    ))
+                else:
+                    row.status = req.get("status", row.status)
+                    row.decision_at = _parse_dt(req.get("decision_at"))
+                    row.decided_by = req.get("decided_by")
+            return True
+        except Exception as e:
+            logger.warning("Failed to persist HITL request: %s", e)
+            return False
+
+    @classmethod
+    def get(cls, request_id: str) -> Optional[dict]:
+        try:
+            with get_db_session() as session:
+                row = session.get(models.HITLRequest, uuid.UUID(str(request_id)))
+                return cls._row_to_dict(row) if row else None
+        except Exception:
+            return None
+
+    @classmethod
+    def list_all(cls, status: Optional[str] = None, limit: int = 100) -> list:
+        """Most-recent-first requests, optionally filtered by status."""
+        try:
+            with get_db_session() as session:
+                stmt = select(models.HITLRequest)
+                if status:
+                    stmt = stmt.where(models.HITLRequest.status == status)
+                rows = session.execute(
+                    stmt.order_by(models.HITLRequest.created_at.desc()).limit(limit)
+                ).scalars().all()
+                return [cls._row_to_dict(r) for r in rows]
+        except Exception:
+            return []
+
+    @classmethod
+    def set_decision(cls, request_id: str, status: str, operator: str) -> Optional[dict]:
+        """Resolve a request. Returns None if it is missing or already decided,
+        so a second approve/deny cannot overwrite the first."""
+        try:
+            with get_db_session() as session:
+                row = session.get(models.HITLRequest, uuid.UUID(str(request_id)))
+                if row is None or row.status != "pending":
+                    return None
+                row.status = status
+                row.decided_by = operator
+                row.decision_at = datetime.now(timezone.utc)
+                session.flush()
+                return cls._row_to_dict(row)
+        except Exception as e:
+            logger.warning("Failed to record HITL decision: %s", e)
+            return None
+
+    @classmethod
+    def expire_stale(cls, older_than_seconds: int) -> int:
+        """Mark pending requests older than the timeout as timed out."""
+        cutoff = datetime.now(timezone.utc).timestamp() - older_than_seconds
+        expired = 0
+        try:
+            with get_db_session() as session:
+                rows = session.execute(
+                    select(models.HITLRequest)
+                    .where(models.HITLRequest.status == "pending")
+                ).scalars().all()
+                for r in rows:
+                    created = r.created_at
+                    if created is not None and created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    if created is not None and created.timestamp() < cutoff:
+                        r.status = "timed_out"
+                        r.decided_by = "timeout"
+                        r.decision_at = datetime.now(timezone.utc)
+                        expired += 1
+        except Exception:
+            return 0
+        return expired
+
+
+def _iso(val) -> Optional[str]:
+    dt = _parse_dt(val)
+    return dt.isoformat() if dt else None
+
+
 def _parse_dt(val) -> Optional[datetime]:
     if val is None:
         return None

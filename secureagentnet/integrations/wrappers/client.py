@@ -11,6 +11,19 @@ from secureagentnet.daemon.config import get_daemon_settings
 logger = logging.getLogger("SecureAgentNet.SDK")
 
 
+def format_denial(result: dict) -> str:
+    """Render a gateway denial for an agent's tool output.
+
+    Includes the pipeline's remediation lines when it supplied them, so a blocked
+    call tells the developer how to authorise it instead of just refusing.
+    """
+    message = f"[BLOCKED by SecureAgentNet] {result.get('reason', 'blocked by security policy')}"
+    remediation = result.get("remediation") or []
+    if remediation:
+        message += "\n" + "\n".join(str(line) for line in remediation)
+    return message
+
+
 class InterceptClient:
     """Minimal synchronous client for the daemon intercept endpoint."""
 

@@ -18,12 +18,12 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QButtonGroup, QComboBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QScrollArea, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
+    QScrollArea, QSizePolicy, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget,
 )
 
 from secureagentnet.desktop.console import SanConsole
-from secureagentnet.desktop.theme import COLORS, STYLESHEET, PHASES
+from secureagentnet.desktop.theme import COLORS, STYLESHEET, PHASES, MONO
 
 if TYPE_CHECKING:
     from secureagentnet.desktop.app import DesktopApplication
@@ -37,26 +37,26 @@ _STATE_COLOR = {
 
 # (accent, fill) per ITCD phase — used for tinted timeline / activity rows.
 _PHASE_STYLE = {
-    "IDENTIFY": ("#16a34a", "#ecfdf5"), "TRACK": ("#2563eb", "#eff6ff"),
-    "CONTAIN": ("#7c3aed", "#f5f3ff"), "DECIDE": ("#dc2626", "#fef2f2"),
-    "EXECUTE": ("#16a34a", "#ecfdf5"),
+    "IDENTIFY": (COLORS["identify"], "#0f2318"), "TRACK": (COLORS["track"], "#101b2b"),
+    "CONTAIN": (COLORS["contain"], "#191430"), "DECIDE": (COLORS["decide"], "#2a1412"),
+    "EXECUTE": (COLORS["identify"], "#0f2318"),
 }
 # (fg, bg) per status/verdict — used for badges.
+_OK = (COLORS["green"], COLORS["green_wash"])
+_WARN = (COLORS["amber"], COLORS["amber_wash"])
+_BAD = (COLORS["red"], COLORS["red_wash"])
 _STATUS_STYLE = {
-    "SUCCESS": ("#15803d", "#dcfce7"), "APPROVED": ("#15803d", "#dcfce7"),
-    "PERMIT": ("#15803d", "#dcfce7"), "ACTIVE": ("#15803d", "#dcfce7"),
-    "REDACTED": ("#b45309", "#fef3c7"), "WARNING": ("#b45309", "#fef3c7"),
-    "ESCALATE": ("#b45309", "#fef3c7"), "STALE": ("#b45309", "#fef3c7"),
-    "DENIED": ("#b91c1c", "#fee2e2"), "FAILED": ("#b91c1c", "#fee2e2"),
-    "CRITICAL": ("#b91c1c", "#fee2e2"), "ERROR": ("#b91c1c", "#fee2e2"),
-    "ROGUE": ("#b91c1c", "#fee2e2"), "KILL-SWITCH": ("#b91c1c", "#fee2e2"),
-    "INFO": ("#1d4ed8", "#dbeafe"),
+    "SUCCESS": _OK, "APPROVED": _OK, "PERMIT": _OK, "ACTIVE": _OK,
+    "REDACTED": _WARN, "WARNING": _WARN, "ESCALATE": _WARN, "STALE": _WARN,
+    "DENIED": _BAD, "FAILED": _BAD, "CRITICAL": _BAD, "ERROR": _BAD,
+    "ROGUE": _BAD, "KILL-SWITCH": _BAD,
+    "INFO": (COLORS["blue"], COLORS["blue_wash"]),
 }
 
 
 def _set_badge(label: QLabel, text: str, kind: str | None = None) -> None:
     key = (kind or text).upper()
-    fg, bg = _STATUS_STYLE.get(key, ("#475569", "#eef2f7"))
+    fg, bg = _STATUS_STYLE.get(key, (COLORS["muted"], COLORS["surface_2"]))
     label.setText(text.upper())
     label.setStyleSheet(
         f"color:{fg}; background:{bg}; border-radius:9px; padding:2px 9px;"
@@ -72,43 +72,88 @@ def _badge(text: str, kind: str | None = None) -> QLabel:
 
 
 class StatusPoller(QThread):
-    """Polls the daemon on a background thread so the UI never blocks on I/O."""
+    """Polls the daemon on a background thread so the UI never blocks on I/O.
+
+    Endpoints are polled on three cadences rather than one, because they do not
+    cost the same and do not change at the same rate:
+
+      * live   (1.5s) — /v1/status and the HITL queue: in-memory on the daemon,
+                        and the numbers a watching operator expects to move.
+      * agents (4s)   — the inventory; touches Docker per container, so it is not
+                        worth re-fetching several times a second.
+      * health (15s)  — dependency probes. Genuinely expensive when something is
+                        down, and a service does not flap second-to-second.
+
+    Each cycle emits a *complete* snapshot by merging fresh values over the last
+    known ones, so the slower lanes never blank the panels they feed.
+    """
 
     updated = Signal(dict)
 
-    def __init__(self, client, interval: float = 5.0, parent=None):
+    # (seconds) per-lane intervals
+    LIVE_INTERVAL = 1.5
+    AGENTS_INTERVAL = 4.0
+    HEALTH_INTERVAL = 15.0
+
+    def __init__(self, client, interval: float = LIVE_INTERVAL, parent=None):
         super().__init__(parent)
         self.client = client
         self.interval = interval
         self._running = True
+        self._snapshot = {"alive": False, "status": None, "agents": [], "health": {}, "hitl": []}
+        self._seeded = False
+
+    def _fetch_agents(self) -> list:
+        # Registered agents are the persistent inventory; fall back to the live
+        # discovery scan if the daemon predates the /v1/agents route.
+        agents = self.client.registered_agents() or self.client.discovered_agents() or []
+        contracts = {c.get("agent_id"): c for c in self.client.agent_contracts()}
+        return [{**a, "agent_contract": contracts.get(a.get("agent_id"))} for a in agents]
 
     def run(self) -> None:
         import time
+        last_agents = 0.0
+        last_health = 0.0
+
         while self._running:
-            data = {"alive": False, "status": None, "agents": [], "health": {}, "hitl": []}
+            cycle_started = time.monotonic()
             try:
-                if self.client.is_alive():
-                    data["alive"] = True
-                    data["status"] = self.client.status() or {}
-                    # Registered agents are the persistent inventory; fall back to the
-                    # live discovery scan if the daemon predates the /v1/agents route.
-                    agents = self.client.registered_agents()
-                    if not agents:
-                        agents = self.client.discovered_agents()
-                    contracts = {c.get("agent_id"): c for c in self.client.agent_contracts()}
-                    agents = [{**a, "agent_contract": contracts.get(a.get("agent_id"))}
-                              for a in (agents or [])]
-                    data["agents"] = agents or []
-                    data["health"] = self.client.service_health() or {}
-                    data["hitl"] = self.client.hitl_pending() or []
+                # status() doubles as the liveness check — a separate /health
+                # round-trip first only added latency to every single cycle.
+                status = self.client.status()
+                if status is None:
+                    self._snapshot = {"alive": False, "status": None,
+                                      "agents": [], "health": {}, "hitl": []}
+                else:
+                    self._snapshot["alive"] = True
+                    self._snapshot["status"] = status
+                    self._snapshot["hitl"] = self.client.hitl_pending() or []
+
+                    if not self._seeded:
+                        # One-shot backfill so Activity and Forensics open with the
+                        # history that predates this launch, not an empty table.
+                        self._snapshot["events_seed"] = self.client.recent_events(200)
+                        self._seeded = True
+                    else:
+                        self._snapshot.pop("events_seed", None)
+
+                    now = time.monotonic()
+                    if now - last_agents >= self.AGENTS_INTERVAL or not self._snapshot["agents"]:
+                        self._snapshot["agents"] = self._fetch_agents()
+                        last_agents = now
+                    if now - last_health >= self.HEALTH_INTERVAL or not self._snapshot["health"]:
+                        self._snapshot["health"] = self.client.service_health() or {}
+                        last_health = now
             except Exception:
                 pass
-            self.updated.emit(data)
-            # sleep in short slices so stop() is responsive
-            for _ in range(int(self.interval * 5)):
-                if not self._running:
-                    break
-                time.sleep(0.2)
+
+            self.updated.emit(dict(self._snapshot))
+
+            # Sleep only the remainder of the interval, in slices, so a slow cycle
+            # does not compound into drift and stop() stays responsive.
+            deadline = cycle_started + self.interval
+            while self._running and time.monotonic() < deadline:
+                time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
 
     def stop(self) -> None:
         self._running = False
@@ -175,7 +220,12 @@ def _card(*children: QWidget, title: str | None = None) -> QWidget:
     box = QFrame(); box.setObjectName("card")
     lay = QVBoxLayout(box); lay.setContentsMargins(18, 16, 18, 16); lay.setSpacing(10)
     if title:
-        t = QLabel(title); t.setObjectName("sectionTitle"); lay.addWidget(t)
+        t = QLabel(title); t.setObjectName("sectionTitle")
+        # Pin the title to the top. With a Preferred vertical policy QVBoxLayout
+        # hands the label a share of any spare height and centres it inside that,
+        # so in a card taller than its content the heading drifted downward.
+        t.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        lay.addWidget(t)
     for c in children:
         lay.addWidget(c)
     return box
@@ -256,7 +306,9 @@ class Sparkline(QWidget):
         self._data: deque = deque([0.0] * maxlen, maxlen=maxlen)
         self._y_max = y_max
         self.setMinimumHeight(56)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Expand vertically too: pinned to a fixed 56px the trace sat on the floor
+        # of a taller card with dead space above it.
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def push(self, value: float, y_max: float | None = None) -> None:
         if y_max is not None and y_max > 0:
@@ -294,8 +346,19 @@ class Sparkline(QWidget):
         grad.setColorAt(0, c0); grad.setColorAt(1, c1)
         p.fillPath(fill, QBrush(grad))
 
+        base = QColor(self._color); base.setAlpha(38)
+        p.setPen(QPen(base, 1))
+        p.drawLine(0, int(h - 1), int(w), int(h - 1))
+
         p.setPen(QPen(self._color, 2))
         p.drawPath(line)
+
+        # "Now" marker: the newest sample, so the eye lands on the current value.
+        ex, ey = pt(n - 1, self._data[-1])
+        halo = QColor(self._color); halo.setAlpha(60)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(halo)); p.drawEllipse(QRectF(ex - 4.5, ey - 4.5, 9, 9))
+        p.setBrush(QBrush(self._color)); p.drawEllipse(QRectF(ex - 2, ey - 2, 4, 4))
         p.end()
 
 
@@ -344,7 +407,7 @@ class MetricGauge(QFrame):
         self.sub.setText(sub_text)
         color = self._bar_color(pct)
         self.bar.setStyleSheet(
-            "QProgressBar{background:#eef2f7; border:none; border-radius:4px;}"
+            f"QProgressBar{{background:{COLORS['surface_2']}; border:none; border-radius:4px;}}"
             f"QProgressBar::chunk{{background:{color}; border-radius:4px;}}"
         )
         self._anim.stop()
@@ -402,7 +465,7 @@ class MainWindow(QMainWindow):
 
         brand = QHBoxLayout(); brand.setSpacing(8)
         logo = QLabel(); logo.setFixedSize(26, 26)
-        logo.setStyleSheet("background:#0f766e; border-radius:7px;")
+        logo.setStyleSheet(f"background:{COLORS['primary']}; border-radius:7px;")
         txt = QVBoxLayout(); txt.setSpacing(0)
         name = QLabel("SecureAgentNet"); name.setObjectName("logoText")
         sub = QLabel("ENDPOINT SECURITY"); sub.setObjectName("logoSub")
@@ -459,7 +522,7 @@ class MainWindow(QMainWindow):
 
         self.badge = StatusBadge()
         banner_text = QVBoxLayout(); banner_text.setSpacing(2)
-        self.banner_title = QLabel("Protected"); self.banner_title.setStyleSheet("font-size:22px; font-weight:700; color:#0f172a;")
+        self.banner_title = QLabel("Protected"); self.banner_title.setObjectName("bannerTitle")
         self.banner_sub = QLabel("The ITCD pipeline is guarding every agent action."); self.banner_sub.setObjectName("pageSub")
         banner_text.addStretch(); banner_text.addWidget(self.banner_title); banner_text.addWidget(self.banner_sub); banner_text.addStretch()
         banner_row = QHBoxLayout(); banner_row.setSpacing(18)
@@ -507,6 +570,7 @@ class MainWindow(QMainWindow):
         self._sec_alert_empty = QLabel("No alerts yet — the pipeline is quiet.")
         self._sec_alert_empty.setObjectName("pageSub")
         self.sec_alerts_box.addWidget(self._sec_alert_empty)
+        self.sec_alerts_box.addStretch()
         holder = QWidget(); holder.setLayout(self.sec_alerts_box)
         return _card(holder, title="Security alerts")
 
@@ -516,7 +580,7 @@ class MainWindow(QMainWindow):
         for svc in ("Database", "Vault", "Ollama LLM", "Docker", "MCP Gateway"):
             row = QHBoxLayout()
             dot = QLabel("●"); dot.setStyleSheet(f"color:{COLORS['muted']}; font-size:13px;")
-            name = QLabel(svc); name.setStyleSheet("font-size:13px; color:#1f2937;")
+            name = QLabel(svc); name.setStyleSheet(f"font-size:13px; color:{COLORS['ink']};")
             state = QLabel("checking…")
             state.setStyleSheet(f"color:{COLORS['muted']}; font-size:12px;")
             row.addWidget(dot); row.addWidget(name); row.addStretch(); row.addWidget(state)
@@ -539,8 +603,9 @@ class MainWindow(QMainWindow):
         self.host_anomaly_banner.setWordWrap(True)
         self.host_anomaly_banner.setVisible(False)
         self.host_anomaly_banner.setStyleSheet(
-            "QLabel{background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;"
-            "border-radius:8px; padding:10px 14px; font-weight:600;}")
+            f"QLabel{{background:{COLORS['red_wash']}; color:{COLORS['red']};"
+            f"border:1px solid #5a2a26; border-radius:8px; padding:10px 14px;"
+            f"font-weight:600;}}")
         lay.addWidget(self.host_anomaly_banner)
 
         # System info strip
@@ -665,14 +730,14 @@ class MainWindow(QMainWindow):
 
     # ── Agent detail ─────────────────────────────────────────────
     def _res_label(self, text: str) -> QLabel:
-        l = QLabel(text); l.setStyleSheet("font-size:11px; color:#64748b; font-weight:600;")
+        l = QLabel(text); l.setStyleSheet(f"font-size:11px; color:{COLORS['muted']}; font-weight:600;")
         return l
 
     def _res_bar(self, color: str) -> QProgressBar:
         b = QProgressBar(); b.setRange(0, 100); b.setValue(0); b.setFixedHeight(18)
         b.setStyleSheet(
-            "QProgressBar{border:none; background:#eef2f7; border-radius:6px;"
-            "text-align:center; font-size:10px; color:#0f172a;}"
+            f"QProgressBar{{border:none; background:{COLORS['surface_2']}; border-radius:6px;"
+            f"text-align:center; font-size:10px; color:{COLORS['ink']};}}"
             f"QProgressBar::chunk{{background:{color}; border-radius:6px;}}")
         return b
 
@@ -692,7 +757,7 @@ class MainWindow(QMainWindow):
         cols = QHBoxLayout(); cols.setSpacing(16)
         self.detail_info = QLabel("—")
         self.detail_info.setStyleSheet(
-            "font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:12px; color:#1f2937;")
+            f"font-family:{MONO}; font-size:12px; color:{COLORS['ink']};")
         self.detail_info.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.detail_info.setAlignment(Qt.AlignTop)
         self.detail_info.setWordWrap(True)
@@ -700,14 +765,14 @@ class MainWindow(QMainWindow):
 
         res = QVBoxLayout(); res.setSpacing(8)
         res.addWidget(self._res_label("CPU usage"))
-        self.detail_cpu = self._res_bar("#2563eb"); res.addWidget(self.detail_cpu)
+        self.detail_cpu = self._res_bar(COLORS["track"]); res.addWidget(self.detail_cpu)
         res.addWidget(self._res_label("Memory usage"))
-        self.detail_mem = self._res_bar("#7c3aed"); res.addWidget(self.detail_mem)
+        self.detail_mem = self._res_bar(COLORS["contain"]); res.addWidget(self.detail_mem)
         self.detail_net = QLabel("Network I/O\n  RX: —    TX: —")
-        self.detail_net.setStyleSheet("font-family:monospace; font-size:11px; color:#64748b;")
+        self.detail_net.setStyleSheet(f"font-family:{MONO}; font-size:11px; color:{COLORS['muted']};")
         res.addWidget(self.detail_net)
         self.detail_container = QLabel("Container: —")
-        self.detail_container.setStyleSheet("font-family:monospace; font-size:11px; color:#64748b;")
+        self.detail_container.setStyleSheet(f"font-family:{MONO}; font-size:11px; color:{COLORS['muted']};")
         res.addWidget(self.detail_container); res.addStretch()
         res_w = QWidget(); res_w.setLayout(res)
         cols.addWidget(_card(res_w, title="Container resources"), 1)
@@ -716,7 +781,7 @@ class MainWindow(QMainWindow):
         for t in ("Read-only filesystem", "Seccomp profile active", "AppArmor enforced",
                   "Network isolated", "Capabilities dropped: ALL"):
             l = QLabel("✓  " + t)
-            l.setStyleSheet("color:#16a34a; font-family:monospace; font-size:12px;")
+            l.setStyleSheet(f"color:{COLORS['green']}; font-family:{MONO}; font-size:12px;")
             self.detail_sec.addWidget(l)
         self.detail_sec.addStretch()
         sec_w = QWidget(); sec_w.setLayout(self.detail_sec)
@@ -729,21 +794,27 @@ class MainWindow(QMainWindow):
         return page
 
     def _timeline_row(self, phase: str, detail: str) -> QWidget:
-        fg, bg = _PHASE_STYLE.get(phase.upper(), ("#475569", "#eef2f7"))
+        fg, bg = _PHASE_STYLE.get(phase.upper(), (COLORS["muted"], COLORS["surface_2"]))
         f = QFrame(); f.setStyleSheet(f"background:{bg}; border-radius:8px;")
         v = QVBoxLayout(f); v.setContentsMargins(12, 8, 12, 8); v.setSpacing(1)
         top = QLabel(phase.upper())
-        top.setStyleSheet(f"color:{fg}; font-weight:700; font-size:11px; font-family:monospace;")
+        top.setStyleSheet(f"color:{fg}; font-weight:700; font-size:11px; font-family:{MONO};")
         sub = QLabel(detail)
-        sub.setStyleSheet("color:#1f2937; font-size:11px; font-family:monospace;")
+        sub.setStyleSheet(f"color:{COLORS['ink']}; font-size:11px; font-family:{MONO};")
         v.addWidget(top); v.addWidget(sub)
         return f
 
     def _clear_layout(self, layout) -> None:
         while layout.count():
             item = layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            w = item.widget()
+            if w is not None:
+                # takeAt() only detaches from the layout; the widget stays a child
+                # with its old geometry and keeps painting until deleteLater() is
+                # serviced. Reparenting first stops it drawing this frame, which is
+                # what left old rows ghosting under the new ones on re-open.
+                w.setParent(None)
+                w.deleteLater()
 
     def _open_agent_detail(self, row: int, _col: int = 0) -> None:
         if 0 <= row < len(self._agents_cache):
@@ -755,6 +826,29 @@ class MainWindow(QMainWindow):
             return ""
         return (" (Excellent)" if t >= 90 else " (Good)" if t >= 70
                 else " (Fair)" if t >= 40 else " (Low)")
+
+    @staticmethod
+    def _mandate_lines(mandate: dict | None, contract: dict) -> str:
+        """Render the commissioned mandate — the goal DECIDE judges actions against.
+
+        Falls back to the framework contract's mandate string when the agent has no
+        commissioned mandate of its own.
+        """
+        if not mandate:
+            return f"Mandate        {contract.get('mandate') or '— (not commissioned)'}"
+        def fit(value: str, width: int = 26) -> str:
+            # The info card is a narrow monospace column; anything longer wraps and
+            # breaks the label/value alignment, so elide rather than let it reflow.
+            return value if len(value) <= width else value[:width - 1] + "…"
+
+        goal = fit(str(mandate.get("goal") or "—"))
+        approved = fit(", ".join(mandate.get("approved_actions") or []) or "—")
+        forbidden = fit(", ".join(mandate.get("forbidden_actions") or []) or "—")
+        expires = str(mandate.get("expires_at") or "")[:16] or "—"
+        return (f"Mandate        {goal}\n"
+                f"  approved     {approved}\n"
+                f"  forbidden    {forbidden}\n"
+                f"  expires      {expires}")
 
     def show_agent_detail(self, agent: dict) -> None:
         aid = str(agent.get("agent_id", ""))
@@ -795,7 +889,7 @@ class MainWindow(QMainWindow):
             f"Last seen      {str(d.get('last_seen', '') or '')[:19] or '—'}\n"
             f"Container ID   {str(cid)[:18]}\n"
             f"Capabilities   {', '.join(contract.get('capabilities') or []) or caps}\n"
-            f"Mandate        {contract.get('mandate') or '—'}")
+            f"{self._mandate_lines(d.get('mandate'), contract)}")
 
         # ── container resources ──
         live = d.get("live")
@@ -825,7 +919,7 @@ class MainWindow(QMainWindow):
         if isinstance(sp, dict):
             for label, val in sp.items():
                 ok = (val is True) or (isinstance(val, str) and val)
-                mark, color = ("✓", "#16a34a") if ok else ("✗", "#dc2626")
+                mark, color = ("✓", COLORS["green"]) if ok else ("✗", COLORS["red"])
                 text = f"{mark}  {label}" + (f": {val}" if isinstance(val, str) else "")
                 l = QLabel(text)
                 l.setStyleSheet(f"color:{color}; font-family:monospace; font-size:12px;")
@@ -834,7 +928,7 @@ class MainWindow(QMainWindow):
             for t in ("Read-only filesystem", "Seccomp profile active", "AppArmor enforced",
                       "Network isolated", "Capabilities dropped: ALL"):
                 l = QLabel("✓  " + t)
-                l.setStyleSheet("color:#16a34a; font-family:monospace; font-size:12px;")
+                l.setStyleSheet(f"color:{COLORS['green']}; font-family:{MONO}; font-size:12px;")
                 self.detail_sec.addWidget(l)
         self.detail_sec.addStretch()
 
@@ -915,7 +1009,7 @@ class MainWindow(QMainWindow):
                 self.forensic_table.setItem(r, c, QTableWidgetItem(str(val)))
             st = str(e.get("status", "INFO"))
             item = QTableWidgetItem(st.upper())
-            fg, _bg = _STATUS_STYLE.get(st.upper(), ("#475569", "#eef2f7"))
+            fg, _bg = _STATUS_STYLE.get(st.upper(), (COLORS["muted"], COLORS["surface_2"]))
             item.setForeground(QColor(fg))
             self.forensic_table.setItem(r, 4, item)
         self.forensic_count.setText(f"{len(events)} event(s)")
@@ -965,10 +1059,10 @@ class MainWindow(QMainWindow):
         self.hitl_detail.setWordWrap(True); self.hitl_detail.setAlignment(Qt.AlignTop)
         self.hitl_detail.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.hitl_detail.setStyleSheet(
-            "font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:12px; color:#1f2937;")
+            f"font-family:{MONO}; font-size:12px; color:{COLORS['ink']};")
         self.hitl_approve_btn = QPushButton("✓  Approve once")
         self.hitl_approve_btn.setStyleSheet(
-            "background:#16a34a; color:#fff; border:none; border-radius:8px;"
+            f"background:{COLORS['green']}; color:#06180d; border:none; border-radius:8px;"
             "padding:9px 16px; font-weight:600;")
         self.hitl_approve_btn.clicked.connect(lambda: self._hitl_decide(True))
         self.hitl_deny_btn = QPushButton("✕  Deny + log"); self.hitl_deny_btn.setObjectName("danger")
@@ -1021,10 +1115,11 @@ class MainWindow(QMainWindow):
                    f"  {req.get('action_name', '')} → {req.get('target_resource', '')}")
             b = QPushButton(txt); b.setCheckable(True); b.setCursor(Qt.PointingHandCursor)
             b.setStyleSheet(
-                "QPushButton{text-align:left; background:#fef2f2; border:1px solid #fecaca;"
-                "border-radius:10px; padding:10px; color:#1f2937;"
+                f"QPushButton{{text-align:left; background:{COLORS['red_wash']};"
+                f"border:1px solid #5a2a26;"
+                f"border-radius:10px; padding:10px; color:{COLORS['ink']};"
                 "font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:11px;}"
-                "QPushButton:checked{border:2px solid #dc2626; background:#fee2e2;}")
+                f"QPushButton:checked{{border:2px solid {COLORS['red']}; background:#3a1a17;}}")
             b.clicked.connect(lambda _=False, r=req: self._select_hitl(r))
             self.hitl_queue_box.addWidget(b)
         self.hitl_queue_box.addStretch()
@@ -1069,43 +1164,81 @@ class MainWindow(QMainWindow):
 
     # ── Commands (action panels + embedded console) ──────────────
     def _page_commands(self) -> QWidget:
-        page, lay = self._page_shell()
+        # This page holds more than fits: nine quick actions, four parameterised
+        # forms and a console. Laid out flat it overflowed the window, and a
+        # QVBoxLayout with nowhere to go compresses its children *past* their
+        # minimum — which is why the form labels and inputs were drawing on top of
+        # each other and the run buttons were slivers. The forms scroll, and a
+        # splitter lets the console be dragged as large as the operator wants.
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(28, 24, 28, 24); lay.setSpacing(16)
         lay.addWidget(self._page_header("Commands", "Every SecureAgentNet CLI command, from the GUI"))
 
-        # quick, no-argument actions
-        quick = QHBoxLayout(); quick.setSpacing(8)
-        for label, args in (("Doctor", ["doctor"]), ("List agents", ["agent", "list"]),
-                            ("Contracts", ["agent", "contracts"]),
-                            ("Audit log", ["view-logs"]), ("Metrics", ["metrics"]),
-                            ("Security status", ["security", "status"]),
-                            ("Containers", ["contain", "list"]),
-                            ("MCP tools", ["mcp", "list"]),
-                            ("Trust root", ["trust", "root"])):
+        upper = QWidget()
+        upper_lay = QVBoxLayout(upper)
+        upper_lay.setContentsMargins(0, 0, 0, 0); upper_lay.setSpacing(16)
+
+        # Quick, no-argument actions. A single QHBoxLayout of nine buttons cannot
+        # wrap, so its minimum width (~900px) became the minimum width of the whole
+        # page — which is what pushed the second form column off the right edge on
+        # a narrower window. A grid wraps instead.
+        quick = QGridLayout(); quick.setSpacing(8)
+        quick_actions = (("Doctor", ["doctor"]), ("List agents", ["agent", "list"]),
+                         ("Contracts", ["agent", "contracts"]),
+                         ("Audit log", ["view-logs"]), ("Metrics", ["metrics"]),
+                         ("Security status", ["security", "status"]),
+                         ("Containers", ["contain", "list"]),
+                         ("MCP tools", ["mcp", "list"]),
+                         ("Trust root", ["trust", "root"]))
+        per_row = 5
+        for i, (label, args) in enumerate(quick_actions):
             b = QPushButton(label); b.setObjectName("ghost")
+            b.setMinimumHeight(38)
+            b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             b.clicked.connect(lambda _=False, a=args: self.console.run(a))
-            quick.addWidget(b)
-        quick.addStretch()
+            quick.addWidget(b, i // per_row, i % per_row)
+        for col in range(per_row):
+            quick.setColumnStretch(col, 1)
         quick_w = QWidget(); quick_w.setLayout(quick)
-        lay.addWidget(_card(quick_w, title="Quick actions"))
+        upper_lay.addWidget(_card(quick_w, title="Quick actions"))
 
         # parameterised action forms
-        forms = QGridLayout(); forms.setSpacing(14)
+        forms = QGridLayout(); forms.setSpacing(16)
         forms.setColumnStretch(0, 1); forms.setColumnStretch(1, 1)
         forms.addWidget(self._form_register(), 0, 0)
         forms.addWidget(self._form_commission(), 0, 1)
         forms.addWidget(self._form_run(), 1, 0)
         forms.addWidget(self._form_agent_controls(), 1, 1)
         forms_w = QWidget(); forms_w.setLayout(forms)
-        lay.addWidget(forms_w)
+        upper_lay.addWidget(forms_w)
+        upper_lay.addStretch()
+
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(upper)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setStyleSheet("QScrollArea{background:transparent; border:none;}")
+        upper_lay.setContentsMargins(0, 0, 10, 0)   # room for the scrollbar
 
         self.console = SanConsole()
-        lay.addWidget(_card(self.console, title="Console"), 1)
+        console_card = _card(self.console, title="Console")
+        console_card.setMinimumHeight(300)
+
+        split = QSplitter(Qt.Vertical)
+        split.setChildrenCollapsible(False)
+        split.setHandleWidth(10)
+        split.addWidget(scroll)
+        split.addWidget(console_card)
+        split.setStretchFactor(0, 3)
+        split.setStretchFactor(1, 2)
+        split.setSizes([430, 360])
+        lay.addWidget(split, 1)
         return page
 
     def _form(self, title: str, fields: List[tuple], run_label: str,
               build_args: Callable[[dict], list]) -> QWidget:
         inputs: dict[str, QWidget] = {}
-        rows = QVBoxLayout(); rows.setSpacing(8)
+        rows = QVBoxLayout(); rows.setSpacing(9)
         for key, placeholder, kind in fields:
             lab = QLabel(placeholder); lab.setObjectName("fieldLabel")
             if kind == "combo":
@@ -1114,16 +1247,30 @@ class MainWindow(QMainWindow):
                 w = QComboBox(); w.addItem("Select registered agent", "")
                 for agent in self._agents_cache:
                     w.addItem(f"{agent.get('name', 'Unnamed')} · {str(agent.get('agent_id', ''))[:12]}", agent.get('agent_id', ''))
-                w.setMinimumWidth(300)
+                w.setMinimumWidth(240)
                 w.setProperty("agent_selector", True)
                 self._agent_selectors.append(w)
             elif kind == "multiline":
-                w = QPlainTextEdit(); w.setPlaceholderText(placeholder); w.setMinimumHeight(72)
+                w = QPlainTextEdit(); w.setPlaceholderText(placeholder); w.setMinimumHeight(80)
             else:
-                w = QLineEdit(); w.setPlaceholderText(placeholder); w.setMinimumWidth(300)
+                w = QLineEdit(); w.setPlaceholderText(placeholder); w.setMinimumWidth(240)
+            # A control with only a *preferred* height gets squeezed to nothing when
+            # its parent runs out of room. Pin the floor so a row always renders.
+            if not isinstance(w, QPlainTextEdit):
+                w.setMinimumHeight(36)
+                w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            lab.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             inputs[key] = w
-            rows.addWidget(lab); rows.addWidget(w)
+            # Label and field are one unit: grouping them in their own tight layout
+            # keeps the caption attached to the control it names.
+            field = QWidget()
+            fl = QVBoxLayout(field)
+            fl.setContentsMargins(0, 0, 0, 0); fl.setSpacing(5)
+            fl.addWidget(lab); fl.addWidget(w)
+            rows.addWidget(field)
         btn = QPushButton(run_label); btn.setObjectName("primary")
+        btn.setMinimumHeight(38)
+        btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         def _go():
             vals = {k: (w.currentData() if w.property("agent_selector") else w.currentText()) if isinstance(w, QComboBox)
@@ -1136,8 +1283,11 @@ class MainWindow(QMainWindow):
             self._select("commands")
             self.console.run(args)
         btn.clicked.connect(_go)
+        rows.addSpacing(4)
         rows.addWidget(btn)
-        wrap = QWidget(); wrap.setLayout(rows); wrap.setMinimumWidth(430)
+        rows.addStretch()
+        wrap = QWidget(); wrap.setLayout(rows); wrap.setMinimumWidth(340)
+        wrap.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         return _card(wrap, title=title)
 
     def _form_register(self) -> QWidget:
@@ -1216,7 +1366,7 @@ class MainWindow(QMainWindow):
             "The desktop app talks to the local daemon on this host. Start one with\n"
             "`secureagentnet-daemon` if the status reads offline."
         )
-        info.setStyleSheet("color:#44403c; font-size:13px;")
+        info.setStyleSheet(f"color:{COLORS['muted']}; font-size:13px;")
         lay.addWidget(_card(info, title="Connection"))
         lay.addStretch()
         return page
@@ -1253,10 +1403,44 @@ class MainWindow(QMainWindow):
         if self.badge._state != "threat":
             self._set_state("protected", "Protected",
                             "The ITCD pipeline is guarding every agent action.")
+        seed = data.get("events_seed")
+        if seed:
+            self._seed_activity(seed)
         agents = data.get("agents") or []
         self._fill_agents_table(agents)
         self._update_phase_cards(status, agents)
         self._on_hitl_update(data.get("hitl") or [])
+
+    def _seed_activity(self, events: list) -> None:
+        """Backfill Recent Activity and the forensic buffer from the audit trail.
+
+        Live alerts prepend to the same tables afterwards, so this only ever runs
+        once per launch and only fills what the WebSocket could not have seen.
+        """
+        rows = events[:60]
+        self.recent_table.setRowCount(0)
+        for e in rows:
+            ts = str(e.get("timestamp", ""))[:19]
+            phase = str(e.get("phase", "")).upper()
+            detail = e.get("detail") or e.get("event_type", "")
+            r = self.recent_table.rowCount()
+            self.recent_table.insertRow(r)
+            for i, v in enumerate([ts[11:] or ts, phase, str(detail)]):
+                item = QTableWidgetItem(v)
+                if i == 1:
+                    fg, _bg = _PHASE_STYLE.get(phase, (COLORS["muted"], ""))
+                    item.setForeground(QColor(fg))
+                self.recent_table.setItem(r, i, item)
+
+        self._event_buffer = [{
+            "time": str(e.get("timestamp", ""))[:19],
+            "agent": (e.get("agent_id") or "—")[:18],
+            "phase": str(e.get("phase", "")).upper(),
+            "event": str(e.get("event_type", ""))[:48],
+            "status": str(e.get("severity", "INFO")),
+        } for e in events[:200]]
+        if getattr(self, "forensic_table", None) is not None:
+            self._render_forensic(self._event_buffer)
 
     def _update_health(self, alive: bool, services: dict | None = None) -> None:
         """Render real per-service probe results from the daemon's /v1/health."""
@@ -1365,7 +1549,7 @@ class MainWindow(QMainWindow):
         for i, v in enumerate([ts[11:] or ts, phase, detail]):
             item = QTableWidgetItem(v)
             if i == 1:
-                fg, _bg = _PHASE_STYLE.get(phase, ("#475569", ""))
+                fg, _bg = _PHASE_STYLE.get(phase, (COLORS["muted"], ""))
                 item.setForeground(QColor(fg))
             self.recent_table.setItem(0, i, item)
         while self.recent_table.rowCount() > 60:
@@ -1397,13 +1581,19 @@ class MainWindow(QMainWindow):
                 placeholder.deleteLater()
             except RuntimeError:
                 pass  # already deleted in a previous (pre-fix) session
-        fg, bg = _STATUS_STYLE.get(sev.upper(), ("#1d4ed8", "#dbeafe"))
+        fg, bg = _STATUS_STYLE.get(sev.upper(), (COLORS["blue"], COLORS["blue_wash"]))
         row = QLabel(text); row.setWordWrap(True)
         row.setStyleSheet(
             f"color:{fg}; background:{bg}; border-radius:8px; padding:8px 10px; font-size:12px;")
         self.sec_alerts_box.insertWidget(0, row)
-        while self.sec_alerts_box.count() > 5:
-            item = self.sec_alerts_box.takeAt(self.sec_alerts_box.count() - 1)
+        # Prune to the newest five, counting only alert rows. The trailing stretch
+        # that keeps them packed to the top of the card is a spacer item, not a
+        # widget — a plain count()-based loop would take it first and let the list
+        # drift back to centre.
+        rows = [i for i in range(self.sec_alerts_box.count())
+                if self.sec_alerts_box.itemAt(i).widget() is not None]
+        while len(rows) > 5:
+            item = self.sec_alerts_box.takeAt(rows.pop())
             if item.widget():
                 item.widget().deleteLater()
 

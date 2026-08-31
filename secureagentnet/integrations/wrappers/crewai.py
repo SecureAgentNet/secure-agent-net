@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from secureagentnet.integrations.wrappers.client import InterceptClient
+from secureagentnet.integrations.wrappers.client import InterceptClient, format_denial
 
 
 try:
@@ -56,7 +56,7 @@ class SecureAgentNetCrewAITool(CrewAIBaseTool):
         )
 
         if result.get("status") == "blocked":
-            return f"[BLOCKED by SecureAgentNet] {result.get('reason', 'blocked')}"
+            return format_denial(result)
         if result.get("status") == "error":
             return f"[ERROR] {result.get('reason', 'unknown error')}"
 

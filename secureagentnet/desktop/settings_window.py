@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 
 from secureagentnet.daemon.config import get_daemon_settings
 
+from secureagentnet.desktop.theme import COLORS
+
 if TYPE_CHECKING:
     from secureagentnet.desktop.main_window import MainWindow
 
@@ -27,16 +29,16 @@ class SettingsWindow(QDialog):
         self.main_window = main_window
         self.setWindowTitle("Settings")
         self.setMinimumSize(500, 300)
-        self.setStyleSheet("background-color: #0f172a; color: #f8fafc;")
+        self.setStyleSheet(f"background-color: {COLORS['window']}; color: {COLORS['ink']};")
 
         layout = QVBoxLayout(self)
         header = QLabel("SecureAgentNet Settings")
-        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #38bdf8;")
+        header.setStyleSheet(f"font-size: 17px; font-weight: 700; color: {COLORS['primary']};")
         layout.addWidget(header)
 
         form = QFormLayout()
         self.port_edit = QLineEdit()
-        self.port_edit.setStyleSheet("background-color: #1e293b; color: #f8fafc; padding: 6px;")
+        self.port_edit.setStyleSheet(f"background-color: #0e141b; color: {COLORS['ink']}; padding: 7px 10px;"f" border: 1px solid #2d3945; border-radius: 7px;")
 
         self.scan_interval_edit = QLineEdit()
         self.scan_interval_edit.setStyleSheet(self.port_edit.styleSheet())
@@ -49,7 +51,7 @@ class SettingsWindow(QDialog):
         self.cloud_key_edit.setEchoMode(QLineEdit.Password)
 
         self.notifications_check = QCheckBox("Enable desktop notifications")
-        self.notifications_check.setStyleSheet("color: #f8fafc;")
+        self.notifications_check.setStyleSheet(f"color: {COLORS['ink']};")
 
         form.addRow("Daemon Port:", self.port_edit)
         form.addRow("Scan Interval (sec):", self.scan_interval_edit)
@@ -60,7 +62,7 @@ class SettingsWindow(QDialog):
 
         save_btn = QPushButton("Save")
         save_btn.setStyleSheet(
-            "QPushButton { background-color: #22c55e; color: #0f172a; border-radius: 6px; padding: 10px 20px; font-weight: bold; }"
+            f"QPushButton {{ background-color: {COLORS['primary']}; color: #04120f; border: none;"f" border-radius: 7px; padding: 10px 20px; font-weight: 700; }}"
         )
         save_btn.clicked.connect(self._save)
         layout.addWidget(save_btn)

@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import os
 import sys
@@ -92,7 +93,10 @@ def _print_table(title: str, columns: List[str], rows: List[List[str]], caption:
 
 
 def _print_json(data: Any):
-    syntax = Syntax(json.dumps(data, indent=2, default=str), "json", theme="monokai")
+    # word_wrap keeps long values (container stderr/tracebacks) fully visible;
+    # without it Rich crops each line at the terminal width and swallows the
+    # very error the operator is trying to read.
+    syntax = Syntax(json.dumps(data, indent=2, default=str), "json", theme="monokai", word_wrap=True)
     console.print(syntax)
 
 
@@ -110,6 +114,18 @@ def _print_warning(msg: str):
 
 def _print_info(msg: str):
     console.print(f"[bold blue]ℹ[/] {msg}")
+
+
+def _print_remediation(result: dict):
+    """Render the fix-it guidance a blocked pipeline result carries, if any."""
+    lines = result.get("remediation") or []
+    if not lines:
+        return
+    body = "\n".join(
+        f"[cyan]{line}[/]" if line.strip().startswith("san ") else line
+        for line in lines
+    )
+    console.print(Panel.fit(body, title="[bold]How to fix[/]", border_style="yellow"))
 
 
 def _status_icon(status: str) -> str:
@@ -196,6 +212,79 @@ def register(name: str, agent_type: str, description: str, public_key: str, capa
 
     _print_success(f"Agent '{name}' registered with ID: [bold]{result['agent_id']}[/]")
     console.print(f"  Type: {agent_type}  |  Trust Score: 50.0  |  Status: active")
+
+
+@agent.command("import-dir")
+@click.argument("agent_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--name", default=None, help="Registered name (defaults to directory name)")
+@click.option("--framework", default="auto", help="Framework: auto, LangChain, CrewAI, AutoGen, Custom")
+def import_dir(agent_dir: Path, name: Optional[str], framework: str):
+    """Import an unmodified agent directory for supervised Docker execution."""
+    from secureagentnet.contain.agent_runtime import detect_entrypoint, detect_framework
+    try:
+        entry = detect_entrypoint(agent_dir)
+    except FileNotFoundError as exc:
+        _print_error(str(exc)); return
+    detected = detect_framework(agent_dir) if framework.lower() == "auto" else framework
+    agent_name = name or agent_dir.name
+    if IdentityRegistry.get_agent_by_name(agent_name):
+        _print_error(f"Agent '{agent_name}' already exists")
+        return
+    metadata = {"agent_dir": str(agent_dir.resolve()), "entrypoint": entry, "supervised": True}
+    result = IdentityRegistry.register_agent({
+        "name": agent_name, "type": detected, "description": f"Imported agent directory: {agent_dir}",
+        "capabilities": {"supervised_run": True}, "metadata": metadata, "created_by": "agent-import",
+    })
+    CapabilityProfiler.add_capability(result["agent_id"], "supervised_run")
+    _print_success(f"Imported '{agent_name}' ({detected}) with ID: [bold]{result['agent_id']}[/]")
+    console.print(f"  Entry point: {entry}\n  Directory: {agent_dir}\n  Run: san agent run {result['agent_id']}")
+
+
+@agent.command("run")
+@click.argument("agent_id")
+@click.option("--network", is_flag=True, help="Allow outbound container networking (disabled by default)")
+@click.option("--timeout", default=120, type=int, help="Maximum runtime in seconds")
+@click.option("--input", "stdin_text", default=None, help="Text supplied to the agent's stdin")
+@click.option("--env", "env_pairs", multiple=True, metavar="KEY=VALUE",
+              help="Environment variable for the agent (repeatable)")
+@click.option("--env-file", "env_file", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Load agent environment from a .env file (kept out of the image)")
+def run_imported_agent(agent_id: str, network: bool, timeout: int, stdin_text: Optional[str],
+                       env_pairs: tuple[str, ...], env_file: Optional[Path]):
+    """Build and run an imported, unmodified agent inside Docker."""
+    from secureagentnet.contain.agent_runtime import AgentRuntime
+    agent = (IdentityRegistry.get_agent(agent_id) or IdentityRegistry.get_agent_by_name(agent_id)
+             or IdentityRegistry.get_agent_by_prefix(agent_id))
+    if not agent:
+        _print_error(f"Agent '{agent_id}' not found"); return
+    metadata = agent.get("metadata", {})
+    agent_dir = metadata.get("agent_dir")
+    if not metadata.get("supervised") or not agent_dir:
+        _print_error("Agent was not imported from a directory; use 'san agent import-dir PATH'"); return
+    from secureagentnet.decide.intent_capsule import MandateRegistry
+    if not MandateRegistry.get_active(agent["agent_id"]):
+        _print_error("Agent has no active mandate; commission it before supervised execution"); return
+    try:
+        runtime = AgentRuntime(agent_dir)
+        image = runtime.build_image()
+        LogIndexer.index_event({"agent_id": agent["agent_id"], "event_type": "supervised_agent_started", "phase": "CONTAIN", "severity": "INFO", "details": {"image": image, "agent_dir": agent_dir}})
+        forwarded = {key: os.environ[key] for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OLLAMA_API_URL", "OLLAMA_MODEL") if os.environ.get(key)}
+        # Secrets are injected at run time, not baked into the image layers, so
+        # --env-file wins over the implicit host forwarding and --env wins over both.
+        if env_file:
+            from dotenv import dotenv_values
+            forwarded.update({k: v for k, v in dotenv_values(env_file).items() if v is not None})
+        for pair in env_pairs:
+            if "=" not in pair:
+                _print_error(f"Invalid --env '{pair}'; expected KEY=VALUE"); return
+            key, _, value = pair.partition("=")
+            forwarded[key.strip()] = value
+        result = runtime.run(image, agent["agent_id"], network=network, timeout=timeout, stdin_text=stdin_text, environment=forwarded)
+        LogIndexer.index_event({"agent_id": agent["agent_id"], "event_type": "supervised_agent_completed", "phase": "CONTAIN", "severity": "INFO" if result["exit_code"] == 0 else "WARNING", "details": {"exit_code": result["exit_code"], "container_id": result["container_id"]}})
+        _print_json(result)
+    except Exception as exc:
+        _print_error(f"Supervised run failed: {exc}")
 
 
 @agent.command(name="list")
@@ -379,7 +468,9 @@ def capabilities(agent_id: str):
 @click.option("--approve-actions", "approve", default="", help="Comma-separated sanctioned actions (default: * = any)")
 @click.option("--forbid-actions", "forbid", default="", help="Comma-separated explicitly forbidden actions")
 @click.option("--expires-minutes", "expires", default=10080, type=int, help="Mandate lifetime in minutes (default 7 days)")
-def commission(agent_id: str, goal: str, approve: str, forbid: str, expires: int):
+@click.option("--grant-missing", is_flag=True,
+              help="Also grant any approved action the agent lacks as a capability")
+def commission(agent_id: str, goal: str, approve: str, forbid: str, expires: int, grant_missing: bool):
     """Commission an agent with a mandate (its sanctioned goal + allowed actions)
 
     The mandate is the anchor the DECIDE phase checks every action against to
@@ -393,6 +484,36 @@ def commission(agent_id: str, goal: str, approve: str, forbid: str, expires: int
     from secureagentnet.decide.intent_capsule import MandateRegistry, DEFAULT_FORBIDDEN_ACTIONS
     approved = [a.strip() for a in approve.split(",") if a.strip()] or ["*"]
     forbidden = [a.strip() for a in forbid.split(",") if a.strip()] or list(DEFAULT_FORBIDDEN_ACTIONS)
+
+    # Capabilities and mandate approved-actions are two independent gates: IDENTIFY
+    # checks capabilities first, so an action approved here but never granted as a
+    # capability produces a mandate that can never authorise anything. Catch that
+    # at commission time rather than at the first blocked run.
+    contradictory = sorted(set(approved) & set(forbidden))
+    if contradictory:
+        _print_error(
+            f"Action(s) both approved and forbidden: {', '.join(contradictory)} — "
+            "forbidden always wins, so these could never run"
+        )
+        return
+
+    missing = [a for a in approved
+               if a != "*" and not CapabilityProfiler.is_authorized(agent["agent_id"], a)]
+    if missing:
+        if grant_missing:
+            for cap in missing:
+                CapabilityProfiler.add_capability(agent["agent_id"], cap)
+            _print_success(f"Granted missing capabilities: {', '.join(missing)}")
+        else:
+            _print_warning(
+                f"Approved action(s) the agent lacks as capabilities: {', '.join(missing)}"
+            )
+            console.print(
+                "  [dim]IDENTIFY checks capabilities before the mandate, so these will be "
+                "blocked before the mandate is ever consulted.[/]\n"
+                f"  Grant them with: [cyan]san agent add-cap {agent['agent_id']} <capability>[/]\n"
+                "  Or re-run this command with [cyan]--grant-missing[/]"
+            )
 
     capsule = MandateRegistry.commission(
         agent_id=agent["agent_id"],
@@ -540,12 +661,20 @@ def discover(scanner_filter: Optional[str], auto_register: bool, json_output: bo
 @click.option("--action", default="execute", help="Action name for the pipeline")
 @click.option("--resource", default="shell", help="Target resource")
 @click.option("--intent", default="Execute command", help="Intent summary")
+@click.option("--file", "input_files", multiple=True,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Inject a host file into /workspace (repeatable)")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def run(agent_id: str, command_str: str, action: str, resource: str, intent: str, json_output: bool):
+def run(agent_id: str, command_str: str, action: str, resource: str, intent: str,
+        input_files: tuple, json_output: bool):
     """Execute a command through the ITCD security pipeline
 
     AGENT_ID: Agent name or ID to run as
     COMMAND_STR: The command to execute in the sandbox
+
+    The sandbox has no host filesystem mount — that isolation is the point of the
+    CONTAIN phase. Use --file to place specific host files inside /workspace, so
+    what the agent can reach is declared explicitly rather than inherited.
     """
     IdentityRegistry.initialize()
     agent = (
@@ -563,9 +692,23 @@ def run(agent_id: str, command_str: str, action: str, resource: str, intent: str
         payload={"command": command_str}
     )
 
+    injected = []
+    for path in input_files:
+        from secureagentnet.contain.models import InjectedFile
+        injected.append(InjectedFile(
+            path=f"/workspace/{path.name}",
+            content_base64=base64.b64encode(path.read_bytes()).decode(),
+        ))
+    if injected:
+        _print_info(f"Injecting {len(injected)} file(s) into /workspace: "
+                    + ", ".join(f.path for f in injected))
+
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
         progress.add_task(description="[bold cyan]ITCD Pipeline:[/] Identify → Track → Contain → Decide", total=None)
-        result = asyncio.run(_get_pipeline().execute_agent_action(agent_id, request, command_str))
+        # origin="operator": a human typed this, so a policy denial must not be
+        # scored against the agent's trust or anomaly counters (see pipeline docs).
+        result = asyncio.run(_get_pipeline().execute_agent_action(
+            agent_id, request, command_str, files=injected, origin="operator"))
 
     if json_output:
         _print_json(result)
@@ -584,6 +727,26 @@ def run(agent_id: str, command_str: str, action: str, resource: str, intent: str
             title="[red]🚫 Blocked[/]",
             border_style="red"
         ))
+        _print_remediation(result)
+
+    elif status == "escalated":
+        console.print(Panel.fit(
+            f"[bold yellow]ACTION ESCALATED FOR APPROVAL[/]\n\n"
+            f"[bold]Phase:[/] {phase}\n"
+            f"[bold]Evaluated By:[/] {result.get('evaluated_by', 'N/A')}\n"
+            f"[bold]Risk Score:[/] [yellow]{result.get('risk_score', 'N/A')}[/]\n"
+            f"[bold]Reason:[/] {result.get('reason', 'N/A')}",
+            title="[yellow]⏸ Awaiting approval[/]",
+            border_style="yellow"
+        ))
+        req_id = result.get("metadata", {}).get("hitl_request_id")
+        if req_id:
+            console.print(
+                f"\n[bold]Review it with:[/]\n"
+                f"  [cyan]san hitl show {req_id}[/]\n"
+                f"  [cyan]san hitl approve {req_id}[/]   [dim]or[/]   "
+                f"[cyan]san hitl deny {req_id}[/]"
+            )
 
     elif status == "success":
         data = result.get("data", {})
@@ -1051,6 +1214,154 @@ def stop(container_id: str):
     ContainerResourceManager.update_status(container_id, "stopped")
     ContainerResourceManager.remove_container(container_id)
     _print_success(f"Container {container_id} stopped and removed")
+
+
+# ============================================================
+#  HITL APPROVAL QUEUE
+# ============================================================
+
+@click.group()
+def hitl():
+    """Review actions the DECIDE phase escalated for human approval"""
+    pass
+
+
+def _hitl_rows(requests: List[dict]) -> List[List[str]]:
+    rows = []
+    for r in requests:
+        agent_id = r.get("agent_id") or ""
+        agent = IdentityRegistry.get_agent(agent_id) if agent_id else None
+        rows.append([
+            _status_icon(r.get("status", "")),
+            str(r.get("request_id", ""))[:8] + "...",
+            (agent or {}).get("name", agent_id[:8] if agent_id else "unknown"),
+            r.get("action_name", ""),
+            f"{r.get('risk_score') or 0:.2f}",
+            r.get("status", ""),
+            str(r.get("created_at", ""))[:19],
+        ])
+    return rows
+
+
+@hitl.command(name="list")
+@click.option("--all", "show_all", is_flag=True, help="Include already-decided requests")
+@click.option("--limit", default=50, help="Max results")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def hitl_list(show_all: bool, limit: int, json_output: bool):
+    """List actions awaiting operator approval"""
+    from secureagentnet.database.repositories import HITLRepository
+
+    requests = HITLRepository.list_all(status=None if show_all else "pending", limit=limit)
+    if json_output:
+        _print_json(requests)
+        return
+    if not requests:
+        _print_info("No requests awaiting approval" if not show_all else "No approval requests recorded")
+        return
+    _print_table(
+        "HITL Approval Queue",
+        ["", "Request", "Agent", "Action", "Risk", "Status", "Created"],
+        _hitl_rows(requests),
+        caption=f"{len(requests)} request(s) — approve with: san hitl approve <request-id>",
+    )
+
+
+def _resolve_hitl(request_id: str) -> Optional[dict]:
+    """Look up a request by full id or unique prefix."""
+    from secureagentnet.database.repositories import HITLRepository
+
+    exact = HITLRepository.get(request_id)
+    if exact:
+        return exact
+    matches = [r for r in HITLRepository.list_all(limit=500)
+               if str(r["request_id"]).startswith(request_id)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        _print_error(f"'{request_id}' is ambiguous — matches {len(matches)} requests")
+        return None
+    _print_error(f"Approval request '{request_id}' not found")
+    return None
+
+
+@hitl.command(name="show")
+@click.argument("request_id")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def hitl_show(request_id: str, json_output: bool):
+    """Show the full detail of one approval request"""
+    req = _resolve_hitl(request_id)
+    if not req:
+        return
+    if json_output:
+        _print_json(req)
+        return
+    agent_id = req.get("agent_id") or ""
+    agent = IdentityRegistry.get_agent(agent_id) if agent_id else None
+    console.print(Panel.fit(
+        f"[bold]Request:[/] {req['request_id']}\n"
+        f"[bold]Agent:[/] {(agent or {}).get('name', 'unknown')} ({agent_id[:8]}...)\n"
+        f"[bold]Action:[/] {req.get('action_name', '')}\n"
+        f"[bold]Resource:[/] {req.get('target_resource', '')}\n"
+        f"[bold]Intent:[/] {req.get('intent_summary', '')}\n"
+        f"[bold]Risk Score:[/] {req.get('risk_score') or 0:.2f}\n"
+        f"[bold]Status:[/] {_status_icon(req.get('status', ''))} {req.get('status', '')}\n"
+        f"[bold]Reason:[/] {req.get('reason', '')}\n"
+        f"[bold]Created:[/] {req.get('created_at', '')}\n"
+        f"[bold]Decided:[/] {req.get('decision_at') or '—'} "
+        f"{('by ' + req['decided_by']) if req.get('decided_by') else ''}",
+        title="[bold cyan]Approval Request[/]",
+        border_style="cyan",
+    ))
+
+
+def _decide_hitl(request_id: str, approve: bool, operator: str):
+    from secureagentnet.decide.hitl import get_hitl_gate, HITLDecision
+
+    req = _resolve_hitl(request_id)
+    if not req:
+        return
+    if req["status"] != "pending":
+        _print_warning(
+            f"Request already {req['status']}"
+            + (f" by {req['decided_by']}" if req.get("decided_by") else "")
+        )
+        return
+    gate = get_hitl_gate()
+    full_id = str(req["request_id"])
+    decision = gate.approve(full_id, operator) if approve else gate.deny(full_id, operator)
+    verb = "approved" if approve else "denied"
+    if decision in (HITLDecision.APPROVED, HITLDecision.DENIED):
+        LogIndexer.index_event({
+            "agent_id": req.get("agent_id") or "",
+            "event_type": f"hitl_{verb}",
+            "phase": "DECIDE",
+            "severity": "INFO" if approve else "WARNING",
+            "details": {"request_id": full_id, "action": req.get("action_name"),
+                        "operator": operator},
+        })
+        _print_success(f"Request {full_id[:8]}... {verb} by '{operator}'")
+        console.print(
+            "  [dim]The escalating process was a one-shot command that has already exited; "
+            "re-issue the action to execute it under this decision.[/]"
+        )
+    else:
+        _print_error(f"Could not {('approve' if approve else 'deny')} request: {decision.value}")
+
+
+@hitl.command(name="approve")
+@click.argument("request_id")
+@click.option("--operator", default="cli", help="Who is approving (recorded in the audit trail)")
+def hitl_approve(request_id: str, operator: str):
+    """Approve an escalated action"""
+    _decide_hitl(request_id, approve=True, operator=operator)
+
+
+@hitl.command(name="deny")
+@click.argument("request_id")
+@click.option("--operator", default="cli", help="Who is denying (recorded in the audit trail)")
+def hitl_deny(request_id: str, operator: str):
+    """Deny an escalated action"""
+    _decide_hitl(request_id, approve=False, operator=operator)
 
 
 # ============================================================

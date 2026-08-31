@@ -89,10 +89,26 @@ class TestHITLApprovalGate:
         self.gate.deny(rid)
         assert results == [HITLDecision.DENIED]
 
-    def test_pending_count(self):
+    def test_pending_count_counts_only_undecided_requests(self):
+        """pending_count is the review backlog, so a decision must clear it.
+
+        It previously returned len(self._pending_requests) — every request the
+        process had ever created, decided or not — so the number only ever grew.
+        That feeds `GET /v1/hitl/pending`'s count and the `san_hitl_pending`
+        Prometheus gauge, where a monotonically-rising "pending" is just wrong.
+        """
         assert self.gate.pending_count == 0
         self.gate.create_pending_request("c1", "a", "x", "/", "t", 0.5, "ok")
         self.gate.create_pending_request("c2", "a", "x", "/", "t", 0.5, "ok")
         assert self.gate.pending_count == 2
+
         self.gate.approve("c1")
-        assert self.gate.pending_count == 2  # still 2, but one is approved
+        assert self.gate.pending_count == 1, "an approved request is no longer pending"
+
+        self.gate.deny("c2")
+        assert self.gate.pending_count == 0, "a denied request is no longer pending"
+
+        # The requests still exist and remember how they were resolved — clearing
+        # the backlog must not lose the decision.
+        assert self.gate.get_pending_request("c1")["status"] == HITLDecision.APPROVED.value
+        assert self.gate.get_pending_request("c2")["status"] == HITLDecision.DENIED.value

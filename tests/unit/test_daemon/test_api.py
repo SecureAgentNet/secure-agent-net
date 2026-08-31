@@ -196,3 +196,32 @@ def test_intercept_allows_registered_agent_with_mandate(client, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "success"
+
+
+def test_intercept_denial_carries_remediation(client):
+    """A denial must reach the caller with its remediation lines intact.
+
+    InterceptResponse had no `remediation` field, so the pipeline computed the
+    lines and pydantic dropped them on the way out — only the CLI, which calls the
+    pipeline directly, ever saw them. The desktop, the framework adapters and any
+    governed agent got a bare refusal.
+    """
+    agent = IdentityRegistry.register_agent(
+        {"name": "remediation-wire", "type": "LangChain",
+         "capabilities": {"search_files": True}})
+
+    resp = client.post("/v1/intercept", json={
+        "agent_id": agent["agent_id"],
+        "action_name": "send_email",
+        "target_resource": "outsider@example.com",
+        "intent_summary": "exfiltrate the findings",
+    })
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "blocked"
+    assert body["phase"] == "IDENTIFY"
+    remediation = body.get("remediation")
+    assert remediation, "denial reached the caller without its remediation lines"
+    assert any("search_files" in line for line in remediation)
+    assert any("san agent add-cap" in line for line in remediation)

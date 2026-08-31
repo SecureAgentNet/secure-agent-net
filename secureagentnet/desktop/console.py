@@ -29,13 +29,21 @@ class SanConsole(QWidget):
         self.output = QPlainTextEdit(readOnly=True)
         self.output.setObjectName("console")
         self.output.setPlaceholderText("Command output appears here…")
+        # CLI output is wide and long — give the pane a real floor so it stays
+        # readable however the rest of the page is sized, and never soft-wrap
+        # table borders, which mangles rich's box drawing.
+        self.output.setMinimumHeight(200)
+        self.output.setLineWrapMode(QPlainTextEdit.NoWrap)
+
         self.input = QLineEdit()
         self.input.setObjectName("consoleInput")
         self.input.setPlaceholderText("Type a command, e.g.  agent list   (prefix 'san' optional)")
+        self.input.setMinimumHeight(42)
+        self.input.setClearButtonEnabled(True)
         self.input.returnPressed.connect(self._on_enter)
 
         layout.addWidget(self.output, 1)
-        layout.addWidget(self.input)
+        layout.addWidget(self.input, 0)
 
         self.proc: QProcess | None = None
         self._append("SecureAgentNet console — every `san` command is available here.\n"
@@ -50,6 +58,21 @@ class SanConsole(QWidget):
         env = QProcessEnvironment.systemEnvironment()
         env.insert("NO_COLOR", "1")
         env.insert("PYTHONUNBUFFERED", "1")
+        # Pin the subprocess to the database this app is already reading.
+        # QProcess inherits the desktop's environment, so launching the app from a
+        # shell without DATABASE_URL set left every console command resolving to the
+        # default ~/.secureagentnet path while the window itself showed agents from
+        # elsewhere — `agent list` and `agent commission` disagreeing about which
+        # agents exist. Resolving it here means the console can never drift from
+        # the app around it, however the app was started.
+        # Pin the subprocess to the database this app already resolved, so a
+        # console command cannot answer from a different store than the window
+        # around it — whatever directory the app happens to be launched from.
+        try:
+            from secureagentnet.core.config import get_settings
+            env.insert("DATABASE_URL", get_settings().database_url)
+        except Exception:
+            pass  # fall back to the CLI's own resolution
         self.proc = QProcess(self)
         self.proc.setProcessEnvironment(env)
         self.proc.setProcessChannelMode(QProcess.MergedChannels)

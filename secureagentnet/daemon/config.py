@@ -58,9 +58,16 @@ class DaemonSettings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        # Mirror the main Settings default so the daemon uses the same DB.
-        default = f"sqlite:///{self.data_dir / 'data' / 'securenet.db'}"
-        return os.environ.get("DATABASE_URL") or default
+        """The database the daemon reads — delegated, never resolved separately.
+
+        This used to compute its own answer from os.environ plus a default beside
+        the daemon's data dir. Nothing consumed it: every read and write goes
+        through database.connection, which asks core.config. So the two could
+        disagree, and the value reported here was not the database in use.
+        One resolver means they cannot drift apart again.
+        """
+        from secureagentnet.core.config import get_settings
+        return get_settings().database_url
 
 
 _daemon_settings: Optional[DaemonSettings] = None

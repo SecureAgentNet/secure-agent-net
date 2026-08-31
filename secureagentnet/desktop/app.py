@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from secureagentnet.desktop.client import DaemonClient
 from secureagentnet.desktop.main_window import MainWindow
+from secureagentnet.desktop.theme import apply_palette
 from secureagentnet.desktop.tray import SystemTray
 from secureagentnet.daemon.process import start_daemon, daemon_status
 
@@ -96,10 +97,30 @@ class AlertWorker(QThread):
         self.wait(2000)
 
 
+class _DaemonStarter(QThread):
+    """Starts the daemon off the UI thread.
+
+    ``start_daemon`` spawns the process and then polls for its PID file for up to
+    two seconds. Run inline that delay lands squarely between launch and first
+    paint; here the window is already up and the poller connects when it connects.
+    """
+
+    finished_msg = Signal(bool, str)
+
+    def run(self):
+        running, msg = daemon_status()
+        if running:
+            self.finished_msg.emit(True, msg)
+            return
+        ok, msg = start_daemon(daemonize=True)
+        self.finished_msg.emit(ok, msg)
+
+
 class DesktopApplication:
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("SecureAgentNet")
+        apply_palette(self.app)
         # A system tray is only usable if the desktop session provides a tray host
         # (a StatusNotifier/AppIndicator). Minimal or Wayland sessions often don't —
         # constructing a tray icon there raises a D-Bus "ServiceUnknown" error. When
@@ -139,7 +160,6 @@ class DesktopApplication:
 
     def start(self) -> int:
         _ensure_app_data_dir()
-        self._ensure_daemon_running()
         if self.tray is not None:
             try:
                 self.tray.show()
@@ -148,16 +168,20 @@ class DesktopApplication:
                 self._disable_tray()
         self.alert_worker.start()
         self.main_window.refresh()
-        self.show_main_window()  # open the window on launch, not just the tray
+        # Paint the window before touching the daemon. Starting it can take a
+        # couple of seconds (spawn, then poll for the PID file) and doing that
+        # inline left the user staring at nothing for the whole wait.
+        self.show_main_window()
+        self._daemon_starter = _DaemonStarter()
+        self._daemon_starter.finished_msg.connect(self._on_daemon_ready)
+        self._daemon_starter.start()
         return self.app.exec()
 
-    def _ensure_daemon_running(self) -> None:
-        running, _ = daemon_status()
-        if running:
-            return
-        ok, msg = start_daemon(daemonize=True)
+    def _on_daemon_ready(self, ok: bool, msg: str) -> None:
         if not ok:
             logger.error("Could not start daemon: %s", msg)
+        else:
+            logger.info("%s", msg)
 
     def _on_alert(self, alert: dict) -> None:
         self.main_window.handle_alert(alert)
@@ -177,6 +201,10 @@ class DesktopApplication:
             pass
         try:
             self.main_window._host_poller.stop()
+        except Exception:
+            pass
+        try:
+            self.client.close()
         except Exception:
             pass
         self.app.quit()

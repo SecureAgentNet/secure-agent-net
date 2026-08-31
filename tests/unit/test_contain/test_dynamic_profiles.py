@@ -16,7 +16,8 @@ class TestDynamicProfileCompiler:
         allowed = profile["syscalls"][0]["names"]
         for s in ["openat", "read", "close", "fstat"]:
             assert s in allowed
-        for s in ["connect", "sendto", "execve"]:
+        # Network stays gated behind a network capability.
+        for s in ["connect", "sendto"]:
             assert s not in allowed
 
     def test_compile_seccomp_network_access(self):
@@ -26,7 +27,40 @@ class TestDynamicProfileCompiler:
         allowed = profile["syscalls"][0]["names"]
         assert "connect" in allowed
         assert "sendto" in allowed
-        assert "execve" not in allowed
+
+    def test_execve_always_allowed_regardless_of_capabilities(self):
+        """A container cannot start without execve, whatever the agent may do.
+
+        These assertions previously read ``execve not in allowed`` for agents
+        lacking "execute_code". That made every such sandbox unstartable: the
+        runtime execs the entrypoint as its first act, so a deny-by-default
+        profile without execve killed init immediately — surfacing as an
+        unrelated netns bind-mount error, while the tests stayed green.
+
+        Whether an agent may launch *further* programs is a real privilege
+        decision, but it belongs in the AppArmor exec rules, which can name
+        which binaries are executable. Seccomp cannot express it without also
+        blocking the container's own entrypoint.
+        """
+        for caps in ({"read_file": True}, {"network_access": True}, {}):
+            profile = json.loads(DynamicProfileCompiler.compile_seccomp_profile(caps))
+            allowed = profile["syscalls"][0]["names"]
+            assert "execve" in allowed, f"execve missing for caps={caps}"
+            assert "execveat" in allowed, f"execveat missing for caps={caps}"
+
+    def test_dangerous_syscalls_never_allowed(self):
+        """The allowlist must stay an allowlist — escape primitives are absent."""
+        profile = json.loads(DynamicProfileCompiler.compile_seccomp_profile(
+            {"read_file": True, "write_file": True, "execute_code": True,
+             "network_access": True}
+        ))
+        allowed = set(profile["syscalls"][0]["names"])
+        for dangerous in ("ptrace", "mount", "umount2", "pivot_root", "chroot",
+                          "unshare", "setns", "bpf", "keyctl", "add_key",
+                          "init_module", "finit_module", "delete_module",
+                          "kexec_load", "reboot", "perf_event_open",
+                          "process_vm_readv", "process_vm_writev", "userfaultfd"):
+            assert dangerous not in allowed, f"{dangerous} must stay denied"
 
     def test_compile_seccomp_multi_capability(self):
         caps = {"read_file": True, "write_file": True, "execute_code": True}

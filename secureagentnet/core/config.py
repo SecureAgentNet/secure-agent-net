@@ -74,8 +74,17 @@ class Settings(BaseSettings):
     # host anomaly, never auto-denies. Off by default; opt in per deployment.
     decide_host_telemetry_enabled: bool = Field(default=False, alias="DECIDE_HOST_TELEMETRY")
 
+    # Resolved lowest-precedence first; a real environment variable still beats
+    # all of them. The user-level file makes a setting stick for the daemon, the
+    # desktop and the desktop's console however each was launched, and the
+    # repo-anchored path means a launcher that starts the app from some other
+    # working directory still finds the project's own settings.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            str(Path.home() / ".secureagentnet" / ".env"),
+            str(Path(__file__).resolve().parent.parent.parent / ".env"),
+            ".env",
+        ),
         env_file_encoding="utf-8",
         populate_by_name=True,
         extra="ignore",

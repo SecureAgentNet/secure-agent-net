@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
+from secureagentnet.contain.runtime_syscalls import BASE_RUNTIME_SYSCALLS
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -23,21 +25,13 @@ CAPABILITY_SYSCALL_MAP = {
     "admin": [],  # wildcard — all allowed
 }
 
-ESSENTIAL_SYSCALLS = [
-    "read", "write", "openat", "close", "fstat", "lseek", "mmap", "mprotect",
-    "munmap", "brk", "rt_sigaction", "rt_sigprocmask", "rt_sigreturn",
-    "ioctl", "pread64", "pwrite64", "readv", "writev", "access", "pipe2",
-    "select", "sched_yield", "nanosleep", "clock_gettime", "getpid",
-    "getuid", "geteuid", "getgid", "getegid", "exit", "exit_group",
-    "futex", "set_robust_list", "rseq", "tgkill", "getrandom",
-    "stat", "statfs", "statx", "fstatfs", "getcwd", "getdents64",
-    "newfstatat", "prctl", "arch_prctl", "set_tid_address",
-    "sched_getaffinity", "epoll_create", "epoll_ctl", "epoll_wait",
-    "dup", "dup2", "fcntl", "chdir", "fchown", "fchmod", "faccessat",
-    "readlink", "readlinkat", "capget", "capset", "setuid", "setgid",
-    "setgroups", "setresuid", "setresgid", "prlimit64", "clone3",
-    "rt_sigsuspend", "sigaltstack", "uname", "umask", "getppid", "getpgid",
-]
+# Every sandbox needs these regardless of the agent's capabilities: they are
+# what lets a process start at all, not a privilege being granted. execve in
+# particular was previously reachable only through the "execute_code"
+# capability, which meant any agent without it — including every agent using
+# the default mandate, where execute_code is forbidden — got a container that
+# could not exec its own entrypoint.
+ESSENTIAL_SYSCALLS = list(BASE_RUNTIME_SYSCALLS)
 
 
 APPARMOR_TEMPLATE = """#include <tunables/global>

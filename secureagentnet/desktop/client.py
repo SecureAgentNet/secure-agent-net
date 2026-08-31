@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from secureagentnet.daemon.config import get_daemon_settings
 
@@ -22,19 +23,38 @@ class DaemonClient:
         self.base_url = f"http://{self.host}:{self.port}"
         self.timeout = 6
 
+        # One pooled session for the whole app. The module-level requests.get()
+        # helpers build a fresh Session per call — a new TCP connection, a new
+        # adapter, no keep-alive — and the desktop makes several calls a second.
+        # A single session with a keep-alive pool removes that per-call setup.
+        self._session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=4, pool_maxsize=8, max_retries=0)
+        self._session.mount("http://", adapter)
+        self._session.headers["Connection"] = "keep-alive"
+
+    def close(self) -> None:
+        """Release the pooled connections (called on app shutdown)."""
+        try:
+            self._session.close()
+        except Exception:
+            pass
+
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
+    def _get(self, path: str, timeout: Optional[float] = None):
+        return self._session.get(self._url(path), timeout=timeout or self.timeout)
+
     def is_alive(self) -> bool:
         try:
-            resp = requests.get(self._url("/health"), timeout=2)
+            resp = self._get("/health", timeout=2)
             return resp.status_code == 200
         except Exception:
             return False
 
     def status(self) -> Optional[Dict[str, Any]]:
         try:
-            resp = requests.get(self._url("/v1/status"), timeout=self.timeout)
+            resp = self._get("/v1/status")
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:
@@ -43,7 +63,7 @@ class DaemonClient:
 
     def registered_agents(self) -> List[Dict[str, Any]]:
         try:
-            resp = requests.get(self._url("/v1/agents"), timeout=self.timeout)
+            resp = self._get("/v1/agents")
             resp.raise_for_status()
             return resp.json()
         except Exception:
@@ -51,7 +71,7 @@ class DaemonClient:
 
     def agent_contracts(self) -> List[Dict[str, Any]]:
         try:
-            resp = requests.get(self._url("/v1/agent-contracts"), timeout=self.timeout)
+            resp = self._get("/v1/agent-contracts")
             resp.raise_for_status()
             return resp.json()
         except Exception:
@@ -59,7 +79,7 @@ class DaemonClient:
 
     def agent_detail(self, agent_id: str) -> Optional[Dict[str, Any]]:
         try:
-            resp = requests.get(self._url(f"/v1/agents/{agent_id}"), timeout=self.timeout)
+            resp = self._get(f"/v1/agents/{agent_id}")
             resp.raise_for_status()
             return resp.json()
         except Exception:
@@ -67,7 +87,7 @@ class DaemonClient:
 
     def service_health(self) -> Dict[str, str]:
         try:
-            resp = requests.get(self._url("/v1/health"), timeout=self.timeout)
+            resp = self._get("/v1/health")
             resp.raise_for_status()
             return resp.json() or {}
         except Exception:
@@ -75,7 +95,7 @@ class DaemonClient:
 
     def hitl_pending(self) -> List[Dict[str, Any]]:
         try:
-            resp = requests.get(self._url("/v1/hitl/pending"), timeout=self.timeout)
+            resp = self._get("/v1/hitl/pending")
             resp.raise_for_status()
             return resp.json().get("pending", [])
         except Exception:
@@ -84,7 +104,7 @@ class DaemonClient:
     def hitl_decide(self, request_id: str, approve: bool) -> Optional[Dict[str, Any]]:
         verb = "approve" if approve else "deny"
         try:
-            resp = requests.post(self._url(f"/v1/hitl/{request_id}/{verb}"), timeout=self.timeout)
+            resp = self._session.post(self._url(f"/v1/hitl/{request_id}/{verb}"), timeout=self.timeout)
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:
@@ -110,7 +130,7 @@ class DaemonClient:
         if command is not None:
             body["command"] = command
         try:
-            resp = requests.post(self._url("/v1/intercept"), json=body, timeout=self.timeout)
+            resp = self._session.post(self._url("/v1/intercept"), json=body, timeout=self.timeout)
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:
@@ -121,7 +141,7 @@ class DaemonClient:
         # A scan can take longer than a normal request, so it gets its own
         # generous timeout (and the desktop runs it on a background thread).
         try:
-            resp = requests.post(self._url("/v1/scan"), timeout=timeout or 120)
+            resp = self._session.post(self._url("/v1/scan"), timeout=timeout or 120)
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:
@@ -130,11 +150,20 @@ class DaemonClient:
 
     def discovered_agents(self) -> List[Dict[str, Any]]:
         try:
-            resp = requests.get(self._url("/v1/agents/discovered"), timeout=self.timeout)
+            resp = self._get("/v1/agents/discovered")
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:
             logger.error("Discovered agents request failed: %s", exc)
+            return []
+
+    def recent_events(self, limit: int = 200) -> List[Dict[str, Any]]:
+        """Backfill for the activity panels — the audit trail before this launch."""
+        try:
+            resp = self._get(f"/v1/events/recent?limit={int(limit)}")
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
             return []
 
     def alert_stream_url(self) -> str:

@@ -23,7 +23,7 @@ from secureagentnet.identify.identity_registry import IdentityRegistry
 from secureagentnet.identify.capability_profiler import CapabilityProfiler
 from secureagentnet.identify.rogue_detector import RogueDetector, get_rogue_detector
 from secureagentnet.utils.helpers import generate_correlation_id, calculate_execution_time_ms
-from secureagentnet.utils.validators import sanitize_command
+from secureagentnet.utils.validators import inspect_command
 
 logger = logging.getLogger("SecureAgentNet.Pipeline")
 
@@ -63,6 +63,61 @@ class ITCDPipeline:
         LogIndexer.index_event(event)
         self.logger.log(severity.value, f"[{phase.value}] {agent_id}: {event_type}")
 
+    @staticmethod
+    def _capability_remediation(agent_id: str, action_name: str) -> list:
+        """Tell the operator what the agent *can* do and how to grant what it can't.
+
+        A denial that only names the missing capability leaves the operator
+        guessing at the granted set, which is the difference between a one-command
+        fix and a round of trial and error.
+        """
+        agent = IdentityRegistry.get_agent(agent_id) or {}
+        capabilities = agent.get("capabilities") or {}
+        if not isinstance(capabilities, dict):
+            capabilities = {}
+
+        # Mirror CapabilityProfiler.is_authorized: a capability map is either a flat
+        # {name: True} grant table or the admin form {"level": "admin", "actions": [...]}.
+        # Listing the raw keys reported an admin agent's granted set as
+        # "actions, level" and then suggested `--action actions`.
+        if capabilities.get("*") or capabilities.get("level") == "admin":
+            granted = ["*"]
+        else:
+            granted = sorted(
+                {cap for cap, enabled in capabilities.items()
+                 if cap not in ("level", "actions") and (enabled or enabled is None)}
+                | {str(a) for a in (capabilities.get("actions") or [])}
+            )
+
+        lines = [f"Granted capabilities: {', '.join(granted) if granted else 'none'}"]
+        # Only suggest an alternative when there is a single obvious one; offering
+        # the alphabetically-first of many is a guess dressed up as advice.
+        if len(granted) == 1 and granted[0] != "*":
+            lines.append(f"Did you mean: --action {granted[0]}")
+        lines.append("Grant this capability with:")
+        lines.append(f"  san agent add-cap {agent_id} {action_name}")
+
+        # Read the mandate straight from the repository. MandateRegistry.get_active()
+        # auto-provisions and *persists* a default when an agent has none — building
+        # a denial message must not hand the agent a mandate it was never
+        # commissioned with, least of all on the path that just refused it.
+        mandate = None
+        try:
+            from secureagentnet.database.repositories import MandateRepository
+            mandate = MandateRepository.get_active_for_agent(agent_id)
+        except Exception:
+            mandate = None
+        if mandate is not None:
+            approved = list(mandate.get("approved_actions") or [])
+            if action_name not in approved and "*" not in approved:
+                lines.append("The mandate must sanction it too:")
+                lines.append(
+                    f"  san agent commission {agent_id} "
+                    f"--goal \"{mandate.get('original_goal') or ''}\" "
+                    f"--approve-actions {','.join(sorted(set(approved) | {action_name}))}"
+                )
+        return lines
+
     async def execute_agent_action(
         self,
         agent_id: str,
@@ -72,7 +127,20 @@ class ITCDPipeline:
         intent_capsule: Optional[IntentCapsule] = None,
         presented_public_key: Optional[str] = None,
         files: Optional[list] = None,
+        origin: str = "agent",
     ) -> Dict[str, Any]:
+        """Run one agent action through IDENTIFY → TRACK → CONTAIN → DECIDE.
+
+        ``origin`` says who initiated the call. ``"agent"`` (the default, and what
+        every adapter, the daemon and the MCP gateway use) means an autonomous
+        agent asked for this, so a policy denial is evidence about the agent and
+        is scored as such. ``"operator"`` means a human typed it at the CLI: the
+        request is still evaluated and blocked identically, but a denial is not
+        counted as agent misbehaviour, because a mistyped action name is an
+        operator error and scoring it would poison the very trust and anomaly
+        signals the detection layer depends on.
+        """
+        by_operator = origin == "operator"
         correlation_id = generate_correlation_id()
         start_time = time.time()
         self.rogue_detector.record_request(agent_id, request.action_name, request.target_resource)
@@ -133,46 +201,73 @@ class ITCDPipeline:
 
         if not CapabilityProfiler.is_authorized(agent_id, request.action_name):
             reason = f"Agent lacks capability: {request.action_name}"
-            self.circuit_breaker.record_failure(agent_id)
-            self._log_event(agent_id, "capability_denied", PipelinePhase.IDENTIFY, EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
-            IdentityRegistry.update_trust_score(agent_id, -5)
-            return {"status": "blocked", "reason": reason, "evaluated_by": "CapabilityProfiler", "phase": "IDENTIFY"}
+            if not by_operator:
+                self.circuit_breaker.record_failure(agent_id)
+                IdentityRegistry.update_trust_score(agent_id, -5)
+            self._log_event(agent_id, "capability_denied", PipelinePhase.IDENTIFY, EventSeverity.WARNING, {"action": request.action_name, "origin": origin}, correlation_id)
+            return {"status": "blocked", "reason": reason,
+                    "evaluated_by": "CapabilityProfiler", "phase": "IDENTIFY",
+                    "remediation": self._capability_remediation(agent_id, request.action_name)}
 
         # === MANDATE CHECK ===
         # An explicit per-call capsule wins; otherwise load the agent's durable,
         # commissioned mandate. Policy is fail-closed: no mandate = no action.
         mandate = intent_capsule or MandateRegistry.get_active(agent_id)
         if mandate is None:
-            self.circuit_breaker.record_failure(agent_id)
+            if not by_operator:
+                self.circuit_breaker.record_failure(agent_id)
             self._log_event(agent_id, "no_mandate", PipelinePhase.IDENTIFY,
-                            EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
+                            EventSeverity.WARNING, {"action": request.action_name, "origin": origin}, correlation_id)
             return {"status": "blocked",
                     "reason": "Agent has no active mandate — it has not been commissioned for any task",
-                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY",
+                    "remediation": [
+                        "Commission the agent with the goal it is authorised to pursue:",
+                        f"  san agent commission {agent_id} --goal \"<what this agent is for>\" "
+                        f"--approve-actions {request.action_name}",
+                    ]}
 
         if mandate.is_expired():
             self._log_event(agent_id, "mandate_expired", PipelinePhase.IDENTIFY,
                             EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
             return {"status": "blocked",
                     "reason": f"Agent mandate {mandate.session_id} has expired — re-commission required",
-                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY",
+                    "remediation": [
+                        f"The mandate expired at {mandate.expires_at.isoformat()}. Re-commission it:",
+                        f"  san agent commission {agent_id} --goal \"{mandate.original_goal}\" "
+                        f"--approve-actions {','.join(mandate.approved_actions) or '*'}",
+                    ]}
 
         if mandate.detect_goal_hijack(request.action_name, request.intent_summary):
-            IdentityRegistry.update_trust_score(agent_id, -20)
-            self.rogue_detector.record_failure(agent_id)
-            self.kill_switch.record_denial(agent_id)
+            if not by_operator:
+                IdentityRegistry.update_trust_score(agent_id, -20)
+                self.rogue_detector.record_failure(agent_id)
+                self.kill_switch.record_denial(agent_id)
             self._log_event(agent_id, "goal_hijack_detected", PipelinePhase.IDENTIFY,
-                            EventSeverity.CRITICAL, {"action": request.action_name}, correlation_id)
+                            EventSeverity.CRITICAL, {"action": request.action_name, "origin": origin}, correlation_id)
             return {"status": "blocked",
                     "reason": f"Goal hijacking detected: action '{request.action_name}' deviates from commissioned mandate",
-                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY",
+                    "remediation": [
+                        f"Commissioned goal: \"{mandate.original_goal}\"",
+                        f"Forbidden actions: {', '.join(mandate.forbidden_actions) or 'none'}",
+                        "If this action is legitimate, re-commission the agent with a goal that covers it.",
+                    ]}
 
         if not mandate.is_action_allowed(request.action_name):
             self._log_event(agent_id, "action_outside_mandate", PipelinePhase.IDENTIFY,
-                            EventSeverity.WARNING, {"action": request.action_name}, correlation_id)
+                            EventSeverity.WARNING, {"action": request.action_name, "origin": origin}, correlation_id)
             return {"status": "blocked",
                     "reason": f"Action '{request.action_name}' is outside the agent's commissioned mandate",
-                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY"}
+                    "evaluated_by": "MandateRegistry", "phase": "IDENTIFY",
+                    "remediation": [
+                        f"Mandate approves: {', '.join(mandate.approved_actions) or 'nothing'}",
+                        f"Commissioned goal: \"{mandate.original_goal}\"",
+                        "Re-commission to sanction this action:",
+                        f"  san agent commission {agent_id} --goal \"{mandate.original_goal}\" "
+                        f"--approve-actions {','.join(sorted(set(mandate.approved_actions) | {request.action_name}))}",
+                    ]}
 
         IdentityRegistry.update_trust_score(agent_id, 1)
         self._log_event(agent_id, "identify_passed", PipelinePhase.IDENTIFY, correlation_id=correlation_id)
@@ -181,7 +276,19 @@ class ITCDPipeline:
 
         async def contain_decide_execute():
             # --- CONTAIN PHASE: provision the isolated sandbox up-front ---
-            safe_command = sanitize_command(command)
+            # Screen the command, but never substitute a rewritten version: running
+            # redacted text would execute something the operator never submitted and
+            # DECIDE never evaluated. Injection constructs block the request instead.
+            inspection = inspect_command(command)
+            if not inspection.safe:
+                raise PipelineBlockedError(
+                    reason="Command contains shell-injection constructs: "
+                           + "; ".join(inspection.findings),
+                    evaluated_by="CommandInspector",
+                    risk_score=1.0,
+                    metadata={"findings": inspection.findings},
+                )
+            safe_command = command
             exec_req = ExecutionRequest(
                 command=safe_command,
                 environment_vars={"AGENT_ID": agent_id, "CORRELATION_ID": correlation_id},
@@ -190,7 +297,13 @@ class ITCDPipeline:
             sandbox_config = SandboxConfig(
                 timeout_seconds=get_settings().container_timeout_seconds,
             )
-            handle = self.provisioner.provision_sandbox(exec_req, sandbox_config)
+            # Creating the sandbox is a multi-second blocking Docker API call.
+            # Left inline it would stall the event loop for the whole provision,
+            # queueing every other in-flight request (including the desktop's
+            # status polls) behind one agent's containment.
+            handle = await asyncio.to_thread(
+                self.provisioner.provision_sandbox, exec_req, sandbox_config
+            )
             self._log_event(
                 agent_id,
                 "container_provisioned",
@@ -216,7 +329,7 @@ class ITCDPipeline:
                 decision = await asyncio.to_thread(self.gateway.evaluate_request, eval_req)
             except Exception:
                 # Any DECIDE failure — destroy the provisioned container unexecuted.
-                self.provisioner.teardown_sandbox(handle, executed=False)
+                await asyncio.to_thread(self.provisioner.teardown_sandbox, handle, False)
                 raise
 
             self._log_event(
@@ -230,7 +343,7 @@ class ITCDPipeline:
 
             if not decision.is_allowed:
                 # Denied (or escalated to HITL) — kill the container without running it.
-                self.provisioner.teardown_sandbox(handle, executed=False)
+                await asyncio.to_thread(self.provisioner.teardown_sandbox, handle, False)
                 self._log_event(
                     agent_id,
                     "container_killed_unexecuted",
@@ -257,9 +370,11 @@ class ITCDPipeline:
                 correlation_id,
             )
             try:
-                return self.provisioner.execute_in_sandbox(handle)
+                # Running the workload blocks for as long as the sandbox takes
+                # (up to container_timeout_seconds). Off the loop it goes.
+                return await asyncio.to_thread(self.provisioner.execute_in_sandbox, handle)
             finally:
-                self.provisioner.teardown_sandbox(handle)
+                await asyncio.to_thread(self.provisioner.teardown_sandbox, handle)
 
         result = await ReasoningCaptureMiddleware.capture_and_evaluate(
             agent_id=agent_id,

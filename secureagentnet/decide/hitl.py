@@ -17,6 +17,45 @@ class HITLDecision(str, Enum):
     PENDING = "pending"
 
 
+def _as_decision(status: Optional[str]) -> HITLDecision:
+    """Map a stored status string to a decision, tolerating unknown values."""
+    try:
+        return HITLDecision(status)
+    except ValueError:
+        return HITLDecision.TIMED_OUT
+
+
+# The repository is imported lazily and every call degrades to None on failure,
+# so the gate still works in unit tests and installs with no database wired up.
+
+def _repo():
+    try:
+        from secureagentnet.database.repositories import HITLRepository
+        return HITLRepository
+    except Exception:
+        return None
+
+
+def _repo_save(req: Dict[str, Any]) -> bool:
+    repo = _repo()
+    return bool(repo and repo.save(req))
+
+
+def _repo_get(request_id: str) -> Optional[Dict[str, Any]]:
+    repo = _repo()
+    return repo.get(request_id) if repo else None
+
+
+def _repo_list(status: Optional[str] = None) -> list:
+    repo = _repo()
+    return repo.list_all(status) if repo else []
+
+
+def _repo_set_decision(request_id: str, status: str, operator: str) -> Optional[Dict[str, Any]]:
+    repo = _repo()
+    return repo.set_decision(request_id, status, operator) if repo else None
+
+
 class HITLApprovalGate:
     """Human-in-the-Loop approval system for moderate-risk agent actions.
 
@@ -31,7 +70,7 @@ class HITLApprovalGate:
 
     @property
     def pending_count(self) -> int:
-        return len(self._pending_requests)
+        return len(self.get_all_pending())
 
     def requires_approval(self, risk_score: float) -> bool:
         settings = None
@@ -67,67 +106,111 @@ class HITLApprovalGate:
             "decision_at": None,
             "decided_by": None,
         }
+        persisted = _repo_save(req)
+        # Remember whether this request reached shared storage. Where it did, the
+        # DB row is authoritative and the local copy is only a cache — another
+        # process may decide the request without this one ever hearing about it.
+        req["_persisted"] = persisted
         with self._lock:
             self._pending_requests[request_id] = req
+        if not persisted:
+            logger.warning(
+                "HITL: request %s is in-process only — no database is reachable, so "
+                "it cannot be resolved from another process (e.g. `san hitl approve`)",
+                request_id,
+            )
         logger.info(
             "HITL: action '%s' by agent %s queued for approval (risk=%.2f)",
             action_name, agent_id, risk_score,
         )
         return request_id
 
-    def approve(self, request_id: str, operator: str = "cli") -> HITLDecision:
+    def _decide(self, request_id: str, decision: HITLDecision, operator: str) -> HITLDecision:
+        """Resolve a request, preferring the shared DB row over the local cache.
+
+        The DB write is conditional on the row still being ``pending``, so two
+        operators racing to approve and deny cannot both win.
+        """
+        row = _repo_set_decision(request_id, decision.value, operator)
+        if row is not None:
+            with self._lock:
+                cached = self._pending_requests.get(request_id)
+                if cached is not None:
+                    cached.update(row)
+            logger.info("HITL: request %s %s by %s", request_id, decision.value.upper(), operator)
+            self._invoke_callback(request_id, decision)
+            return decision
+
+        # Not resolvable in the DB — either it was already decided there, or no
+        # DB is configured and the request only exists in this process.
+        persisted = _repo_get(request_id)
+        if persisted is not None:
+            return _as_decision(persisted["status"])
+
         with self._lock:
             req = self._pending_requests.get(request_id)
             if not req:
                 return HITLDecision.TIMED_OUT
             if req["status"] != HITLDecision.PENDING.value:
-                return HITLDecision(req["status"])
-            req["status"] = HITLDecision.APPROVED.value
+                return _as_decision(req["status"])
+            req["status"] = decision.value
             req["decision_at"] = datetime.now(timezone.utc).isoformat()
             req["decided_by"] = operator
-        logger.info("HITL: request %s APPROVED by %s", request_id, operator)
-        self._invoke_callback(request_id, HITLDecision.APPROVED)
-        return HITLDecision.APPROVED
+        logger.info("HITL: request %s %s by %s", request_id, decision.value.upper(), operator)
+        self._invoke_callback(request_id, decision)
+        return decision
+
+    def approve(self, request_id: str, operator: str = "cli") -> HITLDecision:
+        return self._decide(request_id, HITLDecision.APPROVED, operator)
 
     def deny(self, request_id: str, operator: str = "cli") -> HITLDecision:
-        with self._lock:
-            req = self._pending_requests.get(request_id)
-            if not req:
-                return HITLDecision.TIMED_OUT
-            if req["status"] != HITLDecision.PENDING.value:
-                return HITLDecision(req["status"])
-            req["status"] = HITLDecision.DENIED.value
-            req["decision_at"] = datetime.now(timezone.utc).isoformat()
-            req["decided_by"] = operator
-        logger.info("HITL: request %s DENIED by %s", request_id, operator)
-        self._invoke_callback(request_id, HITLDecision.DENIED)
-        return HITLDecision.DENIED
+        return self._decide(request_id, HITLDecision.DENIED, operator)
 
     def wait_for_decision(self, request_id: str, timeout: int = HITL_TIMEOUT_SECONDS) -> HITLDecision:
         deadline = time.time() + timeout
         while time.time() < deadline:
-            with self._lock:
-                req = self._pending_requests.get(request_id)
-                if not req:
-                    return HITLDecision.TIMED_OUT
-                if req["status"] != HITLDecision.PENDING.value:
-                    return HITLDecision(req["status"])
+            status = self._current_status(request_id)
+            if status is None:
+                return HITLDecision.TIMED_OUT
+            if status != HITLDecision.PENDING.value:
+                return _as_decision(status)
             time.sleep(0.5)
 
         logger.warning("HITL: request %s timed out after %ds — denying", request_id, timeout)
         self.deny(request_id, "timeout")
         return HITLDecision.TIMED_OUT
 
+    def _current_status(self, request_id: str) -> Optional[str]:
+        """Status from the shared DB if present, else the local cache."""
+        persisted = _repo_get(request_id)
+        if persisted is not None:
+            return persisted["status"]
+        with self._lock:
+            req = self._pending_requests.get(request_id)
+            return req["status"] if req else None
+
     def get_pending_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+        persisted = _repo_get(request_id)
+        if persisted is not None:
+            return persisted
         with self._lock:
             return self._pending_requests.get(request_id)
 
     def get_all_pending(self) -> list:
+        """Every pending request visible to this endpoint, from any process.
+
+        Persisted requests come from the DB alone — a local cache entry can be
+        stale the moment another process decides it. Only requests that never
+        reached storage are served from memory.
+        """
+        by_id: Dict[str, Dict[str, Any]] = {}
         with self._lock:
-            return [
-                r for r in self._pending_requests.values()
-                if r["status"] == HITLDecision.PENDING.value
-            ]
+            for r in self._pending_requests.values():
+                if r["status"] == HITLDecision.PENDING.value and not r.get("_persisted"):
+                    by_id[r["request_id"]] = r
+        for r in _repo_list("pending"):
+            by_id[r["request_id"]] = r
+        return sorted(by_id.values(), key=lambda r: r.get("created_at") or "", reverse=True)
 
     def on_decision(self, request_id: str, callback: Callable):
         self._callbacks[request_id] = callback

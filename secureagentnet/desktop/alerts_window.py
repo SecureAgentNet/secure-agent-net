@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
 
 from secureagentnet.daemon.config import get_daemon_settings
 
+from secureagentnet.desktop.theme import COLORS
+
 if TYPE_CHECKING:
     from secureagentnet.desktop.main_window import MainWindow
 
@@ -28,11 +30,11 @@ class AlertsWindow(QDialog):
         self.main_window = main_window
         self.setWindowTitle("Security Alerts")
         self.setMinimumSize(800, 500)
-        self.setStyleSheet("background-color: #0f172a; color: #f8fafc;")
+        self.setStyleSheet(f"background-color: {COLORS['window']}; color: {COLORS['ink']};")
 
         layout = QVBoxLayout(self)
         header = QLabel("Blocked Activity & Security Alerts")
-        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #ef4444;")
+        header.setStyleSheet(f"font-size: 17px; font-weight: 700; color: {COLORS['red']};")
         layout.addWidget(header)
 
         self.table = QTableWidget()
@@ -40,8 +42,8 @@ class AlertsWindow(QDialog):
         self.table.setHorizontalHeaderLabels(["Time", "Severity", "Title", "Message", "Details"])
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.setStyleSheet(
-            "QTableWidget { background-color: #1e293b; gridline-color: #334155; }"
-            "QHeaderView::section { background-color: #334155; color: #f8fafc; padding: 6px; }"
+            f"QTableWidget {{ background-color: {COLORS['card']}; gridline-color: {COLORS['line_soft']};"f" border: 1px solid {COLORS['line']}; border-radius: 8px; color: {COLORS['ink']}; }}"
+            f"QHeaderView::section {{ background-color: {COLORS['surface_2']}; color: {COLORS['muted']};"f" padding: 7px; border: none; border-bottom: 1px solid {COLORS['line']};"f" font-weight: 700; font-size: 9px; letter-spacing: 1px; }}"
         )
         self.table.itemClicked.connect(self._show_details)
         layout.addWidget(self.table)
@@ -49,7 +51,7 @@ class AlertsWindow(QDialog):
         btn_layout = QHBoxLayout()
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setStyleSheet(
-            "QPushButton { background-color: #ef4444; color: #ffffff; border-radius: 6px; padding: 8px 16px; font-weight: bold; }"
+            f"QPushButton {{ background-color: {COLORS['red']}; color: #1a0806; border: none;"f" border-radius: 7px; padding: 9px 16px; font-weight: 700; }}"
         )
         refresh_btn.clicked.connect(self.load)
         btn_layout.addStretch()

@@ -74,6 +74,11 @@ class InterceptResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
     error_details: Optional[str] = None
+    # Operator-facing "here is how to fix this" lines built by the pipeline on a
+    # policy denial. Absent from this model they were computed and then silently
+    # dropped, so only the CLI (which calls the pipeline directly) ever saw them —
+    # never the desktop, an adapter, or a governed agent.
+    remediation: Optional[List[str]] = None
 
 
 class DaemonStatus(BaseModel):
@@ -149,12 +154,17 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
     async def health() -> Dict[str, str]:
         return {"status": "ok", "service": "secureagentnet-daemon"}
 
+    # NOTE: the read routes below are deliberately sync `def`, not `async def`.
+    # They do blocking I/O (DB, Docker, disk, socket probes) and never await, so
+    # FastAPI runs them in its threadpool. As `async def` they executed on the
+    # event loop and a single slow read blocked every other request, /v1/intercept
+    # included. Keep any handler that does blocking work sync.
     @app.get("/v1/status")
-    async def status() -> DaemonStatus:
+    def status() -> DaemonStatus:
         return get_state().get_status()
 
     @app.get("/v1/health")
-    async def service_health() -> Dict[str, str]:
+    def service_health() -> Dict[str, str]:
         from secureagentnet.daemon.health import probe_services
         return probe_services()
 
@@ -248,6 +258,7 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
             data=result.get("data"),
             metadata=result.get("metadata", {}),
             error_details=result.get("error_details"),
+            remediation=result.get("remediation"),
         )
 
     @app.post("/v1/scan", dependencies=[Depends(_require_local_or_token)])
@@ -259,14 +270,14 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
         return {"status": "error", "detail": "Discovery scheduler not available"}
 
     @app.get("/v1/agents/discovered")
-    async def discovered() -> List[Dict[str, Any]]:
+    def discovered() -> List[Dict[str, Any]]:
         state = get_state()
         if state.discovery_scheduler:
             return state.discovery_scheduler.last_results
         return []
 
     @app.get("/v1/agents")
-    async def registered_agents() -> List[Dict[str, Any]]:
+    def registered_agents() -> List[Dict[str, Any]]:
         """All agents known to the identity registry (registered + discovered),
         not just those currently running as live processes."""
         # Framework gateways may run in a separate process while the Desktop is
@@ -315,20 +326,69 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
             })
         return out
 
+    @app.get("/v1/events/recent")
+    def recent_events(limit: int = 200) -> List[Dict[str, Any]]:
+        """The newest audit events, newest first.
+
+        The desktop's Recent Activity and Forensics panels were fed only by the
+        live alert WebSocket, so they opened empty on every launch and showed
+        nothing that happened before the app started. This backfills them from the
+        persisted audit trail.
+        """
+        if not LogIndexer._events:
+            LogIndexer._load()
+        # The buffer's order is not uniform: load_all() returns newest-first, while
+        # index_event appends live events to the tail. Sort explicitly rather than
+        # trusting either end.
+        events = sorted(
+            LogIndexer._events,
+            key=lambda e: str(e.get("timestamp") or ""),
+            reverse=True,
+        )[:max(1, min(limit, 1000))]
+        out: List[Dict[str, Any]] = []
+        for e in events:
+            # Persisted rows carry a flat "summary"; live in-memory events carry a
+            # "details" dict. Accept both so the panel reads the same either way.
+            detail = str(e.get("summary") or "")
+            details = e.get("details")
+            if not detail and isinstance(details, dict):
+                detail = str(details.get("reason") or details.get("action")
+                             or details.get("command") or details.get("target_resource") or "")
+            out.append({
+                "timestamp": str(e.get("timestamp", "")),
+                "agent_id": str(e.get("agent_id", "")),
+                "phase": str(e.get("phase", "")),
+                "event_type": str(e.get("event_type", "")),
+                "severity": str(e.get("severity", "INFO")),
+                "detail": detail,
+                "correlation_id": str(e.get("correlation_id", "")),
+            })
+        return out
+
     @app.get("/v1/agent-contracts")
-    async def agent_contracts() -> List[Dict[str, Any]]:
+    def agent_contracts() -> List[Dict[str, Any]]:
         """Framework-neutral contracts observed on governed agent actions."""
         from secureagentnet.integrations.events import summarize_agent_contracts
 
-        LogIndexer._load()
+        # Backfill from disk only on a cold buffer. _load() *replaces* the buffer
+        # with DB rows, and the persisted schema has no column for an event's
+        # "details" — which is exactly where the security_context that contracts
+        # are derived from lives. Reloading unconditionally therefore threw away
+        # every contract the running daemon had observed, leaving the desktop's
+        # Project column permanently blank.
+        if not LogIndexer._events:
+            LogIndexer._load()
         return summarize_agent_contracts(LogIndexer._events)
 
     @app.get("/v1/agents/{agent_id}")
-    async def agent_detail(agent_id: str) -> Dict[str, Any]:
+    def agent_detail(agent_id: str) -> Dict[str, Any]:
         """Full detail for one agent: identity, capabilities, container resources,
         the enforced security profile, and a timestamped ITCD activity timeline."""
         IdentityRegistry.initialize()
-        LogIndexer._load()
+        # Backfill only on a cold buffer — _load() replaces the in-memory events
+        # with DB rows, which drops the per-event "details" the timeline reads.
+        if not LogIndexer._events:
+            LogIndexer._load()
         a = IdentityRegistry.get_agent(agent_id)
         if not a:
             raise HTTPException(status_code=404, detail="Agent not found")
@@ -338,6 +398,25 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
             cap_list = sorted(k for k, v in caps.items() if v)
         else:
             cap_list = [str(x) for x in (caps or [])]
+
+        # The commissioned mandate — the goal DECIDE measures every action against.
+        # Read it straight from the repository rather than MandateRegistry.get_active(),
+        # which auto-provisions and persists a default when none exists; a detail view
+        # must not create a mandate as a side effect of being opened.
+        mandate: Optional[Dict[str, Any]] = None
+        try:
+            from secureagentnet.database.repositories import MandateRepository
+            record = MandateRepository.get_active_for_agent(agent_id)
+            if record:
+                mandate = {
+                    "goal": record.get("original_goal") or "",
+                    "approved_actions": record.get("approved_actions") or [],
+                    "forbidden_actions": record.get("forbidden_actions") or [],
+                    "expires_at": str(record.get("expires_at") or ""),
+                    "session_id": str(record.get("session_id") or ""),
+                }
+        except Exception:
+            mandate = None
 
         from secureagentnet.contain.resource_manager import ContainerResourceManager
         containers = ContainerResourceManager.get_agent_containers(agent_id)
@@ -352,7 +431,6 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
         if container and container.get("status") == "running":
             live = _live_container_stats(container.get("container_id"))
 
-        from secureagentnet.track.log_indexer import LogIndexer
         events = LogIndexer.query_by_agent(agent_id, limit=8)
         from secureagentnet.integrations.events import summarize_agent_contracts
         contracts = summarize_agent_contracts(LogIndexer._events)
@@ -372,6 +450,7 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
 
         return {
             "agent_id": agent_id,
+            "mandate": mandate,
             "name": a.get("name", ""),
             "type": a.get("type", ""),
             "framework": a.get("type", ""),

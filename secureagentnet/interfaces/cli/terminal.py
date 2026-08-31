@@ -10,7 +10,7 @@ from secureagentnet.interfaces.cli.commands import (
     agent, run, forensics, security, contain,
     server, doctor, audit, config_cmd, metrics,
     version, init, evaluate, mcp, daemon, desktop,
-    view_logs, trust, host,
+    view_logs, trust, host, hitl,
 )
 
 console = Console()
@@ -120,6 +120,7 @@ cli.add_command(daemon)
 cli.add_command(desktop)
 cli.add_command(view_logs)
 cli.add_command(host)
+cli.add_command(hitl)
 
 
 if __name__ == "__main__":

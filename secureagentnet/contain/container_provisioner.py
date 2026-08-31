@@ -130,6 +130,18 @@ class ContainerProvisioner:
                 f"Agent container limit reached ({agent_running}/{config.max_containers_per_agent})"
             )
 
+    @staticmethod
+    def _workspace_volume_name(sandbox_id: str) -> str:
+        return f"san-ws-{sandbox_id}"
+
+    def _remove_workspace_volume(self, sandbox_id: str):
+        """Drop a sandbox's workspace volume; a no-op when it never had one."""
+        try:
+            self.client.volumes.get(self._workspace_volume_name(sandbox_id)).remove(force=True)
+            logger.debug("Removed workspace volume for %s", sandbox_id)
+        except Exception:
+            pass
+
     def _inject_files(self, sandbox_id: str, files: list[InjectedFile]):
         if not files:
             return
@@ -148,7 +160,12 @@ class ContainerProvisioner:
                         )
             logger.info("Injected %d files into %s", len(files), sandbox_id)
         except Exception as e:
-            logger.warning("Failed to inject files into %s: %s", sandbox_id, e)
+            # Swallowing this left the workload running against an empty
+            # workspace and reporting "no matches" as though that were a result.
+            logger.error("Failed to inject files into %s: %s", sandbox_id, e)
+            raise RuntimeError(
+                f"Could not inject {len(files)} file(s) into sandbox {sandbox_id}: {e}"
+            ) from e
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -280,10 +297,23 @@ class ContainerProvisioner:
 
         if config.read_only:
             size = config.tmpfs_size
-            run_kwargs["tmpfs"] = {
-                "/tmp": f"size={size},noexec,nosuid,nodev",
-                config.work_dir: f"size={size},noexec,nosuid,nodev",
-            }
+            run_kwargs["tmpfs"] = {"/tmp": f"size={size},noexec,nosuid,nodev"}
+            if request.files:
+                # Injected files have to be written before the container starts,
+                # and Docker refuses put_archive against a read-only rootfs — a
+                # tmpfs at the workspace does not help, because the mount would
+                # also shadow anything written underneath it. A dedicated volume
+                # is writable for the injection and still leaves the rest of the
+                # filesystem read-only.
+                run_kwargs["volumes"] = {
+                    self._workspace_volume_name(sandbox_id): {
+                        "bind": config.work_dir, "mode": "rw",
+                    }
+                }
+            else:
+                run_kwargs["tmpfs"][config.work_dir] = (
+                    f"size={size},noexec,nosuid,nodev"
+                )
 
         if request.args:
             run_kwargs["command"] = request.args
@@ -328,16 +358,32 @@ class ContainerProvisioner:
             ResourceQuota(cpu_limit=1.0, memory_limit_mb=int(config.mem_limit.rstrip("m"))),
         )
 
+        if request.files:
+            # Per-sandbox and removed at teardown, so one agent's injected files
+            # can never be visible to another's workspace.
+            self.client.volumes.create(
+                name=self._workspace_volume_name(sandbox_id),
+                labels={"managed_by": "secureagentnet", "sandbox_id": sandbox_id},
+            )
+
         try:
             container = self.client.containers.create(**run_kwargs)
         except (APIError, RuntimeError) as e:
             logger.error("Container provisioning error: %s", e)
             ContainerResourceManager.remove_container(sandbox_id)
             secret_injector.revoke_secrets(agent_id, sandbox_id)
+            self._remove_workspace_volume(sandbox_id)
             raise
 
         ContainerResourceManager.update_status(sandbox_id, "provisioned")
-        self._inject_files(sandbox_id, request.files)
+        try:
+            self._inject_files(sandbox_id, request.files)
+        except Exception:
+            container.remove(force=True)
+            ContainerResourceManager.remove_container(sandbox_id)
+            secret_injector.revoke_secrets(agent_id, sandbox_id)
+            self._remove_workspace_volume(sandbox_id)
+            raise
         logger.info(
             "Provisioned sandbox %s (image=%s) — contained, awaiting DECIDE",
             sandbox_id, config.image,
@@ -418,6 +464,7 @@ class ContainerProvisioner:
         finally:
             ContainerResourceManager.remove_container(sandbox_id)
             handle.secret_injector.revoke_secrets(handle.agent_id, sandbox_id)
+            self._remove_workspace_volume(sandbox_id)
 
         if not executed:
             logger.info(

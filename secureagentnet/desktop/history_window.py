@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 
 from secureagentnet.database.repositories import AuditLogRepository
 
+from secureagentnet.desktop.theme import COLORS
+
 if TYPE_CHECKING:
     from secureagentnet.desktop.main_window import MainWindow
 
@@ -27,11 +29,11 @@ class HistoryWindow(QDialog):
         self.main_window = main_window
         self.setWindowTitle("Security Log History")
         self.setMinimumSize(800, 500)
-        self.setStyleSheet("background-color: #0f172a; color: #f8fafc;")
+        self.setStyleSheet(f"background-color: {COLORS['window']}; color: {COLORS['ink']};")
 
         layout = QVBoxLayout(self)
         header = QLabel("Security Log Database")
-        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #38bdf8;")
+        header.setStyleSheet(f"font-size: 17px; font-weight: 700; color: {COLORS['primary']};")
         layout.addWidget(header)
 
         self.table = QTableWidget()
@@ -39,15 +41,15 @@ class HistoryWindow(QDialog):
         self.table.setHorizontalHeaderLabels(["Time", "Agent", "Event", "Phase", "Severity", "Summary"])
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         self.table.setStyleSheet(
-            "QTableWidget { background-color: #1e293b; gridline-color: #334155; }"
-            "QHeaderView::section { background-color: #334155; color: #f8fafc; padding: 6px; }"
+            f"QTableWidget {{ background-color: {COLORS['card']}; gridline-color: {COLORS['line_soft']};"f" border: 1px solid {COLORS['line']}; border-radius: 8px; color: {COLORS['ink']}; }}"
+            f"QHeaderView::section {{ background-color: {COLORS['surface_2']}; color: {COLORS['muted']};"f" padding: 7px; border: none; border-bottom: 1px solid {COLORS['line']};"f" font-weight: 700; font-size: 9px; letter-spacing: 1px; }}"
         )
         layout.addWidget(self.table)
 
         btn_layout = QHBoxLayout()
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setStyleSheet(
-            "QPushButton { background-color: #38bdf8; color: #0f172a; border-radius: 6px; padding: 8px 16px; font-weight: bold; }"
+            f"QPushButton {{ background-color: {COLORS['primary']}; color: #04120f; border: none;"f" border-radius: 7px; padding: 9px 16px; font-weight: 700; }}"
         )
         refresh_btn.clicked.connect(self.load)
         btn_layout.addStretch()

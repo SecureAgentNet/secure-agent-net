@@ -3,6 +3,8 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from secureagentnet.contain.runtime_syscalls import GENERAL_RUNTIME_SYSCALLS
+
 logger = logging.getLogger("SecureAgentNet.Contain.SecurityProfiles")
 
 
@@ -11,24 +13,13 @@ SECCOMP_DEFAULT = {
     "architectures": ["SCMP_ARCH_X86_64", "SCMP_ARCH_X86", "SCMP_ARCH_AARCH64"],
     "syscalls": [
         {
-            "names": [
-                "accept", "accept4", "access", "arch_prctl", "bind", "brk",
-                "capget", "capset", "chdir", "chmod", "chown",
-                "clock_gettime", "clone", "close", "connect",
-                "dup", "dup2", "epoll_create", "epoll_ctl",
-                "epoll_pwait", "epoll_wait", "exit", "exit_group",
-                "faccessat", "fchmod", "fchown", "fcntl", "fstat",
-                "futex", "getdents64", "getegid", "geteuid", "getgid",
-                "getpid", "getrandom", "getuid", "ioctl", "listen",
-                "lseek", "mmap", "mprotect", "munmap", "nanosleep",
-                "newfstatat", "openat", "pipe2", "poll", "prctl",
-                "pread64", "pselect6", "pwrite64", "read", "readlink",
-                "recvfrom", "recvmsg", "rseq", "rt_sigaction",
-                "rt_sigprocmask", "rt_sigreturn", "sched_getaffinity",
-                "select", "sendmmsg", "sendto", "set_robust_list",
-                "setitimer", "setsockopt", "socket", "splice", "stat",
-                "sysinfo", "tgkill", "uname", "wait4", "write", "writev",
-            ],
+            # The general-purpose fallback, used when no per-agent profile
+            # applies, so it carries sockets too. Per-agent profiles start from
+            # the socket-free base and add network syscalls per capability.
+            # Both derive from the same source, so a syscall required just to
+            # start a process cannot go missing from one of them. Dangerous
+            # syscalls are absent and therefore denied by defaultAction.
+            "names": list(GENERAL_RUNTIME_SYSCALLS),
             "action": "SCMP_ACT_ALLOW",
         },
         {

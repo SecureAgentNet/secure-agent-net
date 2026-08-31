@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from secureagentnet.integrations.wrappers.client import InterceptClient
+from secureagentnet.integrations.wrappers.client import InterceptClient, format_denial
 
 
 try:
@@ -64,8 +64,7 @@ class SecureAgentNetLangChainTool(BaseTool):
         )
 
         if result.get("status") == "blocked":
-            reason = result.get("reason", "blocked by security policy")
-            return f"[BLOCKED by SecureAgentNet] {reason}"
+            return format_denial(result)
 
         if result.get("status") == "error":
             return f"[ERROR] {result.get('reason', 'unknown error')}"

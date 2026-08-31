@@ -196,6 +196,32 @@ class IntentCapsule(Base):
     active = Column(Boolean, default=True)
 
 
+class HITLRequest(Base):
+    """A medium-risk action parked for operator approval.
+
+    Persisted rather than held in process memory: the escalating process (a
+    one-shot ``san run``) and the resolving process (``san hitl approve``, the
+    daemon API, the desktop console) are different processes, so an in-memory
+    queue is invisible to every consumer but its own.
+    """
+
+    __tablename__ = "hitl_requests"
+
+    request_id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    agent_id = Column(Uuid, ForeignKey("agents.agent_id", ondelete="CASCADE"), nullable=True)
+    action_name = Column(String(255), nullable=False)
+    target_resource = Column(Text, nullable=True)
+    intent_summary = Column(Text, nullable=True)
+    risk_score = Column(Float, nullable=True)
+    reason = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    decision_at = Column(DateTime(timezone=True), nullable=True)
+    decided_by = Column(String(255), nullable=True)
+
+    __table_args__ = (Index("ix_hitl_requests_status", "status"),)
+
+
 class User(Base):
     __tablename__ = "users"
 

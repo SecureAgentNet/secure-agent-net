@@ -183,3 +183,67 @@ async def test_get_pipeline_status(pipeline):
     assert "agents" in status
     assert status["agents"]["active"] == 2
     assert status["agents"]["total"] == 2
+
+
+class TestCapabilityRemediation:
+    """The operator-facing 'here is how to authorise this' lines on a denial."""
+
+    def test_admin_capability_map_is_not_listed_as_raw_keys(self):
+        """An admin grant is {"level": "admin", "actions": [...]}, not a grant table.
+
+        Listing its keys reported the granted set as "actions, level" and then
+        suggested `--action actions`, which is not a capability at all.
+        """
+        from secureagentnet.core.pipeline import ITCDPipeline
+        from secureagentnet.identify.identity_registry import IdentityRegistry
+
+        IdentityRegistry.initialize()
+        agent = IdentityRegistry.register_agent(
+            {"name": "remediation-admin", "type": "Custom",
+             "capabilities": {"level": "admin", "actions": ["*"]}})
+        lines = ITCDPipeline._capability_remediation(agent["agent_id"], "send_email")
+
+        assert "Granted capabilities: *" in lines
+        assert not any("level" in ln for ln in lines)
+        assert not any("--action actions" in ln for ln in lines)
+
+    def test_suggests_an_alternative_only_when_there_is_exactly_one(self):
+        from secureagentnet.core.pipeline import ITCDPipeline
+        from secureagentnet.identify.identity_registry import IdentityRegistry
+
+        IdentityRegistry.initialize()
+        one = IdentityRegistry.register_agent(
+            {"name": "remediation-one", "type": "Custom", "capabilities": {"read_file": True}})
+        many = IdentityRegistry.register_agent(
+            {"name": "remediation-many", "type": "Custom",
+             "capabilities": {"read_file": True, "list_dir": True, "stat_file": True}})
+
+        one_lines = ITCDPipeline._capability_remediation(one["agent_id"], "send_email")
+        many_lines = ITCDPipeline._capability_remediation(many["agent_id"], "send_email")
+
+        assert any("Did you mean: --action read_file" in ln for ln in one_lines)
+        # With several granted actions the alphabetically-first is a guess, not advice.
+        assert not any("Did you mean" in ln for ln in many_lines)
+        assert any("list_dir, read_file, stat_file" in ln for ln in many_lines)
+
+    def test_building_a_denial_does_not_provision_a_mandate(self):
+        """MandateRegistry.get_active() auto-provisions and persists a default.
+
+        Reaching for it while explaining a refusal would hand the agent a mandate
+        it was never commissioned with — on the very path that just denied it.
+        """
+        from secureagentnet.core.pipeline import ITCDPipeline
+        from secureagentnet.identify.identity_registry import IdentityRegistry
+        from secureagentnet.database.repositories import MandateRepository
+
+        IdentityRegistry.initialize()
+        agent = IdentityRegistry.register_agent(
+            {"name": "remediation-no-mandate", "type": "Custom",
+             "capabilities": {"read_file": True}})
+        aid = agent["agent_id"]
+        assert MandateRepository.get_active_for_agent(aid) is None
+
+        ITCDPipeline._capability_remediation(aid, "send_email")
+
+        assert MandateRepository.get_active_for_agent(aid) is None, \
+            "explaining a denial must not commission the agent"

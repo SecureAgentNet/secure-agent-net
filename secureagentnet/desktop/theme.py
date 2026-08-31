@@ -1,115 +1,247 @@
 """Visual theme for the SecureAgentNet desktop app.
 
-Matches the SecureAgentNet product design system: a light app surface with a
-dark slate sidebar, a blue primary action, a green/teal status accent, the four
-ITCD phase colours (IDENTIFY green, TRACK blue, CONTAIN purple, DECIDE red) and a
-navy terminal. Data and logs are set in a monospace face.
+A dark operations console. The chrome recedes to near-black so that the only
+saturated colour on screen is carrying information: the four ITCD phase hues, and
+the allow / escalate / deny verdict signals. Data and logs are set in a monospace
+face; chrome and labels in the UI sans.
+
+Colour is a signal here, not decoration — nothing is tinted just to look lively.
+Every token below is referenced by ``main_window.py`` rather than being written as
+a literal, so the palette can be retuned in one place.
 """
 
+def apply_palette(app) -> None:
+    """Paint Qt's *default* widget colours dark.
+
+    The stylesheet only reaches widgets it names. Plain containers — the page
+    widgets inside the QStackedWidget, the viewport of every QScrollArea — keep
+    the platform palette, which on a light desktop theme leaves the content plane
+    white behind the dark cards. Setting the palette fixes those at the source,
+    and the stylesheet keeps styling the named components on top.
+    """
+    from PySide6.QtGui import QColor, QPalette
+
+    ground = QColor(COLORS["window"])
+    surface = QColor(COLORS["card"])
+    ink = QColor(COLORS["ink"])
+    muted = QColor(COLORS["muted"])
+    accent = QColor(COLORS["primary"])
+
+    pal = QPalette()
+    for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+        pal.setColor(group, QPalette.Window, ground)
+        pal.setColor(group, QPalette.Base, QColor("#0e141b"))
+        pal.setColor(group, QPalette.AlternateBase, surface)
+        pal.setColor(group, QPalette.Button, surface)
+        pal.setColor(group, QPalette.ToolTipBase, surface)
+        pal.setColor(group, QPalette.Highlight, accent)
+        pal.setColor(group, QPalette.Link, accent)
+        text = muted if group == QPalette.Disabled else ink
+        for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText,
+                     QPalette.ToolTipText):
+            pal.setColor(group, role, text)
+        pal.setColor(group, QPalette.HighlightedText, QColor("#04120f"))
+        pal.setColor(group, QPalette.PlaceholderText, QColor(COLORS["dim"]))
+    app.setPalette(pal)
+
+
 COLORS = {
-    "window": "#f5f8fc",
-    "sidebar": "#0f172a",
-    "sidebar_text": "#94a3b8",
-    "card": "#ffffff",
-    "line": "#e6ebf2",
-    "ink": "#0f172a",
-    "muted": "#64748b",
-    "primary": "#2563eb",
-    "accent": "#10b981",
-    "teal": "#10b981",
-    "green": "#16a34a",
-    "blue": "#2563eb",
-    "purple": "#7c3aed",
-    "amber": "#b45309",
-    "red": "#dc2626",
-    # ITCD phase tints
-    "identify": "#16a34a",
-    "track": "#2563eb",
-    "contain": "#7c3aed",
-    "decide": "#dc2626",
-    "console_bg": "#0b1220",
-    "console_fg": "#cbd5e1",
+    # ── ground & chrome ──
+    "window": "#0b0f14",          # app ground
+    "sidebar": "#070a0e",         # chrome sits *below* the content plane
+    "sidebar_text": "#8896a4",
+    "card": "#121820",            # raised surface
+    "surface_2": "#18202a",       # insets: table headers, wells
+    "line": "#232d38",
+    "line_soft": "#1b242e",
+
+    # ── type ──
+    "ink": "#e6edf3",             # primary text
+    "muted": "#8896a4",           # secondary text
+    "dim": "#5f6d7a",             # tertiary / disabled
+
+    # ── accent (interaction, not status) ──
+    "primary": "#19b8a6",
+    "primary_hover": "#25d0bc",
+    "primary_dim": "#0e6e64",
+    "accent": "#19b8a6",
+    "teal": "#19b8a6",
+
+    # ── semantic verdicts ──
+    "green": "#3fbf6f",
+    "green_wash": "#0f2318",
+    "amber": "#e0a63c",
+    "amber_wash": "#2b2211",
+    "red": "#ef6d63",
+    "red_wash": "#2e1614",
+    "blue": "#5b9cf8",
+    "blue_wash": "#101b2b",
+    "purple": "#9b7ef0",
+    "purple_wash": "#191430",
+
+    # ── ITCD phase tints ──
+    "identify": "#3fbf6f",
+    "track": "#5b9cf8",
+    "contain": "#9b7ef0",
+    "decide": "#ef6d63",
+
+    "console_bg": "#080b0f",
+    "console_fg": "#c3d0dc",
 }
+
+MONO = "'JetBrains Mono','DejaVu Sans Mono','SF Mono',Menlo,monospace"
 
 # (objectName, accent, fill, border) for the four ITCD phase cards.
 PHASES = [
-    ("phaseIdentify", "#16a34a", "#ecfdf5", "#bbf7d0"),
-    ("phaseTrack",    "#2563eb", "#eff6ff", "#bfdbfe"),
-    ("phaseContain",  "#7c3aed", "#f5f3ff", "#ddd6fe"),
-    ("phaseDecide",   "#dc2626", "#fef2f2", "#fecaca"),
+    ("phaseIdentify", "#3fbf6f", "#0f2318", "#1e4a31"),
+    ("phaseTrack",    "#5b9cf8", "#101b2b", "#22406b"),
+    ("phaseContain",  "#9b7ef0", "#191430", "#3a2e63"),
+    ("phaseDecide",   "#ef6d63", "#2a1412", "#5a2a26"),
 ]
 
 STYLESHEET = """
-#root { background: #f5f8fc; }
+#root, QMainWindow, QStackedWidget { background: #0b0f14; }
+QStackedWidget > QWidget { background: #0b0f14; }
+QScrollArea { background: #0b0f14; border: none; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+QWidget { color: #e6edf3; }
+QToolTip {
+  background: #18202a; color: #e6edf3; border: 1px solid #232d38;
+  padding: 5px 8px; border-radius: 4px;
+}
 
-/* ── sidebar ── */
-#sidebar { background: #0f172a; }
-QLabel#logoText { color: #ffffff; font-size: 15px; font-weight: 700; }
-QLabel#logoSub { color: #64748b; font-size: 10px; letter-spacing: 1px; }
+/* ── sidebar ─────────────────────────────────────────────────── */
+#sidebar { background: #070a0e; border-right: 1px solid #1b242e; }
+QLabel#logoText { color: #e6edf3; font-size: 14px; font-weight: 700; letter-spacing: .2px; }
+QLabel#logoSub {
+  color: #5f6d7a; font-size: 9px; font-weight: 600; letter-spacing: 1.4px;
+}
 QPushButton#nav {
-  color: #94a3b8; text-align: left; padding: 10px 14px; border: none;
-  border-radius: 8px; background: transparent; font-size: 13px; font-weight: 500;
+  color: #8896a4; text-align: left; padding: 9px 12px 9px 13px;
+  border: none; border-left: 2px solid transparent;
+  background: transparent; font-size: 13px; font-weight: 500;
 }
-QPushButton#nav:hover { background: rgba(255,255,255,0.06); color: #ffffff; }
-QPushButton#nav:checked { background: #2563eb; color: #ffffff; font-weight: 600; }
-QLabel#connDot { font-size: 11px; color: #94a3b8; }
+QPushButton#nav:hover { background: #101720; color: #e6edf3; }
+QPushButton#nav:checked {
+  background: #101720; color: #19b8a6;
+  border-left: 2px solid #19b8a6; font-weight: 600;
+}
+QLabel#connDot { font-size: 11px; color: #8896a4; font-family: 'JetBrains Mono', monospace; }
+QLabel#railMeta {
+  font-size: 10px; color: #5f6d7a; font-family: 'JetBrains Mono', monospace;
+}
 
-/* ── content ── */
-QLabel#pageTitle { font-size: 20px; font-weight: 700; color: #0f172a; }
-QLabel#pageSub { font-size: 12px; color: #64748b; }
-QLabel#sectionTitle { font-size: 14px; font-weight: 600; color: #0f172a; }
-QLabel#statValue { font-size: 26px; font-weight: 700; color: #0f172a; }
-QLabel#statLabel { font-size: 11px; color: #64748b; }
-QLabel#fieldLabel { font-size: 12px; color: #334155; font-weight: 500; }
+/* ── content ─────────────────────────────────────────────────── */
+QLabel#pageTitle { font-size: 19px; font-weight: 700; color: #e6edf3; letter-spacing: -.2px; }
+QLabel#pageSub { font-size: 13px; color: #8896a4; }
+QLabel#sectionTitle {
+  font-size: 10px; font-weight: 700; color: #8896a4;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+QLabel#statValue {
+  font-size: 25px; font-weight: 700; color: #e6edf3;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+}
+QLabel#statLabel {
+  font-size: 10px; color: #8896a4; letter-spacing: .8px; text-transform: uppercase;
+}
+QLabel#fieldLabel { font-size: 13px; color: #a9b6c2; font-weight: 500; }
+QLabel#bannerTitle { font-size: 21px; font-weight: 700; color: #e6edf3; }
 
-#card { background: #ffffff; border: 1px solid #e6ebf2; border-radius: 12px; }
+#card { background: #121820; border: 1px solid #232d38; border-radius: 10px; }
 
-/* ── ITCD phase cards ── */
-QFrame#phaseIdentify { background: #ecfdf5; border: 1px solid #bbf7d0; border-radius: 12px; }
-QFrame#phaseTrack    { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; }
-QFrame#phaseContain  { background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 12px; }
-QFrame#phaseDecide   { background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; }
-QLabel#phaseTitle { font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+/* ── ITCD phase cards ────────────────────────────────────────── */
+QFrame#phaseIdentify { background: #0f2318; border: 1px solid #1e4a31; border-radius: 10px; }
+QFrame#phaseTrack    { background: #101b2b; border: 1px solid #22406b; border-radius: 10px; }
+QFrame#phaseContain  { background: #191430; border: 1px solid #3a2e63; border-radius: 10px; }
+QFrame#phaseDecide   { background: #2a1412; border: 1px solid #5a2a26; border-radius: 10px; }
+QLabel#phaseTitle { font-size: 10px; font-weight: 700; letter-spacing: 1.4px; }
 QLabel#phaseStat {
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 11px; color: #334155;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 11px; color: #a9b6c2;
 }
 
+/* ── buttons ─────────────────────────────────────────────────── */
 QPushButton#primary {
-  background: #2563eb; color: #ffffff; border: none; border-radius: 8px;
-  padding: 9px 16px; font-weight: 600; font-size: 13px;
+  background: #19b8a6; color: #04120f; border: none; border-radius: 7px;
+  padding: 11px 18px; font-weight: 700; font-size: 13px; letter-spacing: .3px;
 }
-QPushButton#primary:hover { background: #1d4ed8; }
-QPushButton#primary:disabled { background: #93b4f5; }
-QPushButton#danger { background: #dc2626; color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-weight: 600; }
-QPushButton#danger:hover { background: #b91c1c; }
-QPushButton#ghost { background: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 16px; font-weight: 600; }
-QPushButton#ghost:hover { background: #f1f5f9; }
+QPushButton#primary:hover { background: #25d0bc; }
+QPushButton#primary:pressed { background: #0e6e64; color: #d9fbf6; }
+QPushButton#primary:disabled { background: #14332f; color: #5f6d7a; }
+QPushButton#danger {
+  background: #ef6d63; color: #1a0806; border: none; border-radius: 7px;
+  padding: 9px 16px; font-weight: 700; font-size: 12px;
+}
+QPushButton#danger:hover { background: #f7867d; }
+QPushButton#ghost {
+  background: transparent; color: #c3d0dc; border: 1px solid #2d3945;
+  border-radius: 7px; padding: 10px 16px; font-weight: 600; font-size: 13px;
+}
+QPushButton#ghost:hover { background: #18202a; border-color: #19b8a6; color: #e6edf3; }
 
+/* ── inputs ──────────────────────────────────────────────────── */
 QLineEdit, QComboBox {
-  border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 10px;
-  background: #ffffff; color: #0f172a; font-size: 13px;
+  border: 1px solid #2d3945; border-radius: 7px; padding: 9px 12px;
+  background: #0e141b; color: #e6edf3; font-size: 13px;
+  selection-background-color: #0e6e64;
 }
-QLineEdit:focus, QComboBox:focus { border-color: #2563eb; }
+QLineEdit:focus, QComboBox:focus { border-color: #19b8a6; background: #101720; }
+QLineEdit::placeholder { color: #5f6d7a; }
+QComboBox::drop-down { border: none; width: 18px; }
+QComboBox QAbstractItemView {
+  background: #121820; color: #e6edf3; border: 1px solid #232d38;
+  selection-background-color: #18202a; selection-color: #19b8a6; outline: none;
+}
 
+/* ── tables ──────────────────────────────────────────────────── */
 QTableWidget {
-  background: #ffffff; border: 1px solid #e6ebf2; border-radius: 8px;
-  gridline-color: #f1f5f9; color: #0f172a;
+  background: #121820; border: 1px solid #232d38; border-radius: 8px;
+  gridline-color: #1b242e; color: #c3d0dc;
+  alternate-background-color: #141b23;
+  selection-background-color: #18202a; selection-color: #19b8a6;
+  font-size: 12px;
 }
 QHeaderView::section {
-  background: #f1f5f9; color: #64748b; padding: 8px 10px; border: none;
-  border-bottom: 1px solid #e6ebf2; font-weight: 600; font-size: 11px;
+  background: #0e141b; color: #8896a4; padding: 8px 10px; border: none;
+  border-bottom: 1px solid #232d38; font-weight: 700; font-size: 9px;
+  letter-spacing: 1px; text-transform: uppercase;
 }
-QTableWidget::item { padding: 4px 6px; }
+QTableWidget::item { padding: 5px 6px; border: none; }
+QTableWidget::item:selected { background: #18202a; color: #19b8a6; }
+QTableCornerButton::section { background: #0e141b; border: none; }
 
+/* ── console ─────────────────────────────────────────────────── */
 QPlainTextEdit#console {
-  background: #0b1220; color: #cbd5e1; border: 1px solid #1e293b;
+  background: #080b0f; color: #c3d0dc; border: 1px solid #232d38;
   border-radius: 8px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: 12px; padding: 8px;
+  font-size: 13px; line-height: 20px; padding: 14px;
+  selection-background-color: #0e6e64;
 }
 QLineEdit#consoleInput {
-  background: #0b1220; color: #cbd5e1; border: 1px solid #1e293b; border-radius: 8px;
-  font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 8px 10px;
+  background: #080b0f; color: #19b8a6; border: 1px solid #2d3945; border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 11px 14px;
 }
-QScrollBar:vertical { background: transparent; width: 10px; }
-QScrollBar::handle:vertical { background: #cbd5e1; border-radius: 5px; min-height: 30px; }
+QLineEdit#consoleInput:focus { border-color: #19b8a6; }
+
+/* ── scrollbars ──────────────────────────────────────────────── */
+QScrollBar:vertical { background: transparent; width: 9px; margin: 2px; }
+QScrollBar::handle:vertical { background: #2d3945; border-radius: 4px; min-height: 28px; }
+QScrollBar::handle:vertical:hover { background: #3d4c5a; }
+QScrollBar:horizontal { background: transparent; height: 9px; margin: 2px; }
+QScrollBar::handle:horizontal { background: #2d3945; border-radius: 4px; min-width: 28px; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; border: none; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+/* ── misc ────────────────────────────────────────────────────── */
+QSplitter::handle:vertical {
+  background: #1b242e; height: 4px; margin: 3px 0; border-radius: 2px;
+}
+QSplitter::handle:vertical:hover { background: #19b8a6; }
+QCheckBox { color: #c3d0dc; font-size: 12px; }
+QCheckBox::indicator {
+  width: 14px; height: 14px; border: 1px solid #2d3945;
+  border-radius: 3px; background: #0e141b;
+}
+QCheckBox::indicator:checked { background: #19b8a6; border-color: #19b8a6; }
 """

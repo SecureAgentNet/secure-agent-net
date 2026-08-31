@@ -8,10 +8,23 @@ from __future__ import annotations
 
 import os
 import socket
+import threading
+import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 from typing import Dict
+
+# A probe result is only as fresh as the slowest dependency it waited on, and the
+# desktop polls this several times a minute. Serve a cached snapshot within the TTL
+# so a panel refresh never re-pays the probe cost, and a dependency that is *down*
+# (the expensive case — each probe burns its full timeout) is retried at a sane rate
+# instead of on every poll.
+_CACHE_TTL_SECONDS = 10.0
+_cache_lock = threading.Lock()
+_cached: Dict[str, str] | None = None
+_cached_at = 0.0
 
 
 def _tcp_ok(url: str, default_port: int, timeout: float = 1.0) -> bool:
@@ -75,7 +88,7 @@ def _docker_ok() -> bool:
         return False
 
 
-def probe_services() -> Dict[str, str]:
+def _probe_services_uncached() -> Dict[str, str]:
     """Return {service_label: "online" | "offline"} for the core dependencies."""
     try:
         from secureagentnet.core.config import get_settings
@@ -95,10 +108,40 @@ def probe_services() -> Dict[str, str]:
     # inside has crashed on startup — a TCP-only check would falsely report "online".
     mcp_url = os.environ.get("SAN_MCP_GATEWAY_URL", "http://127.0.0.1:5000/")
 
-    return {
-        "Database": mark(_database_ok()),
-        "Vault": mark(_tcp_ok(vault_addr, 8200)),
-        "Ollama LLM": mark(_tcp_ok(ollama_url, 11434)),
-        "Docker": mark(_docker_ok()),
-        "MCP Gateway": mark(_http_ok(mcp_url)),
+    # Run the five probes concurrently. Serially, every dependency that is down
+    # adds its full timeout to the total (5 down ~= 6s); in parallel the worst case
+    # is the slowest single probe (~1.5s).
+    probes = {
+        "Database": _database_ok,
+        "Vault": lambda: _tcp_ok(vault_addr, 8200),
+        "Ollama LLM": lambda: _tcp_ok(ollama_url, 11434),
+        "Docker": _docker_ok,
+        "MCP Gateway": lambda: _http_ok(mcp_url),
     }
+    with ThreadPoolExecutor(max_workers=len(probes), thread_name_prefix="san-probe") as pool:
+        futures = {name: pool.submit(fn) for name, fn in probes.items()}
+        results = {}
+        for name, fut in futures.items():
+            try:
+                results[name] = mark(bool(fut.result()))
+            except Exception:
+                results[name] = "offline"
+    return results
+
+
+def probe_services(max_age: float = _CACHE_TTL_SECONDS) -> Dict[str, str]:
+    """Cached wrapper around the live probes.
+
+    Pass ``max_age=0`` to force a fresh probe (the Settings page's explicit
+    "re-check now" action); everything else shares the cached snapshot.
+    """
+    global _cached, _cached_at
+    now = time.monotonic()
+    with _cache_lock:
+        if _cached is not None and max_age > 0 and (now - _cached_at) < max_age:
+            return dict(_cached)
+    fresh = _probe_services_uncached()
+    with _cache_lock:
+        _cached = fresh
+        _cached_at = time.monotonic()
+    return dict(fresh)

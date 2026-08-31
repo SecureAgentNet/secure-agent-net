@@ -5,9 +5,19 @@ from dotenv import load_dotenv
 from email_client import GmailClient
 from ai_agent import EmailAgent
 
-load_dotenv()
+# Explicit path: under `san agent run` the working directory is the sandbox
+# workspace, not this folder, so a bare load_dotenv() would find nothing.
+load_dotenv(Path(__file__).parent / ".env")
 
-DRAFTS_DIR = Path(__file__).parent / "drafts"
+# /agent-src is mounted read-only inside the sandbox; /workspace is the tmpfs
+# the runtime hands back as output_files. Outside the sandbox, write locally.
+DRAFTS_DIR = Path(
+    os.environ.get("EMAIL_AGENT_DRAFTS_DIR")
+    or ("/workspace/drafts" if os.environ.get("SAN_SUPERVISED") == "1"
+        else Path(__file__).parent / "drafts")
+)
+
+
 def main():
     gmail_address = os.environ["GMAIL_ADDRESS"]
     gmail_app_password = os.environ["GMAIL_APP_PASSWORD"]
@@ -29,7 +39,7 @@ def main():
     if not unread:
         return
 
-    DRAFTS_DIR.mkdir(exist_ok=True)
+    DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
     for msg in unread:
         sender_email = mail.sender_email_only(msg["sender"])
         print(f"Analyzing: '{msg['subject']}' from {sender_email}")
@@ -62,10 +72,26 @@ def main():
                     f"{result['draft_reply']}\n"
                 )
                 print(f"  -> draft reply saved to {draft_path}")
+                if os.environ.get("SAN_SUPERVISED") == "1":
+                    # The sandbox workspace is discarded with the container and
+                    # is not readable from the host, so stdout is the only way
+                    # the draft survives a supervised run.
+                    print(f"--- draft {msg['id']} ---")
+                    print(draft_path.read_text())
+                    print(f"--- end draft {msg['id']} ---")
 
         print()
 
-    print("Done. Review drafts in the 'drafts/' folder before sending anything.") 
+    if os.environ.get("SAN_SUPERVISED") == "1":
+        # The sandbox workspace is not reachable from the host, so point the
+        # operator at the stdout copy rather than a path they cannot open.
+        print("Done. Drafts are printed above; review them before sending anything.")
+    else:
+        print(f"Done. Review drafts in {DRAFTS_DIR} before sending anything.")
+
+
 if __name__ == "__main__":
     main()
+
+
     
