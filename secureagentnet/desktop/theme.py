@@ -9,6 +9,8 @@ Colour is a signal here, not decoration — nothing is tinted just to look livel
 Every token below is referenced by ``main_window.py`` rather than being written as
 a literal, so the palette can be retuned in one place.
 """
+from pathlib import Path
+
 
 def apply_palette(app) -> None:
     """Paint Qt's *default* widget colours dark.
@@ -44,6 +46,8 @@ def apply_palette(app) -> None:
         pal.setColor(group, QPalette.PlaceholderText, QColor(COLORS["dim"]))
     app.setPalette(pal)
 
+
+_CARET = (Path(__file__).parent / "resources" / "caret.svg").as_posix()
 
 COLORS = {
     # ── ground & chrome ──
@@ -99,7 +103,7 @@ PHASES = [
     ("phaseDecide",   "#ef6d63", "#2a1412", "#5a2a26"),
 ]
 
-STYLESHEET = """
+_STYLESHEET_TEMPLATE = """
 #root, QMainWindow, QStackedWidget { background: #0b0f14; }
 QStackedWidget > QWidget { background: #0b0f14; }
 QScrollArea { background: #0b0f14; border: none; }
@@ -181,14 +185,21 @@ QPushButton#ghost {
 QPushButton#ghost:hover { background: #18202a; border-color: #19b8a6; color: #e6edf3; }
 
 /* ── inputs ──────────────────────────────────────────────────── */
-QLineEdit, QComboBox {
+QLineEdit, QComboBox, QPlainTextEdit {
   border: 1px solid #2d3945; border-radius: 7px; padding: 9px 12px;
   background: #0e141b; color: #e6edf3; font-size: 13px;
   selection-background-color: #0e6e64;
 }
-QLineEdit:focus, QComboBox:focus { border-color: #19b8a6; background: #101720; }
+/* The console keeps its own rule below; every other multi-line field is an
+   ordinary form input and was rendering on Qt's default white. */
+QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus { border-color: #19b8a6; background: #101720; }
 QLineEdit::placeholder { color: #5f6d7a; }
-QComboBox::drop-down { border: none; width: 18px; }
+QComboBox::drop-down { border: none; width: 22px; }
+/* Qt's native arrow is drawn dark and vanishes on this ground, so a combo box
+   read as a plain text field. Draw the chevron with borders instead. */
+QComboBox::down-arrow {
+  image: url("__CARET__"); width: 10px; height: 6px; margin-right: 9px;
+}
 QComboBox QAbstractItemView {
   background: #121820; color: #e6edf3; border: 1px solid #232d38;
   selection-background-color: #18202a; selection-color: #19b8a6; outline: none;
@@ -245,3 +256,10 @@ QCheckBox::indicator {
 }
 QCheckBox::indicator:checked { background: #19b8a6; border-color: #19b8a6; }
 """
+
+
+# Qt draws its native combo arrow in a dark tone that vanishes on this ground, so
+# a drop-down read as a plain text field. QSS border-triangles do not render as
+# triangles in this Qt build, so the caret ships as a small SVG and its absolute
+# path is substituted here at import.
+STYLESHEET = _STYLESHEET_TEMPLATE.replace("__CARET__", _CARET)

@@ -10,13 +10,13 @@ from typing import TYPE_CHECKING, Callable, List
 from collections import deque
 
 from PySide6.QtCore import (
-    Qt, QThread, Signal, QPropertyAnimation, QEasingCurve, Property, QRectF,
+    QSettings, Qt, QThread, Signal, QPropertyAnimation, QEasingCurve, Property, QRectF,
 )
 from PySide6.QtGui import (
     QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen,
 )
 from PySide6.QtWidgets import (
-    QButtonGroup, QComboBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
+    QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSizePolicy, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget,
@@ -24,6 +24,52 @@ from PySide6.QtWidgets import (
 
 from secureagentnet.desktop.console import SanConsole
 from secureagentnet.desktop.theme import COLORS, STYLESHEET, PHASES, MONO
+
+
+# Vocabularies the forms offer instead of asking the operator to remember them.
+# An agent's own capabilities always come first; these are the fallback for an
+# agent that has not declared any yet.
+def _common_actions() -> list[str]:
+    """The action names an operator can tick when registering or commissioning.
+
+    Derived from the capability library rather than written out again, so the
+    two cannot drift: an action this build can actually perform should always be
+    offerable, and one it cannot should not be silently suggested. The extras
+    are actions the wider system understands even though the desktop has no
+    tool for them.
+    """
+    try:
+        from secureagentnet.agents.capabilities import supported
+
+        known = set(supported())
+    except Exception:  # pragma: no cover - agents package unavailable
+        known = set()
+    known.update({"http_request", "run_query"})
+    return sorted(known)
+
+
+COMMON_ACTIONS = _common_actions()
+COMMON_RESOURCES = ["shell", "local filesystem", "support-inbox", "smtp",
+                    "database", "http", "workspace"]
+
+
+def capability_actions(agent: dict | None) -> list[str]:
+    """The action names an agent actually holds, from either capability shape.
+
+    The registry stores capabilities two ways — ``{"search_files": true}`` for a
+    normal agent and ``{"level": "admin", "actions": ["*"]}`` for a privileged
+    one — so a form that reads only the first shape silently offers nothing for
+    the second.
+    """
+    caps = (agent or {}).get("capabilities") or {}
+    if not isinstance(caps, dict):
+        return []
+    if "actions" in caps and isinstance(caps["actions"], list):
+        actions = [a for a in caps["actions"] if isinstance(a, str) and a != "*"]
+    else:
+        actions = [k for k, v in caps.items()
+                   if v is True and k not in ("level", "actions")]
+    return sorted(actions)
 
 if TYPE_CHECKING:
     from secureagentnet.desktop.app import DesktopApplication
@@ -52,6 +98,104 @@ _STATUS_STYLE = {
     "ROGUE": _BAD, "KILL-SWITCH": _BAD,
     "INFO": (COLORS["blue"], COLORS["blue_wash"]),
 }
+
+
+class MandateDrafter(QThread):
+    """Draft a mandate off the UI thread — the local model takes seconds."""
+
+    drafted = Signal(object)     # DraftMandate
+    failed = Signal(str)
+
+    def __init__(self, brief: str, known_actions: list):
+        super().__init__()
+        self._brief = brief
+        self._known = known_actions
+
+    def run(self) -> None:
+        try:
+            from secureagentnet.decide.mandate_author import draft_from_brief
+            self.drafted.emit(draft_from_brief(self._brief, known_actions=self._known))
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
+class ActionPicker(QWidget):
+    """Tick the actions you mean, instead of typing a comma-separated list.
+
+    The comma syntax was the single most error-prone field on the page: a stray
+    space or a misremembered action name produced a mandate that silently did not
+    cover the work. Here the choices are the agent's own capabilities, and the
+    widget renders the comma string the CLI wants.
+    """
+
+    def __init__(self, placeholder: str = "add another…", parent=None):
+        super().__init__(parent)
+        self._boxes: list[QCheckBox] = []
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        self._host = QWidget()
+        self._host_lay = QVBoxLayout(self._host)
+        self._host_lay.setContentsMargins(8, 6, 8, 6)
+        self._host_lay.setSpacing(2)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setWidget(self._host)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._scroll.setFixedHeight(96)
+        self._scroll.setStyleSheet(
+            f"QScrollArea{{background:{COLORS['surface_2']};"
+            f"border:1px solid {COLORS['line']}; border-radius:6px;}}")
+        lay.addWidget(self._scroll)
+
+        self._extra = QLineEdit()
+        self._extra.setPlaceholderText(placeholder)
+        self._extra.setMinimumHeight(32)
+        lay.addWidget(self._extra)
+
+        self._empty = QLabel("Select an agent to list its actions")
+        self._empty.setObjectName("fieldLabel")
+        self._host_lay.addWidget(self._empty)
+        self._host_lay.addStretch()
+
+    def set_options(self, options: list[str]) -> None:
+        keep = set(self.selected())
+        for box in self._boxes:
+            box.setParent(None)
+        self._boxes.clear()
+        self._empty.setVisible(not options)
+        for name in options:
+            box = QCheckBox(name)
+            box.setChecked(name in keep)
+            self._host_lay.insertWidget(self._host_lay.count() - 1, box)
+            self._boxes.append(box)
+
+    def selected(self) -> list[str]:
+        picked = [b.text() for b in self._boxes if b.isChecked()]
+        typed = [t.strip() for t in self._extra.text().split(",") if t.strip()]
+        seen, out = set(), []
+        for name in picked + typed:
+            if name not in seen:
+                seen.add(name)
+                out.append(name)
+        return out
+
+    def value(self) -> str:
+        return ",".join(self.selected())
+
+    def set_value(self, csv: str) -> None:
+        """Tick what this agent offers; anything else falls to the free-text box."""
+        wanted = [t.strip() for t in (csv or "").split(",") if t.strip()]
+        offered = {b.text() for b in self._boxes}
+        for box in self._boxes:
+            box.setChecked(box.text() in wanted)
+        self._extra.setText(",".join(w for w in wanted if w not in offered))
+
+    def changed_signals(self) -> list:
+        return [self._extra.textChanged]
+
 
 
 def _set_badge(label: QLabel, text: str, kind: str | None = None) -> None:
@@ -434,9 +578,15 @@ class MainWindow(QMainWindow):
 
         self._agents_cache: list = []     # row-index → agent dict, for the detail view
         self._agent_selectors: list[QComboBox] = []
+        # form title → its agent dropdown / its card, so the agent detail page can
+        # send the operator straight into the right form with the agent chosen.
+        self._form_agent_selectors: dict[str, QComboBox] = {}
+        self._form_cards: dict[str, QWidget] = {}
+        self._detail_agent_id: str = ""
         self._event_buffer: list = []     # recent events, fed to the Forensics table
 
         self._pages: dict[str, int] = {}
+        self._add_page("prompt", self._page_prompt())
         self._add_page("protection", self._page_protection())
         self._add_page("host", self._page_host())
         self._add_page("agents", self._page_agents())
@@ -445,8 +595,10 @@ class MainWindow(QMainWindow):
         self._add_page("hitl", self._page_hitl())
         self._add_page("activity", self._page_activity())
         self._add_page("commands", self._page_commands())
+        self._add_page("runs", self._page_runs())
         self._add_page("settings", self._page_settings())
-        self._select("protection")
+        # Prompting is now the way work starts, so it is where the app opens.
+        self._select("prompt")
 
         # Poll the daemon off the UI thread; updates arrive via the signal.
         self._poller = StatusPoller(self.app.client)
@@ -476,8 +628,9 @@ class MainWindow(QMainWindow):
 
         self._nav_group = QButtonGroup(self); self._nav_group.setExclusive(True)
         self._nav_buttons: dict[str, QPushButton] = {}
-        for key, label in (("protection", "Dashboard"), ("host", "Host Monitor"),
-                           ("agents", "Agents"),
+        for key, label in (("prompt", "Prompt"), ("protection", "Dashboard"),
+                           ("host", "Host Monitor"), ("agents", "Agents"),
+                           ("runs", "Agent Runs"),
                            ("forensics", "Forensics"), ("hitl", "HITL Queue"),
                            ("activity", "Activity"), ("commands", "Commands"),
                            ("settings", "Settings")):
@@ -497,6 +650,8 @@ class MainWindow(QMainWindow):
         self._pages[key] = self.stack.addWidget(widget)
 
     def _select(self, key: str) -> None:
+        if key == "runs" and getattr(self, "runs_page", None) is not None:
+            self.runs_page.reload()
         self.stack.setCurrentIndex(self._pages[key])
         for b in self._nav_group.buttons():
             if getattr(b, "_key", None) == key:
@@ -513,6 +668,20 @@ class MainWindow(QMainWindow):
         page = QWidget(); lay = QVBoxLayout(page)
         lay.setContentsMargins(28, 24, 28, 24); lay.setSpacing(16)
         return page, lay
+
+    # ── Prompt & runs ────────────────────────────────────────────
+    def _page_prompt(self) -> QWidget:
+        from secureagentnet.desktop.prompt_page import PromptPage
+
+        self.prompt_page = PromptPage(self._operator_name)
+        self.prompt_page.review_requested.connect(lambda: self._select("hitl"))
+        return self.prompt_page
+
+    def _page_runs(self) -> QWidget:
+        from secureagentnet.desktop.prompt_page import RunsPage
+
+        self.runs_page = RunsPage()
+        return self.runs_page
 
     # ── Dashboard (home) ─────────────────────────────────────────
     def _page_protection(self) -> QWidget:
@@ -741,6 +910,47 @@ class MainWindow(QMainWindow):
             f"QProgressBar::chunk{{background:{color}; border-radius:6px;}}")
         return b
 
+    # ── operator identity ────────────────────────────────────────
+    def _settings_store(self) -> QSettings:
+        return QSettings("SecureAgentNet", "Desktop")
+
+    def _operator_name(self) -> str:
+        """Who is accountable for decisions made from this app.
+
+        Defaults to the OS login rather than a generic label: an audit row saying
+        an action was released by "desktop" names an application, not a person,
+        which is the one thing a review trail has to record.
+        """
+        saved = str(self._settings_store().value("operator", "") or "").strip()
+        if saved:
+            return saved
+        try:
+            import getpass
+            return getpass.getuser()
+        except Exception:
+            return "desktop"
+
+    def _set_operator_name(self, name: str) -> None:
+        self._settings_store().setValue("operator", name.strip())
+
+    def _act_on_current_agent(self, form_title: str) -> None:
+        """Jump to Commands with this agent already chosen in the named form."""
+        agent_id = getattr(self, "_detail_agent_id", "") or ""
+        self._select("commands")
+        target = self._form_agent_selectors.get(form_title)
+        if target is not None and agent_id:
+            idx = target.findData(agent_id)
+            if idx >= 0:
+                target.setCurrentIndex(idx)
+        card = self._form_cards.get(form_title)
+        if card is not None:
+            # Bring the form into view inside the scrolling upper pane.
+            scroll = getattr(self, "_commands_scroll", None)
+            if scroll is not None:
+                scroll.ensureWidgetVisible(card, 0, 40)
+        if target is not None:
+            target.setFocus()
+
     def _page_agent_detail(self) -> QWidget:
         page = QWidget(); outer = QVBoxLayout(page)
         outer.setContentsMargins(28, 24, 28, 24); outer.setSpacing(16)
@@ -751,7 +961,20 @@ class MainWindow(QMainWindow):
         self.detail_title = QLabel("Agent details"); self.detail_title.setObjectName("pageTitle")
         self.detail_badge = _badge("ACTIVE", "ACTIVE")
         head.addWidget(back); head.addSpacing(12); head.addWidget(self.detail_title)
-        head.addStretch(); head.addWidget(self.detail_badge)
+        head.addStretch()
+
+        # Act on the agent you are already looking at. Without these the operator
+        # had to remember the agent, cross to Commands and find it again in a
+        # dropdown — the commonest reason to touch the console by hand.
+        for label, form_title in (("Commission…", "Commission (set mandate)"),
+                                  ("Run action…", "Run an action through ITCD"),
+                                  ("Grant capability…", "Grant a capability")):
+            b = QPushButton(label); b.setObjectName("ghost")
+            b.clicked.connect(lambda _=False, t=form_title: self._act_on_current_agent(t))
+            head.addWidget(b)
+            head.addSpacing(6)
+
+        head.addWidget(self.detail_badge)
         head_w = QWidget(); head_w.setLayout(head); outer.addWidget(head_w)
 
         cols = QHBoxLayout(); cols.setSpacing(16)
@@ -852,6 +1075,7 @@ class MainWindow(QMainWindow):
 
     def show_agent_detail(self, agent: dict) -> None:
         aid = str(agent.get("agent_id", ""))
+        self._detail_agent_id = aid
         # Fetch the enriched detail from the daemon; fall back to the list row.
         detail = self.app.client.agent_detail(aid) if aid else None
         d = {**agent, **(detail or {})}
@@ -939,7 +1163,7 @@ class MainWindow(QMainWindow):
             for e in tl[:8]:
                 raw = str(e.get("time", ""))
                 ts = raw[11:19] or raw[:19]
-                ph = (e.get("phase") or "DECIDE").upper()
+                ph = (e.get("phase") or "SYSTEM").upper()
                 summ = e.get("summary") or e.get("event") or ""
                 self.detail_timeline.addWidget(self._timeline_row(ph, f"{ts}   {summ}"))
         else:
@@ -949,7 +1173,7 @@ class MainWindow(QMainWindow):
                 for e in evs[:8]:
                     raw = str(e.get("time", "")); ts = raw[11:19] or raw
                     self.detail_timeline.addWidget(self._timeline_row(
-                        e.get("phase", "DECIDE") or "DECIDE",
+                        e.get("phase") or "SYSTEM",
                         f"{ts}   {e.get('event','')}  [{e.get('status','')}]"))
             else:
                 auth = "verified" if status == "ACTIVE" else status.lower()
@@ -1071,11 +1295,21 @@ class MainWindow(QMainWindow):
         btns = QHBoxLayout(); btns.addWidget(self.hitl_approve_btn)
         btns.addWidget(self.hitl_deny_btn); btns.addStretch()
         btns_w = QWidget(); btns_w.setLayout(btns)
+        # A decision is redeemed by the *next* attempt, because the process that
+        # escalated has already exited. Saying so here is the difference between
+        # "I approved it and nothing happened" and knowing to re-run the action.
+        self.hitl_outcome = QLabel("")
+        self.hitl_outcome.setWordWrap(True)
+        self.hitl_outcome.setVisible(False)
+        self.hitl_outcome.setStyleSheet(
+            f"background:{COLORS['green_wash']}; color:{COLORS['ink']};"
+            "border-radius:8px; padding:10px 12px; font-size:12px;")
         note = QLabel("Decisions are signed and written to the tamper-evident audit log.")
         note.setObjectName("pageSub")
         review_inner = QWidget(); rv = QVBoxLayout(review_inner)
         rv.setContentsMargins(0, 0, 0, 0); rv.setSpacing(12)
-        rv.addWidget(self.hitl_detail, 1); rv.addWidget(btns_w); rv.addWidget(note)
+        rv.addWidget(self.hitl_detail, 1); rv.addWidget(btns_w)
+        rv.addWidget(self.hitl_outcome); rv.addWidget(note)
         cols.addWidget(_card(review_inner, title="Review"), 2)
         cols_w = QWidget(); cols_w.setLayout(cols); lay.addWidget(cols_w, 1)
 
@@ -1114,12 +1348,15 @@ class MainWindow(QMainWindow):
             txt = (f"  {agent or '—'}      risk {risk:.2f}\n"
                    f"  {req.get('action_name', '')} → {req.get('target_resource', '')}")
             b = QPushButton(txt); b.setCheckable(True); b.setCursor(Qt.PointingHandCursor)
+            # Amber, not red: these are actions held for a decision, not blocked
+            # ones. Colouring a queue of pending reviews as alarms trains the
+            # operator to ignore the colour that should mean "something was denied".
             b.setStyleSheet(
-                f"QPushButton{{text-align:left; background:{COLORS['red_wash']};"
-                f"border:1px solid #5a2a26;"
+                f"QPushButton{{text-align:left; background:{COLORS['amber_wash']};"
+                f"border:1px solid #5a4522;"
                 f"border-radius:10px; padding:10px; color:{COLORS['ink']};"
                 "font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:11px;}"
-                f"QPushButton:checked{{border:2px solid {COLORS['red']}; background:#3a1a17;}}")
+                f"QPushButton:checked{{border:2px solid {COLORS['amber']}; background:#3a2f16;}}")
             b.clicked.connect(lambda _=False, r=req: self._select_hitl(r))
             self.hitl_queue_box.addWidget(b)
         self.hitl_queue_box.addStretch()
@@ -1130,6 +1367,7 @@ class MainWindow(QMainWindow):
 
     def _select_hitl(self, req: dict) -> None:
         self._hitl_selected_id = req.get("request_id")
+        self.hitl_outcome.setVisible(False)
         self.hitl_detail.setText(
             f"Request    {str(req.get('request_id', ''))[:18]}\n"
             f"Agent      {req.get('agent_id', '')}\n"
@@ -1145,7 +1383,20 @@ class MainWindow(QMainWindow):
         rid = self._hitl_selected_id
         if not rid:
             return
-        self.app.client.hitl_decide(rid, approve)
+        operator = self._operator_name()
+        self.app.client.hitl_decide(rid, approve, operator=operator)
+        wash = COLORS["green_wash"] if approve else COLORS["amber_wash"]
+        self.hitl_outcome.setStyleSheet(
+            f"background:{wash}; color:{COLORS['ink']};"
+            "border-radius:8px; padding:10px 12px; font-size:12px;")
+        self.hitl_outcome.setText(
+            f"Approved by {operator}  ·  {str(rid)[:8]}\nRe-issue the same action within 15 "
+            "minutes and it will execute under this approval — once. A later attempt "
+            "escalates again."
+            if approve else
+            f"Denied by {operator}  ·  {str(rid)[:8]}\nRe-issuing the same action within 15 "
+            "minutes will be blocked under this decision rather than escalating again.")
+        self.hitl_outcome.setVisible(True)
         # optimistic update — the next poll reconciles with the daemon
         remaining = [r for r in self._hitl_pending if r.get("request_id") != rid]
         self._hitl_selected_id = None
@@ -1215,34 +1466,60 @@ class MainWindow(QMainWindow):
         upper_lay.addStretch()
 
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(upper)
+        self._commands_scroll = scroll
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setStyleSheet("QScrollArea{background:transparent; border:none;}")
         upper_lay.setContentsMargins(0, 0, 10, 0)   # room for the scrollbar
 
         self.console = SanConsole()
-        console_card = _card(self.console, title="Console")
-        console_card.setMinimumHeight(300)
+        console_card = _card(self.console, title="Console  ·  for anything the forms above don't cover")
+        console_card.setMinimumHeight(170)
 
         split = QSplitter(Qt.Vertical)
         split.setChildrenCollapsible(False)
         split.setHandleWidth(10)
         split.addWidget(scroll)
         split.addWidget(console_card)
-        split.setStretchFactor(0, 3)
-        split.setStretchFactor(1, 2)
-        split.setSizes([430, 360])
+        # The forms are the page; the console is the escape hatch. It used to open
+        # at nearly half the height, which made the page read as a terminal with
+        # some forms attached rather than the other way round.
+        split.setStretchFactor(0, 5)
+        split.setStretchFactor(1, 1)
+        split.setSizes([680, 200])
         lay.addWidget(split, 1)
         return page
 
     def _form(self, title: str, fields: List[tuple], run_label: str,
-              build_args: Callable[[dict], list]) -> QWidget:
+              build_args: Callable[[dict], list],
+              templates: List[tuple] | None = None,
+              describe_field: bool = False) -> QWidget:
         inputs: dict[str, QWidget] = {}
+        agent_combo: QComboBox | None = None
+        dependents: list[QWidget] = []      # fields whose options follow the chosen agent
         rows = QVBoxLayout(); rows.setSpacing(9)
         for key, placeholder, kind in fields:
             lab = QLabel(placeholder); lab.setObjectName("fieldLabel")
             if kind == "combo":
                 w = QComboBox(); w.addItems(["Custom", "LangChain", "CrewAI", "AutoGen"])
+            elif kind == "action":
+                # Editable so an action the agent does not hold yet can still be
+                # typed, but the agent's own capabilities are offered first.
+                w = QComboBox(); w.setEditable(True)
+                w.lineEdit().setPlaceholderText(placeholder)
+                w.setMinimumWidth(240)
+                w.setProperty("action_field", True)
+                dependents.append(w)
+            elif kind == "resource":
+                w = QComboBox(); w.setEditable(True)
+                w.addItems(COMMON_RESOURCES)
+                w.setCurrentText("")
+                w.lineEdit().setPlaceholderText(placeholder)
+                w.setMinimumWidth(240)
+            elif kind == "actionlist":
+                w = ActionPicker()
+                w.setProperty("action_list", True)
+                dependents.append(w)
             elif kind == "agent":
                 w = QComboBox(); w.addItem("Select registered agent", "")
                 for agent in self._agents_cache:
@@ -1250,13 +1527,14 @@ class MainWindow(QMainWindow):
                 w.setMinimumWidth(240)
                 w.setProperty("agent_selector", True)
                 self._agent_selectors.append(w)
+                agent_combo = w
             elif kind == "multiline":
                 w = QPlainTextEdit(); w.setPlaceholderText(placeholder); w.setMinimumHeight(80)
             else:
                 w = QLineEdit(); w.setPlaceholderText(placeholder); w.setMinimumWidth(240)
             # A control with only a *preferred* height gets squeezed to nothing when
             # its parent runs out of room. Pin the floor so a row always renders.
-            if not isinstance(w, QPlainTextEdit):
+            if not isinstance(w, (QPlainTextEdit, ActionPicker)):
                 w.setMinimumHeight(36)
                 w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             lab.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
@@ -1268,15 +1546,167 @@ class MainWindow(QMainWindow):
             fl.setContentsMargins(0, 0, 0, 0); fl.setSpacing(5)
             fl.addWidget(lab); fl.addWidget(w)
             rows.addWidget(field)
+        def _apply_template(values: dict) -> None:
+            for key, val in values.items():
+                w = inputs.get(key)
+                if w is None:
+                    continue
+                if isinstance(w, ActionPicker):
+                    w.set_value(val)
+                elif isinstance(w, QComboBox):
+                    w.setCurrentText(val)
+                elif isinstance(w, QPlainTextEdit):
+                    w.setPlainText(val)
+                else:
+                    w.setText(val)
+            _refresh_preview()
+
+        if describe_field:
+            # The operator writes the job; the model proposes the structure; the
+            # fields stay editable. Nothing is committed until they press the
+            # form's own button, so the draft is a starting point, not a decision.
+            drow = QVBoxLayout(); drow.setSpacing(6); drow.setContentsMargins(0, 0, 0, 0)
+            dlab = QLabel("Describe the job in a sentence and let the local model draft it")
+            dlab.setObjectName("fieldLabel")
+            brief = QPlainTextEdit()
+            brief.setPlaceholderText(
+                "e.g. Read our support inbox each morning and reply to customers "
+                "using public help articles. Never touch billing or passwords.")
+            brief.setMinimumHeight(62); brief.setMaximumHeight(76)
+            draft_btn = QPushButton("Draft mandate with local model")
+            draft_btn.setObjectName("ghost"); draft_btn.setMinimumHeight(32)
+            status = QLabel(""); status.setObjectName("pageSub"); status.setWordWrap(True)
+
+            def _draft() -> None:
+                text = brief.toPlainText().strip()
+                if len(text.split()) < 4:
+                    status.setText("Describe the job in a sentence first.")
+                    return
+                agent_id = agent_combo.currentData() if agent_combo else ""
+                agent = next((a for a in self._agents_cache
+                              if str(a.get("agent_id")) == str(agent_id)), None)
+                draft_btn.setEnabled(False)
+                status.setText("Asking the local model…")
+
+                def _ok(draft) -> None:
+                    _apply_template({
+                        "goal": draft.goal,
+                        "approve": ",".join(draft.approved_actions),
+                        "forbid": ",".join(draft.forbidden_actions)})
+                    notes = list(draft.warnings)
+                    if draft.reasoning:
+                        notes.insert(0, draft.reasoning)
+                    status.setText("Drafted — review and edit before commissioning."
+                                   + ("  ⚠ " + "  ⚠ ".join(notes) if notes else ""))
+                    draft_btn.setEnabled(True)
+
+                def _err(msg: str) -> None:
+                    status.setText(f"Could not draft: {msg}  Nothing was changed.")
+                    draft_btn.setEnabled(True)
+
+                self._drafter = MandateDrafter(text, capability_actions(agent))
+                self._drafter.drafted.connect(_ok)
+                self._drafter.failed.connect(_err)
+                self._drafter.start()
+
+            draft_btn.clicked.connect(_draft)
+            drow.addWidget(dlab); drow.addWidget(brief)
+            drow.addWidget(draft_btn); drow.addWidget(status)
+            dw = QWidget(); dw.setLayout(drow)
+            rows.insertWidget(0, dw)
+
+        if templates:
+            # A blank form asks the operator to invent a mandate from nothing.
+            # These fill one in, to be edited rather than composed.
+            trow = QHBoxLayout(); trow.setSpacing(6); trow.setContentsMargins(0, 0, 0, 0)
+            tlab = QLabel("Start from"); tlab.setObjectName("fieldLabel")
+            trow.addWidget(tlab)
+            for label, values in templates:
+                tb = QPushButton(label); tb.setObjectName("ghost")
+                tb.setMinimumHeight(28)
+                tb.setCursor(Qt.PointingHandCursor)
+                tb.clicked.connect(lambda _=False, v=values: _apply_template(v))
+                trow.addWidget(tb)
+            trow.addStretch()
+            tw = QWidget(); tw.setLayout(trow)
+            rows.insertWidget(0, tw)
+
         btn = QPushButton(run_label); btn.setObjectName("primary")
         btn.setMinimumHeight(38)
         btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
+        # The exact command this form will run, shown before it runs. The GUI is a
+        # view over the CLI, so showing the command keeps the two legible to each
+        # other — and an operator can copy it into a terminal or a report.
+        preview = QLabel(); preview.setObjectName("cmdPreview")
+        preview.setWordWrap(True)
+        preview.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        preview.setStyleSheet(
+            f"color:{COLORS['dim']}; font-family:{MONO}; font-size:11px; "
+            f"background:{COLORS['surface_2']}; border-radius:5px; padding:7px 9px;")
+
+        def _values() -> dict:
+            out = {}
+            for k, w in inputs.items():
+                if isinstance(w, ActionPicker):
+                    out[k] = w.value()
+                elif isinstance(w, QComboBox):
+                    out[k] = w.currentData() if w.property("agent_selector") else w.currentText().strip()
+                elif isinstance(w, QPlainTextEdit):
+                    out[k] = w.toPlainText().strip()
+                else:
+                    out[k] = w.text().strip()
+            return out
+
+        def _refresh_preview():
+            try:
+                args = build_args(_values())
+            except Exception:
+                args = None
+            if not args:
+                preview.setText("san …   (fill the required fields)")
+                return
+            preview.setText("san " + " ".join(
+                a if (a and " " not in a) else f'"{a}"' for a in args))
+
+        def _sync_dependents():
+            """Offer the selected agent's own actions in this form's action fields."""
+            if agent_combo is None:
+                # A form with no agent field (registering a new one) has no
+                # capabilities to read, so offer the standard vocabulary.
+                options = COMMON_ACTIONS
+            else:
+                agent_id = agent_combo.currentData()
+                agent = next((a for a in self._agents_cache
+                              if str(a.get("agent_id")) == str(agent_id)), None)
+                options = capability_actions(agent) or (COMMON_ACTIONS if agent else [])
+            for w in dependents:
+                if isinstance(w, ActionPicker):
+                    w.set_options(options)
+                else:
+                    current = w.currentText()
+                    w.blockSignals(True)
+                    w.clear(); w.addItems(options)
+                    w.setCurrentText(current)
+                    w.blockSignals(False)
+            _refresh_preview()
+
+        for w in inputs.values():
+            if isinstance(w, ActionPicker):
+                for sig in w.changed_signals():
+                    sig.connect(_refresh_preview)
+            elif isinstance(w, QComboBox):
+                w.currentTextChanged.connect(_refresh_preview)
+            elif isinstance(w, QPlainTextEdit):
+                w.textChanged.connect(_refresh_preview)
+            else:
+                w.textChanged.connect(_refresh_preview)
+        if agent_combo is not None:
+            agent_combo.currentIndexChanged.connect(lambda _=0: _sync_dependents())
+        _sync_dependents()
+
         def _go():
-            vals = {k: (w.currentData() if w.property("agent_selector") else w.currentText()) if isinstance(w, QComboBox)
-                    else w.toPlainText().strip() if isinstance(w, QPlainTextEdit) else w.text().strip()
-                    for k, w in inputs.items()}
-            args = build_args(vals)
+            args = build_args(_values())
             if args is None:
                 self.console.run([])  # no-op guard
                 return
@@ -1284,16 +1714,21 @@ class MainWindow(QMainWindow):
             self.console.run(args)
         btn.clicked.connect(_go)
         rows.addSpacing(4)
+        rows.addWidget(preview)
         rows.addWidget(btn)
         rows.addStretch()
         wrap = QWidget(); wrap.setLayout(rows); wrap.setMinimumWidth(340)
         wrap.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        return _card(wrap, title=title)
+        card = _card(wrap, title=title)
+        if agent_combo is not None:
+            self._form_agent_selectors[title] = agent_combo
+        self._form_cards[title] = card
+        return card
 
     def _form_register(self) -> QWidget:
         return self._form("Register agent",
                           [("name", "Agent name", "text"), ("type", "Framework", "combo"),
-                           ("capabilities", "Capabilities (comma-separated)", "text"),
+                           ("capabilities", "Actions it may take", "actionlist"),
                            ("description", "Description (optional)", "text")],
                           "Register",
                           lambda v: (["agent", "register", v["name"] or "new-agent", "--type", v["type"]]
@@ -1303,20 +1738,38 @@ class MainWindow(QMainWindow):
     def _form_commission(self) -> QWidget:
         return self._form("Commission (set mandate)",
                           [("agent", "Registered agent", "agent"),
-                           ("goal", "Commissioned goal", "multiline"),
-                           ("approve", "Approved actions (comma)", "text"),
-                           ("forbid", "Forbidden actions (comma)", "text"),
+                           ("goal", "What is this agent for?", "multiline"),
+                           ("approve", "Actions it may take", "actionlist"),
+                           ("forbid", "Actions it must never take", "actionlist"),
                            ("expires", "Expires in minutes (optional)", "text")],
                           "Commission",
                           lambda v: ["agent", "commission", v["agent"], "--goal", v["goal"]]
                                     + (["--approve-actions", v["approve"]] if v["approve"] else [])
                                     + (["--forbid-actions", v["forbid"]] if v["forbid"] else [])
-                                    + (["--expires-minutes", v["expires"]] if v["expires"] else []))
+                                    + (["--expires-minutes", v["expires"]] if v["expires"] else []),
+                          templates=[
+                              ("Research", {
+                                  "goal": "Locate and summarise information for the "
+                                          "commissioned research task",
+                                  "approve": "search_files,read_file",
+                                  "forbid": "send_email,write_file,execute_code"}),
+                              ("Support inbox", {
+                                  "goal": "Triage the support inbox and reply to customers "
+                                          "using public knowledge-base information only",
+                                  "approve": "read_email,send_email",
+                                  "forbid": "read_credentials,transfer_funds,write_file"}),
+                              ("Read-only diagnostics", {
+                                  "goal": "Run read-only diagnostic commands and report on "
+                                          "system state",
+                                  "approve": "execute",
+                                  "forbid": "write_file,send_email,delete_file"}),
+                          ],
+                          describe_field=True)
 
     def _form_agent_controls(self) -> QWidget:
-        return self._form("Agent controls",
+        return self._form("Grant a capability",
                           [("agent", "Registered agent", "agent"),
-                           ("capability", "Capability to add (optional)", "text")],
+                           ("capability", "Capability to grant", "action")],
                           "Add capability",
                           lambda v: ["agent", "add-cap", v["agent"], v["capability"]]
                                     if v["agent"] and v["capability"] else None)
@@ -1324,45 +1777,67 @@ class MainWindow(QMainWindow):
     def _form_run(self) -> QWidget:
         return self._form("Run an action through ITCD",
                           [("agent", "Registered agent", "agent"),
-                           ("action", "Action name", "text"),
-                           ("resource", "Target resource", "text"),
+                           ("action", "Action name", "action"),
+                           ("resource", "Target resource", "resource"),
                            ("intent", "Why is the agent doing this?", "multiline"),
-                           ("cmd", "Command to execute", "multiline")],
+                           ("cmd", "Command to execute in the sandbox", "multiline")],
                           "Run",
                           lambda v: (["run", v["agent"], "--action", v["action"] or "execute",
                                       "--resource", v["resource"] or "shell",
                                       "--intent", v["intent"] or "Execute command", v["cmd"]]
-                                     if v["agent"] and v["cmd"] else None))
+                                     if v["agent"] and v["cmd"] else None),
+                          templates=[
+                              ("Read-only check", {
+                                  "action": "execute", "resource": "shell",
+                                  "intent": "Read-only diagnostic of the sandbox workspace",
+                                  "cmd": "echo ok; ls -la /workspace; df -h"}),
+                              ("Search workspace", {
+                                  "action": "search_files", "resource": "local filesystem",
+                                  "intent": "Locate files matching the commissioned search",
+                                  "cmd": "grep -ril 'faustina' /workspace || echo 'no matches'"}),
+                          ])
 
-    def _form_cloud_enroll(self) -> QWidget:
-        return self._form("Enroll with cloud console",
-                          [("url", "Console URL", "text"), ("token", "Enrollment token", "text")],
-                          "Enroll",
-                          lambda v: ["cloud", "enroll", "--url", v["url"], "--token", v["token"]])
-
-    # ── Cloud ────────────────────────────────────────────────────
-    def _page_cloud(self) -> QWidget:
-        page, lay = self._page_shell()
-        lay.addWidget(self._page_header("Cloud console", "Report this endpoint up to a central console"))
-        self.cloud_status_label = QLabel("Checking enrollment…"); self.cloud_status_label.setObjectName("pageSub")
-        check = QPushButton("Check status"); check.setObjectName("ghost")
-        check.clicked.connect(lambda: (self._select("commands"), self.console.run(["cloud", "status"])))
-        enroll = QPushButton("Enroll this endpoint →"); enroll.setObjectName("primary")
-        enroll.clicked.connect(lambda: self._select("commands"))
-        bar = QHBoxLayout(); bar.addWidget(check); bar.addStretch(); bar.addWidget(enroll)
-        bar_w = QWidget(); bar_w.setLayout(bar)
-        lay.addWidget(_card(self.cloud_status_label, bar_w, title="Enrollment"))
-        lay.addStretch()
-        return page
 
     # ── Settings ─────────────────────────────────────────────────
     def _page_settings(self) -> QWidget:
         page, lay = self._page_shell()
-        lay.addWidget(self._page_header("Settings", "Daemon connection and app information"))
+        lay.addWidget(self._page_header("Settings", "Operator identity and daemon connection"))
+
+        # Every approval and denial made from this app is written to the audit
+        # trail under this name, so it has to be a person.
+        op_box = QVBoxLayout(); op_box.setSpacing(7)
+        op_lab = QLabel("Your name, as recorded against decisions you make")
+        op_lab.setObjectName("fieldLabel")
+        self.operator_field = QLineEdit(self._operator_name())
+        self.operator_field.setPlaceholderText("e.g. a.owusu")
+        self.operator_field.setMinimumHeight(36)
+        self.operator_field.setMaximumWidth(360)
+        self.operator_saved = QLabel("")
+        self.operator_saved.setObjectName("pageSub")
+
+        def _save_operator() -> None:
+            name = self.operator_field.text().strip()
+            if not name:
+                self.operator_field.setText(self._operator_name())
+                return
+            self._set_operator_name(name)
+            self.operator_saved.setText(
+                f"Approvals from this app will be recorded as '{name}'.")
+
+        self.operator_field.editingFinished.connect(_save_operator)
+        op_box.addWidget(op_lab)
+        op_box.addWidget(self.operator_field)
+        op_box.addWidget(self.operator_saved)
+        hint = QLabel("Approvals released from the CLI carry their own "
+                      "--operator value instead.")
+        hint.setObjectName("pageSub")
+        op_box.addWidget(hint)
+        op_w = QWidget(); op_w.setLayout(op_box)
+        lay.addWidget(_card(op_w, title="Operator identity"))
+
         info = QLabel(
             f"Daemon endpoint:  {self.app.client.base_url}\n"
             "Alerts stream:    live websocket\n"
-            "Reporting:        metadata only (when enrolled to a cloud console)\n\n"
             "The desktop app talks to the local daemon on this host. Start one with\n"
             "`secureagentnet-daemon` if the status reads offline."
         )
@@ -1400,7 +1875,14 @@ class MainWindow(QMainWindow):
             self._set_state("offline", "Daemon offline", "Start it with `secureagentnet-daemon`.")
             return
         status = data.get("status") or {}
-        if self.badge._state != "threat":
+        # A stale daemon is withholding verdicts, so the endpoint is not being
+        # guarded — saying "Protected" here would be the reassuring lie the whole
+        # fingerprint check exists to prevent.
+        if status.get("stale"):
+            self._set_state("threat", "Daemon needs restarting",
+                            f"{status.get('stale_reason') or 'The enforcement surface changed'}. "
+                            "Verdicts are withheld until it restarts — run `san daemon restart`.")
+        elif self.badge._state != "threat":
             self._set_state("protected", "Protected",
                             "The ITCD pipeline is guarding every agent action.")
         seed = data.get("events_seed")

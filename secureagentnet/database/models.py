@@ -218,8 +218,18 @@ class HITLRequest(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     decision_at = Column(DateTime(timezone=True), nullable=True)
     decided_by = Column(String(255), nullable=True)
+    # Stable identity of the action that was escalated: agent + action + target +
+    # payload. A re-issued action hashes to the same value, which is how an
+    # operator's approval is matched back to the retry that should execute under it.
+    request_fingerprint = Column(String(64), nullable=True)
+    # Set when a decision has been spent on one execution. A decision is
+    # single-use: approving once does not permanently whitelist the action.
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (Index("ix_hitl_requests_status", "status"),)
+    __table_args__ = (
+        Index("ix_hitl_requests_status", "status"),
+        Index("ix_hitl_requests_fingerprint", "request_fingerprint"),
+    )
 
 
 class User(Base):
@@ -248,3 +258,77 @@ class BlogPost(Base):
     read_time = Column(String(20), default="5 MIN")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     published = Column(Boolean, default=True)
+
+
+class AgentRun(Base):
+    """One commissioned run of an agent, start to finish.
+
+    The row is the answerable record of a job: what the operator asked for, the
+    mandate they approved, what the agent produced, and how the gateway ruled on
+    the way. ``agent_id`` is nullable and set to NULL rather than cascaded on
+    agent deletion — deleting an agent must not delete the evidence of what it
+    did while it existed.
+    """
+
+    __tablename__ = "agent_runs"
+
+    run_id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    agent_id = Column(Uuid, ForeignKey("agents.agent_id", ondelete="SET NULL"), nullable=True)
+    agent_key = Column(String(64), nullable=False)
+    agent_name = Column(String(255), nullable=False)
+    operator = Column(String(255), nullable=True)
+
+    prompt = Column(Text, nullable=False)
+    task = Column(Text, nullable=True)
+    goal = Column(Text, nullable=False)
+    approved_actions = Column(JSON, default=[])
+    forbidden_actions = Column(JSON, default=[])
+
+    status = Column(String(20), nullable=False, default="running")
+    brain = Column(String(120), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    final_answer = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    artifacts = Column(JSON, default=[])
+
+    allowed_count = Column(Integer, default=0)
+    blocked_count = Column(Integer, default=0)
+    escalated_count = Column(Integer, default=0)
+    # {entity_type: times_masked} for content the agent read. The tally is kept;
+    # the values themselves never were.
+    redactions = Column(JSON, default={})
+
+    __table_args__ = (
+        Index("ix_agent_runs_started_at", "started_at"),
+        Index("ix_agent_runs_agent_id", "agent_id"),
+    )
+
+
+class AgentRunEvent(Base):
+    """One thing that happened during a run, in the order it happened.
+
+    Kept as rows rather than a JSON blob on the run so a question like "show me
+    every action this agent was blocked from taking" is a query, not a scan of
+    every run's payload.
+    """
+
+    __tablename__ = "agent_run_events"
+
+    event_id = Column(BigInteger().with_variant(Integer, "sqlite"),
+                      primary_key=True, autoincrement=True)
+    run_id = Column(Uuid, ForeignKey("agent_runs.run_id", ondelete="CASCADE"),
+                    nullable=False)
+    seq = Column(Integer, nullable=False)
+    kind = Column(String(32), nullable=False)
+    summary = Column(Text, nullable=True)
+    verdict = Column(String(16), nullable=True)
+    at = Column(DateTime(timezone=True), nullable=False,
+                default=lambda: datetime.now(timezone.utc))
+    detail = Column(JSON, default={})
+
+    __table_args__ = (
+        Index("ix_agent_run_events_run_seq", "run_id", "seq"),
+        Index("ix_agent_run_events_verdict", "verdict"),
+    )

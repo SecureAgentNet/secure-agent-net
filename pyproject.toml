@@ -91,7 +91,6 @@ secureagentnet = "secureagentnet.interfaces.cli.terminal:cli"
 san = "secureagentnet.interfaces.cli.terminal:cli"
 secureagentnet-desktop = "secureagentnet.desktop.app:main"
 secureagentnet-daemon = "secureagentnet.daemon.__main__:main"
-secureagentnet-cloud = "secureagentnet.cloud.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -99,6 +98,8 @@ include = ["secureagentnet", "secureagentnet.*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.yaml", "*.yml", "*.ini"]
+# The desktop's combo-box caret ships as an SVG referenced from the stylesheet.
+"secureagentnet.desktop.resources" = ["*.svg"]
 # Ship the cloud console's Alembic migration environment (templates + revisions)
 # so `secureagentnet-cloud --migrate` works from an installed wheel, not just source.
 "secureagentnet.cloud.migrations" = ["*.mako"]
@@ -116,6 +117,7 @@ markers = [
     "redteam: Red team / adversarial test scenario",
     "integration: Integration test requiring external services",
     "unit: Unit tests",
+    "containment: Starts a real Docker container (slow, unmocked)",
 ]
 
 [tool.black]

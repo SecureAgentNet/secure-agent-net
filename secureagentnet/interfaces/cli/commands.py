@@ -93,11 +93,20 @@ def _print_table(title: str, columns: List[str], rows: List[List[str]], caption:
 
 
 def _print_json(data: Any):
-    # word_wrap keeps long values (container stderr/tracebacks) fully visible;
-    # without it Rich crops each line at the terminal width and swallows the
-    # very error the operator is trying to read.
-    syntax = Syntax(json.dumps(data, indent=2, default=str), "json", theme="monokai", word_wrap=True)
-    console.print(syntax)
+    """Emit ``data`` as JSON — highlighted for a human, raw for a pipe.
+
+    A ``--json`` flag exists so the output can be parsed. Rich's ``word_wrap``
+    inserts real newlines *inside* string literals to fit the terminal, which
+    produces something pretty that is no longer valid JSON — `san agent mandate
+    --json | jq` failed on any goal longer than the terminal width. So a pipe or
+    a redirect gets the raw document, and only an interactive terminal gets the
+    highlighting (where wrapping is a readability win, not a corruption).
+    """
+    payload = json.dumps(data, indent=2, default=str)
+    if not sys.stdout.isatty():
+        click.echo(payload)
+        return
+    console.print(Syntax(payload, "json", theme="monokai", word_wrap=True))
 
 
 def _print_success(msg: str):
@@ -464,13 +473,18 @@ def capabilities(agent_id: str):
 
 @agent.command()
 @click.argument("agent_id")
-@click.option("--goal", required=True, help="The commissioned goal (what this agent is tasked to do)")
+@click.option("--goal", default=None, help="The commissioned goal (what this agent is tasked to do)")
+@click.option("--from-brief", "brief", default=None,
+              help="Describe the job in plain language; the local model drafts the mandate for review")
+@click.option("--yes", "assume_yes", is_flag=True,
+              help="Accept a drafted mandate without the confirmation prompt")
 @click.option("--approve-actions", "approve", default="", help="Comma-separated sanctioned actions (default: * = any)")
 @click.option("--forbid-actions", "forbid", default="", help="Comma-separated explicitly forbidden actions")
 @click.option("--expires-minutes", "expires", default=10080, type=int, help="Mandate lifetime in minutes (default 7 days)")
 @click.option("--grant-missing", is_flag=True,
               help="Also grant any approved action the agent lacks as a capability")
-def commission(agent_id: str, goal: str, approve: str, forbid: str, expires: int, grant_missing: bool):
+def commission(agent_id: str, goal: str, brief: str, assume_yes: bool, approve: str,
+               forbid: str, expires: int, grant_missing: bool):
     """Commission an agent with a mandate (its sanctioned goal + allowed actions)
 
     The mandate is the anchor the DECIDE phase checks every action against to
@@ -482,6 +496,44 @@ def commission(agent_id: str, goal: str, approve: str, forbid: str, expires: int
         return
 
     from secureagentnet.decide.intent_capsule import MandateRegistry, DEFAULT_FORBIDDEN_ACTIONS
+
+    if brief:
+        # The model proposes the structure; it is shown in full and confirmed
+        # before anything is committed. A draft is never a commission.
+        from secureagentnet.decide.mandate_author import draft_from_brief, MandateDraftError
+        caps = [c for c, on in (agent.get("capabilities") or {}).items() if on]
+        with console.status("[dim]Drafting a mandate with the local model…[/]"):
+            try:
+                draft = draft_from_brief(brief, known_actions=caps)
+            except MandateDraftError as exc:
+                _print_error(f"Could not draft a mandate: {exc}")
+                console.print("  [dim]Nothing was committed. Write the mandate directly "
+                              "with --goal and --approve-actions.[/]")
+                return
+        body = (f"[bold]Goal[/]       {draft.goal}\n"
+                f"[bold]Approve[/]    {', '.join(draft.approved_actions)}\n"
+                f"[bold]Forbid[/]     {', '.join(draft.forbidden_actions) or '—'}")
+        if draft.reasoning:
+            body += f"\n[dim]{draft.reasoning}[/]"
+        for warning in draft.warnings:
+            body += f"\n[yellow]! {warning}[/]"
+        if draft.ungranted_actions:
+            body += ("\n[yellow]! not yet granted as capabilities — add --grant-missing "
+                     f"to grant them: {', '.join(draft.ungranted_actions)}[/]")
+        console.print(Panel(body, title=f"Drafted by {draft.model}",
+                            border_style="cyan"))
+        if not assume_yes and not click.confirm("Commission the agent with this mandate?",
+                                                default=False):
+            _print_warning("Not commissioned. Re-run with --goal to write it yourself.")
+            return
+        goal = draft.goal
+        approve = approve or ",".join(draft.approved_actions)
+        forbid = forbid or ",".join(draft.forbidden_actions)
+
+    if not goal:
+        _print_error("Give the mandate a goal with --goal, or describe the job with --from-brief")
+        return
+
     approved = [a.strip() for a in approve.split(",") if a.strip()] or ["*"]
     forbidden = [a.strip() for a in forbid.split(",") if a.strip()] or list(DEFAULT_FORBIDDEN_ACTIONS)
 
@@ -823,14 +875,28 @@ def evaluate(action_name: str, agent_id: str, resource: str, intent: str, payloa
     icon = "[green]✓[/]" if result.is_allowed else "[red]✗[/]"
     decision_str = "ALLOWED" if result.is_allowed else "DENIED"
 
+    # Tier-2 evidence. Redaction happens before the payload reaches any model,
+    # so surfacing the count is the only way an operator can confirm it ran.
+    if result.pii_redacted_count:
+        pii_line = (f"\n[bold]PII Redacted:[/] [yellow]{result.pii_redacted_count}[/] "
+                    f"value(s) — {', '.join(result.pii_entity_types)}")
+    else:
+        pii_line = "\n[bold]PII Redacted:[/] [dim]none detected[/]"
+
     console.print(Panel.fit(
         f"[bold]Decision:[/] {'[green]' + decision_str + '[/]' if result.is_allowed else '[red]' + decision_str + '[/]'}\n"
         f"[bold]Risk Score:[/] {result.risk_score:.4f}\n"
         f"[bold]Evaluated By:[/] {result.evaluated_by}\n"
-        f"[bold]Reason:[/] {result.reason}",
+        f"[bold]Reason:[/] {result.reason}"
+        f"{pii_line}",
         title=f"{icon} Evaluation Result",
         border_style="green" if result.is_allowed else "red"
     ))
+
+    if result.pii_redacted_count:
+        from secureagentnet.decide.pii_redactor import PiiRedactor
+        console.print("\n[bold]Payload as the Tier-3 model received it:[/]")
+        _print_json(PiiRedactor.redact_payload(payload_dict))
 
 
 # ============================================================
@@ -1340,10 +1406,17 @@ def _decide_hitl(request_id: str, approve: bool, operator: str):
                         "operator": operator},
         })
         _print_success(f"Request {full_id[:8]}... {verb} by '{operator}'")
-        console.print(
-            "  [dim]The escalating process was a one-shot command that has already exited; "
-            "re-issue the action to execute it under this decision.[/]"
-        )
+        if approve:
+            console.print(
+                "  [dim]The process that escalated has already exited. Re-issue the same "
+                "action within 15 minutes and it will execute under this approval — "
+                "once. A later attempt escalates again.[/]"
+            )
+        else:
+            console.print(
+                "  [dim]Re-issuing the same action within 15 minutes will be denied "
+                "under this decision rather than escalating again.[/]"
+            )
     else:
         _print_error(f"Could not {('approve' if approve else 'deny')} request: {decision.value}")
 
@@ -1626,7 +1699,48 @@ def doctor(deploy_mode: Optional[str]):
         icon = "[green]✓[/]" if aa_ok else "[dim]—[/]"
         checks.append((icon, f"AppArmor: {'available' if aa_ok else 'not detected (optional)'}", True))
 
+    # The trust-root private key lives in this store. A world-readable copy lets
+    # any local user forge a manifest, so the mode is checked here and repaired
+    # rather than merely reported.
+    from secureagentnet.utils.persistence import PersistenceStore
+    repaired = PersistenceStore.repair_permissions()
+    if repaired:
+        checks.append(("[yellow]![/]",
+                       f"State store: tightened permissions on {repaired} path(s) "
+                       "— the trust-root key was readable by other local users", True))
+    else:
+        checks.append(("[green]✓[/]", "State store: owner-only (trust-root key protected)", True))
+
+    # Compare what a fresh process would enforce with what the running daemon
+    # actually loaded. A mismatch means the daemon is deciding by policy that has
+    # since been replaced — the failure that looks like everything working.
+    from secureagentnet.core import runtime_fingerprint
+    local_fp = runtime_fingerprint.compute(use_cache=False)["fingerprint"]
+    try:
+        import requests as _rq
+        from secureagentnet.daemon.config import get_daemon_settings as _gds
+        _ds = _gds()
+        _st = _rq.get(f"http://{_ds.daemon_host}:{_ds.daemon_port}/v1/status", timeout=2).json()
+    except Exception:
+        _st = None
+    if _st is None:
+        checks.append(("[dim]—[/]", f"Enforcement surface: {local_fp} (daemon not running)", True))
+    elif _st.get("stale"):
+        checks.append(("[red]✗[/]",
+                       f"Daemon is STALE — {_st.get('stale_reason')}. It is withholding "
+                       "verdicts; run `san daemon restart`", False))
+    elif _st.get("fingerprint") and _st["fingerprint"] != local_fp:
+        checks.append(("[yellow]![/]",
+                       f"Daemon fingerprint {_st['fingerprint']} ≠ local {local_fp} — "
+                       "restart the daemon to align them", True))
+    else:
+        checks.append(("[green]✓[/]", f"Enforcement surface: {local_fp} (daemon in sync)", True))
+
     checks.append(("[green]✓[/]", f"Environment: {settings.environment}", True))
+
+    # Every check carries a pass flag; honour it. It used to be ignored, so a
+    # check could print a red cross and still be followed by "All checks passed".
+    all_pass = all_pass and all(ok for _, _, ok in checks)
 
     console.print("\n[bold cyan]SecureAgentNet System Health[/]")
     console.print("=" * 50)
@@ -2115,75 +2229,6 @@ def view_logs(agent_id: Optional[str], severity: Optional[str], limit: int, json
         caption=f"Showing {len(events)} entries"
     )
 
-
-# ============================================================
-#  CLOUD CONSOLE ENROLLMENT
-# ============================================================
-
-@click.group()
-def cloud():
-    """Enroll this daemon with a Cloud Console and check status"""
-
-
-@cloud.command("enroll")
-@click.option("--url", required=True, help="Cloud console base URL, e.g. https://console.secureagentnet.com")
-@click.option("--token", required=True, help="One-time enrollment token from the console admin")
-@click.option("--hostname", default=None, help="Override the reported hostname (e.g. for local multi-endpoint demos)")
-def cloud_enroll(url: str, token: str, hostname: Optional[str]):
-    """Exchange an enrollment token for this endpoint's API key and store it locally."""
-    import socket
-    import platform as _platform
-    import requests
-    from secureagentnet.daemon.config import get_daemon_settings
-    from secureagentnet.daemon.cloud_reporter import CloudCreds
-
-    base = url.rstrip("/")
-    hostname = hostname or socket.gethostname()
-    try:
-        resp = requests.post(
-            f"{base}/api/v1/enroll",
-            json={"token": token, "hostname": hostname, "platform": _platform.system()},
-            timeout=15,
-        )
-    except requests.RequestException as e:
-        _print_error(f"Could not reach console at {base}: {e}")
-        return
-    if resp.status_code != 200:
-        _print_error(f"Enrollment failed ({resp.status_code}): {resp.text[:200]}")
-        return
-
-    data = resp.json()
-    settings = get_daemon_settings()
-    creds = CloudCreds(console_url=base, endpoint_id=data["endpoint_id"], api_key=data["api_key"])
-    creds.save(settings.data_dir)
-    console.print(Panel.fit(
-        f"[bold green]Enrolled with cloud console[/]\n\n"
-        f"[bold]Console:[/] {base}\n"
-        f"[bold]Endpoint ID:[/] {data['endpoint_id']}\n"
-        f"[bold]Hostname:[/] {hostname}\n"
-        f"[dim]API key stored in {settings.data_dir}/cloud.json (chmod 600)[/]\n"
-        f"[dim]Restart the daemon to begin reporting.[/]",
-        title="[bold cyan]Cloud Enrollment[/]", border_style="cyan",
-    ))
-
-
-@cloud.command("status")
-def cloud_status():
-    """Show whether this daemon is enrolled with a cloud console."""
-    from secureagentnet.daemon.config import get_daemon_settings
-    from secureagentnet.daemon.cloud_reporter import CloudCreds
-
-    settings = get_daemon_settings()
-    creds = CloudCreds.load(settings.data_dir)
-    if creds is None:
-        _print_info("Not enrolled with any cloud console. Run: san cloud enroll --url <url> --token <token>")
-        return
-    console.print(Panel.fit(
-        f"[bold]Console:[/] {creds.console_url}\n"
-        f"[bold]Endpoint ID:[/] {creds.endpoint_id}\n"
-        f"[bold]Reporting:[/] metadata only (decisions, alerts, agent inventory, trust)",
-        title="[bold green]Enrolled[/]", border_style="green",
-    ))
 
 
 def _host_bar(pct: float, width: int = 24) -> str:

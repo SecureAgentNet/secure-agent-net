@@ -58,6 +58,9 @@ def _search_files(
     pattern = _phrase_pattern(term)
     limit = max(1, int(max_results))
 
+    if not os.path.isdir(root):
+        raise ValueError(f"search root is not a directory: {root}")
+
     # No shell. The term is caller-supplied, and interpolating it into a shell
     # string — even inside quotes — is injectable via a single quote. Passing an
     # argv list hands ripgrep the pattern directly, with no shell to parse it.
@@ -73,6 +76,7 @@ def _search_files(
     paths: List[str] = []
     proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     truncated = False
+    self_terminated = False
     try:
         assert proc.stdout is not None
         for line in proc.stdout:
@@ -84,6 +88,7 @@ def _search_files(
                 break
     finally:
         if proc.poll() is None:
+            self_terminated = True
             proc.terminate()
             try:
                 proc.wait(timeout=5)
@@ -94,13 +99,32 @@ def _search_files(
             if stream is not None:
                 stream.close()
 
-    # rg exits 1 when it simply found nothing; anything else is a real failure.
-    # A terminate() of our own is not an error.
-    if not truncated and proc.returncode not in (0, 1, None):
+    # ripgrep exit codes: 0 = matches, 1 = no matches, 2 = errors occurred.
+    #
+    # A 2 is routine here and does NOT mean the search failed: --no-messages asks
+    # ripgrep to skip paths it cannot read, and scanning a home directory always
+    # hits some (permission denied, broken symlinks). It still returns every match
+    # it did find — 32 of them, in the run that surfaced this — and with the
+    # messages suppressed stderr is empty. Treat it as a partial result.
+    #
+    # This was invisible until the shell went away: the old `rg ... | head -n`
+    # pipeline reported *head's* status, so ripgrep's 2 never reached the caller.
+    #
+    # A run we stopped ourselves has no meaningful exit code to judge — terminate()
+    # leaves it -15, not None — so skip the check entirely in that case.
+    partial = proc.returncode == 2
+    if not self_terminated and proc.returncode not in (0, 1, 2, None):
         raise RuntimeError(stderr.strip() or f"search failed ({proc.returncode})")
 
     return json.dumps(
-        {"query": term, "root": root, "matches": paths, "truncated": truncated},
+        {
+            "query": term,
+            "root": root,
+            "matches": paths,
+            "truncated": truncated,
+            # True when some paths were skipped as unreadable.
+            "partial": partial,
+        },
         indent=2,
     )
 

@@ -54,13 +54,21 @@ class AlertManager:
         message: str,
         metadata: Optional[Dict[str, Any]] = None,
         notify_desktop: bool = True,
+        phase: Optional[str] = None,
     ) -> None:
-        """Persist, broadcast, and optionally show a desktop notification."""
+        """Persist, broadcast, and optionally show a desktop notification.
+
+        ``phase`` is the ITCD phase the alert belongs to. Alerts that omit it
+        used to be rendered as DECIDE by the desktop, so an agent-discovery
+        notice appeared in the operator's activity table as though a decision
+        had been made about it.
+        """
         alert = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "severity": severity,
             "title": title,
             "message": message,
+            "phase": phase,
             "metadata": metadata or {},
         }
 

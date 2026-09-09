@@ -89,3 +89,21 @@ jobs:
         with: { python-version: '3.11' }
       - run: pip install -e ".[dev]"
       - run: python scripts/run_evaluation.py --check
+
+  # Poisoned-agent regression gate. Four poisoned duplicates of the example
+  # agents are driven with OWASP LLM Top 10 attacks mapped to MITRE ATLAS, and
+  # the job fails if a scenario that was being defended stops being defended.
+  # Runs on the offline classifier provider, so it is deterministic and needs no
+  # Ollama; the two scenarios that require the mandate-anchored model are outside
+  # the committed floor by design.
+  poisoned-agents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -e ".[dev]"
+      - run: python -m examples.poisoned --provider classifier --check
+        env:
+          INSTALL_DIR: /tmp/san-ci
+          DATABASE_URL: sqlite:////tmp/san-ci/securenet.db

@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     hosted_api_model: str = Field(default="gpt-4o-mini", alias="HOSTED_API_MODEL")
     hosted_api_timeout: int = Field(default=30, alias="HOSTED_API_TIMEOUT")
 
+    # The model that drives a *running agent's* own reasoning — separate from the
+    # DECIDE providers above, deliberately: the evaluator and the evaluated must
+    # not share a configuration, or a change made to speed an agent up silently
+    # weakens the control judging it. Read here rather than from os.environ so a
+    # key in .env is picked up like every other setting.
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="", alias="OPENAI_MODEL")
+
     # Small-classifier provider: a HuggingFace text-classification model id/path
     # (used if `transformers` is installed), else a dependency-free linear model
     # whose feature weights load from this JSON path (falls back to built-ins).

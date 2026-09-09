@@ -41,3 +41,11 @@ backups/
 .DS_Store
 # Email agent runtime output — not source code, don't commit
 examples/email_agent/drafts/
+
+# Local runtime state. These directories hold the endpoint database and the
+# Ed25519 trust-root PRIVATE KEY (data/trust_authority.json). Committing them
+# would publish the key the whole trust chain verifies against.
+.san-data/
+.san-runtime/
+.secureagentnet/
+**/data/trust_authority.json

@@ -85,7 +85,7 @@ class TestGatewayHostTelemetryWiring:
         )
 
     def test_host_anomaly_escalates_otherwise_safe_action(self, gateway):
-        # Semantic + cloud both say low-risk; host telemetry is the escalating signal.
+        # Semantic evaluation says low-risk; host telemetry is the escalating signal.
         high = HostRiskContext(risk=0.5, anomaly=True,
                                reason="Host outbound spike during exfil-shaped action.")
         with (

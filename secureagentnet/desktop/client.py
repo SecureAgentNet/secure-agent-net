@@ -101,10 +101,14 @@ class DaemonClient:
         except Exception:
             return []
 
-    def hitl_decide(self, request_id: str, approve: bool) -> Optional[Dict[str, Any]]:
+    def hitl_decide(self, request_id: str, approve: bool,
+                    operator: Optional[str] = None) -> Optional[Dict[str, Any]]:
         verb = "approve" if approve else "deny"
         try:
-            resp = self._session.post(self._url(f"/v1/hitl/{request_id}/{verb}"), timeout=self.timeout)
+            resp = self._session.post(
+                self._url(f"/v1/hitl/{request_id}/{verb}"),
+                params={"operator": operator} if operator else None,
+                timeout=self.timeout)
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:

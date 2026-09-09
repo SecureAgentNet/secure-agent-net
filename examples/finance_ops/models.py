@@ -11,6 +11,10 @@ class PaymentState(str, Enum):
     AWAITING_APPROVAL = "awaiting_approval"
     REJECTED = "rejected"
     RELEASED = "released"
+    # A cancellation can arrive after a payment is approved but before it is
+    # released. It has to win that race, or an approved-then-cancelled payment
+    # still goes out.
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)

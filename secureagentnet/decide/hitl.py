@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 import threading
 import time
@@ -8,6 +10,31 @@ from enum import Enum
 logger = logging.getLogger(__name__)
 
 HITL_TIMEOUT_SECONDS = 60
+
+# How long an operator's decision stays redeemable by a re-issued action. Long
+# enough for a human to read the request and re-run the command; short enough
+# that yesterday's approval cannot authorise today's action.
+HITL_DECISION_TTL_SECONDS = 900
+
+
+def fingerprint_action(agent_id: str, action_name: str, target_resource: str,
+                       payload: Optional[Dict[str, Any]] = None) -> str:
+    """Stable identity for one action, so a retry can be matched to its decision.
+
+    The payload is included: approving ``execute_code`` once must not authorise
+    every future ``execute_code`` on the same target. Serialisation is sorted and
+    falls back to ``repr`` so an unserialisable payload still hashes consistently
+    rather than raising inside the decision path.
+    """
+    try:
+        payload_repr = json.dumps(payload or {}, sort_keys=True, default=repr)
+    except Exception:
+        payload_repr = repr(payload)
+    material = "\x1f".join((
+        str(agent_id or ""), str(action_name or ""),
+        str(target_resource or ""), payload_repr,
+    ))
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 class HITLDecision(str, Enum):
@@ -56,6 +83,11 @@ def _repo_set_decision(request_id: str, status: str, operator: str) -> Optional[
     return repo.set_decision(request_id, status, operator) if repo else None
 
 
+def _repo_consume(fingerprint: str, max_age_seconds: int) -> Optional[Dict[str, Any]]:
+    repo = _repo()
+    return repo.consume_decision(fingerprint, max_age_seconds) if repo else None
+
+
 class HITLApprovalGate:
     """Human-in-the-Loop approval system for moderate-risk agent actions.
 
@@ -83,6 +115,30 @@ class HITLApprovalGate:
         high = getattr(settings, 'hitl_high_threshold', 0.7) if settings else 0.7
         return low <= risk_score < high
 
+    def consume_decision(self, fingerprint: str,
+                         max_age_seconds: int = HITL_DECISION_TTL_SECONDS
+                         ) -> Optional[Dict[str, Any]]:
+        """Redeem a standing operator decision for this exact action, if any.
+
+        An escalation is raised by a one-shot process that exits while the
+        operator is still deciding, so the approval has to be honoured by the
+        *next* attempt rather than the one that raised it. Without this, approving
+        and re-running would simply escalate again — the approval would never
+        take effect.
+
+        The decision is single-use: it is stamped consumed as it is read, so it
+        authorises one execution rather than becoming a standing exemption.
+        """
+        row = _repo_consume(fingerprint, max_age_seconds)
+        if row is None:
+            return None
+        logger.info(
+            "HITL: redeeming %s decision %s for action '%s' (decided by %s)",
+            row.get("status"), row.get("request_id"), row.get("action_name"),
+            row.get("decided_by"),
+        )
+        return row
+
     def create_pending_request(
         self,
         request_id: str,
@@ -92,6 +148,7 @@ class HITLApprovalGate:
         intent_summary: str,
         risk_score: float,
         reason: str,
+        request_fingerprint: Optional[str] = None,
     ) -> str:
         req = {
             "request_id": request_id,
@@ -105,6 +162,7 @@ class HITLApprovalGate:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "decision_at": None,
             "decided_by": None,
+            "request_fingerprint": request_fingerprint,
         }
         persisted = _repo_save(req)
         # Remember whether this request reached shared storage. Where it did, the

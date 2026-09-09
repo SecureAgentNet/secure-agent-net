@@ -89,6 +89,12 @@ class DaemonStatus(BaseModel):
     threats_blocked: int
     uptime_seconds: float
     version: str = "2.0.0"
+    # The enforcement surface this process loaded. A client comparing it with
+    # its own is how "the daemon is running code you have since changed" becomes
+    # visible instead of silent.
+    fingerprint: str = ""
+    stale: bool = False
+    stale_reason: str = ""
 
 
 class DaemonState:
@@ -96,23 +102,37 @@ class DaemonState:
 
     def __init__(self, settings: Optional[DaemonSettings] = None):
         self.settings = settings or get_daemon_settings()
+        # Snapshot what this process is actually enforcing with. Everything the
+        # daemon later approves is approved under *this* surface, so it is the
+        # thing that has to be checked, not whatever is on disk at the time.
+        from secureagentnet.core import runtime_fingerprint
+        self.fingerprint = runtime_fingerprint.compute(use_cache=False)
+        logger.info("Daemon enforcement fingerprint %s (code %s, policy %s)",
+                    self.fingerprint["fingerprint"], self.fingerprint["code"],
+                    self.fingerprint["policy"])
         self.started_at = datetime.now(timezone.utc)
         self.pipeline = ITCDPipeline()
         self.alert_manager = AlertManager(settings=self.settings)
         self.discovery_scheduler: Optional[DiscoveryScheduler] = None
         self.threats_blocked = 0
-        self.cloud_reporter = None          # set in lifespan if the daemon is enrolled
-        self._cloud_tasks: list = []
-        self._cloud_client = None
+
+    def staleness(self) -> Optional[str]:
+        """Why this process can no longer vouch for its verdicts, or None."""
+        from secureagentnet.core import runtime_fingerprint
+        return runtime_fingerprint.drift(self.fingerprint)
 
     def get_status(self) -> DaemonStatus:
         uptime = (datetime.now(timezone.utc) - self.started_at).total_seconds()
+        reason = self.staleness()
         return DaemonStatus(
             started_at=self.started_at.isoformat(),
             agents_total=IdentityRegistry.get_total_count(),
             agents_active=IdentityRegistry.get_active_count(),
             threats_blocked=self.threats_blocked,
             uptime_seconds=uptime,
+            fingerprint=self.fingerprint.get("fingerprint", ""),
+            stale=reason is not None,
+            stale_reason=reason or "",
         )
 
 
@@ -141,12 +161,10 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
             alert_manager=_state.alert_manager,
         )
         await _state.discovery_scheduler.start()
-        await _start_cloud_reporter(_state)
         yield
         logger.info("Daemon API shutting down")
         if _state.discovery_scheduler:
             await _state.discovery_scheduler.stop()
-        await _stop_cloud_reporter(_state)
 
     app = FastAPI(title="SecureAgentNet Daemon", version="2.0.0", lifespan=lifespan)
 
@@ -174,22 +192,47 @@ def create_app(settings: Optional[DaemonSettings] = None) -> FastAPI:
         from secureagentnet.decide.hitl import get_hitl_gate
         return {"pending": get_hitl_gate().get_all_pending()}
 
+    # ``operator`` is who is accountable for the decision, and it is written to the
+    # audit row. It defaults to "desktop" so an older client still works, but a
+    # decision attributed to an application rather than a person is not much of an
+    # audit trail — the desktop app sends the operator configured in its settings.
     @app.post("/v1/hitl/{request_id}/approve", dependencies=[Depends(_require_local_or_token)])
-    async def hitl_approve(request_id: str) -> Dict[str, str]:
+    async def hitl_approve(request_id: str, operator: str = "desktop") -> Dict[str, str]:
         from secureagentnet.decide.hitl import get_hitl_gate
-        decision = get_hitl_gate().approve(request_id, "desktop")
-        return {"request_id": request_id, "decision": getattr(decision, "value", str(decision))}
+        decision = get_hitl_gate().approve(request_id, operator or "desktop")
+        return {"request_id": request_id, "operator": operator or "desktop",
+                "decision": getattr(decision, "value", str(decision))}
 
     @app.post("/v1/hitl/{request_id}/deny", dependencies=[Depends(_require_local_or_token)])
-    async def hitl_deny(request_id: str) -> Dict[str, str]:
+    async def hitl_deny(request_id: str, operator: str = "desktop") -> Dict[str, str]:
         from secureagentnet.decide.hitl import get_hitl_gate
-        decision = get_hitl_gate().deny(request_id, "desktop")
-        return {"request_id": request_id, "decision": getattr(decision, "value", str(decision))}
+        decision = get_hitl_gate().deny(request_id, operator or "desktop")
+        return {"request_id": request_id, "operator": operator or "desktop",
+                "decision": getattr(decision, "value", str(decision))}
 
     @app.post("/v1/intercept", response_model=InterceptResponse,
               dependencies=[Depends(_require_local_or_token)])
     async def intercept(req: InterceptRequest) -> InterceptResponse:
         state = get_state()
+
+        # A daemon whose loaded enforcement surface no longer matches the one on
+        # disk cannot honestly say what its verdict means, so it stops issuing
+        # them. Refusing is the safe direction: the previous behaviour was to
+        # keep approving under policy the operator had already replaced.
+        stale_reason = state.staleness()
+        if stale_reason:
+            logger.error("Refusing to evaluate — daemon is stale: %s", stale_reason)
+            return InterceptResponse(
+                status="blocked",
+                reason=(f"Daemon is running a stale enforcement surface ({stale_reason}). "
+                        "Verdicts are withheld until it is restarted."),
+                evaluated_by="RuntimeFingerprint",
+                phase="DAEMON",
+                correlation_id="",
+                remediation=["Restart the daemon so it loads the current policy:",
+                             "  san daemon restart"],
+            )
+
         command = req.command or req.payload.get("command", "")
         request = AgentActionRequest(
             action_name=req.action_name,
@@ -531,72 +574,4 @@ def _live_container_stats(container_id: Optional[str]) -> Optional[Dict[str, Any
         return None
 
 
-async def _start_cloud_reporter(state: "DaemonState") -> None:
-    """If this daemon has been enrolled (`san cloud enroll`), start forwarding
-    metadata to the cloud console: alert stream + heartbeat loop."""
-    import asyncio
 
-    from secureagentnet.daemon.cloud_reporter import CloudCreds, CloudReporter
-
-    creds = CloudCreds.load(state.settings.data_dir)
-    if creds is None:
-        logger.info("No cloud enrollment found — running standalone (no console reporting)")
-        return
-    try:
-        import httpx
-        client = httpx.AsyncClient(base_url=creds.console_url, timeout=10)
-
-        def _command_handler(command: dict) -> str:
-            # The only control action the console can issue (by design): trip the
-            # local kill-switch the daemon already owns. Nothing else is honored.
-            if command.get("type") == "kill_switch":
-                state.pipeline.kill_switch.activate(triggered_by="cloud-console")
-                logger.warning("Remote kill-switch ACTIVATED by cloud console (command %s)",
-                               command.get("id"))
-                return "kill-switch activated"
-            return f"ignored unsupported command type: {command.get('type')}"
-
-        def _agent_provider() -> list:
-            # Report agent inventory (metadata only) so the console shows trust
-            # scores and counts per endpoint.
-            from secureagentnet.identify.identity_registry import IdentityRegistry
-            out = []
-            for a in IdentityRegistry.list_agents():
-                out.append({
-                    "agent_ref": a.get("name") or str(a.get("agent_id")),
-                    "name": a.get("name"),
-                    "type": a.get("type"),
-                    "trust_score": a.get("trust_score"),
-                    "status": a.get("status"),
-                })
-            return out
-
-        reporter = CloudReporter(
-            client=client, creds=creds, data_dir=state.settings.data_dir,
-            interval=getattr(state.settings, "cloud_report_interval_seconds", 15),
-            command_handler=_command_handler,
-            agent_provider=_agent_provider,
-        )
-        state.cloud_reporter = reporter
-        state._cloud_client = client
-        state._cloud_tasks = [
-            asyncio.create_task(reporter.consume_alerts(state.alert_manager)),
-            asyncio.create_task(reporter.run_loop()),
-        ]
-        logger.info("Cloud reporter started → %s (endpoint %s)",
-                    creds.console_url, creds.endpoint_id)
-    except Exception as exc:
-        logger.error("Failed to start cloud reporter: %s", exc)
-
-
-async def _stop_cloud_reporter(state: "DaemonState") -> None:
-    if state.cloud_reporter is None:
-        return
-    state.cloud_reporter.stop()
-    for task in state._cloud_tasks:
-        task.cancel()
-    if state._cloud_client is not None:
-        try:
-            await state._cloud_client.aclose()
-        except Exception:
-            pass

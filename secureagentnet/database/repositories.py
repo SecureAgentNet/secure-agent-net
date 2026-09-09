@@ -25,8 +25,9 @@ def _is_uuid(value) -> bool:
 
 
 def init_db():
-    """Create all tables. Safe to call repeatedly."""
-    Base.metadata.create_all(bind=get_engine())
+    """Create all tables and reconcile additive columns. Safe to call repeatedly."""
+    from secureagentnet.database.connection import init_database
+    init_database()
 
 
 class AgentRepository:
@@ -483,6 +484,8 @@ class HITLRepository:
             "created_at": _iso(r.created_at),
             "decision_at": _iso(r.decision_at),
             "decided_by": r.decided_by,
+            "request_fingerprint": r.request_fingerprint,
+            "consumed_at": _iso(r.consumed_at),
         }
 
     @classmethod
@@ -507,6 +510,7 @@ class HITLRepository:
                         created_at=_parse_dt(req.get("created_at")) or datetime.now(timezone.utc),
                         decision_at=_parse_dt(req.get("decision_at")),
                         decided_by=req.get("decided_by"),
+                        request_fingerprint=req.get("request_fingerprint"),
                     ))
                 else:
                     row.status = req.get("status", row.status)
@@ -560,6 +564,42 @@ class HITLRepository:
             return None
 
     @classmethod
+    def consume_decision(cls, fingerprint: str, max_age_seconds: int) -> Optional[dict]:
+        """Spend a standing decision for ``fingerprint`` on one execution.
+
+        Returns the decided row and stamps ``consumed_at`` in the same
+        transaction, so two concurrent retries cannot both redeem the same
+        approval. Decisions older than ``max_age_seconds`` are ignored: an
+        approval granted for one attempt should not silently authorise the same
+        action days later.
+        """
+        if not fingerprint:
+            return None
+        cutoff = datetime.now(timezone.utc).timestamp() - max_age_seconds
+        try:
+            with get_db_session() as session:
+                rows = session.execute(
+                    select(models.HITLRequest)
+                    .where(models.HITLRequest.request_fingerprint == fingerprint)
+                    .where(models.HITLRequest.status.in_(("approved", "denied")))
+                    .where(models.HITLRequest.consumed_at.is_(None))
+                    .order_by(models.HITLRequest.decision_at.desc())
+                ).scalars().all()
+                for row in rows:
+                    decided = row.decision_at
+                    if decided is not None and decided.tzinfo is None:
+                        decided = decided.replace(tzinfo=timezone.utc)
+                    if decided is None or decided.timestamp() < cutoff:
+                        continue
+                    row.consumed_at = datetime.now(timezone.utc)
+                    session.flush()
+                    return cls._row_to_dict(row)
+                return None
+        except Exception as e:
+            logger.warning("Failed to consume HITL decision: %s", e)
+            return None
+
+    @classmethod
     def expire_stale(cls, older_than_seconds: int) -> int:
         """Mark pending requests older than the timeout as timed out."""
         cutoff = datetime.now(timezone.utc).timestamp() - older_than_seconds
@@ -600,3 +640,148 @@ def _parse_dt(val) -> Optional[datetime]:
         except (ValueError, TypeError):
             return None
     return None
+
+
+class AgentRunRepository:
+    """DB-backed history of agent runs and their event traces.
+
+    Every run the desktop starts lands here, whether it completed, failed or was
+    blocked outright. That is the point of the table: a run that went wrong is
+    the one you most want to be able to read back.
+    """
+
+    @classmethod
+    def save(cls, result) -> bool:
+        """Upsert a run and (re)write its event trace. Returns success."""
+        try:
+            with get_db_session() as session:
+                rid = uuid.UUID(str(result.run_id))
+                row = session.get(models.AgentRun, rid)
+                agent_uuid = uuid.UUID(result.agent_id) if _is_uuid(result.agent_id) else None
+                counts = result.counts or {}
+                fields = dict(
+                    agent_id=agent_uuid,
+                    agent_key=result.agent_key,
+                    agent_name=result.agent_name,
+                    operator=getattr(result, "operator", None),
+                    prompt=result.prompt,
+                    task=result.task,
+                    goal=result.mandate.goal,
+                    approved_actions=list(result.mandate.approved_actions),
+                    forbidden_actions=list(result.mandate.forbidden_actions),
+                    status=result.status,
+                    brain=result.brain,
+                    started_at=result.started_at,
+                    finished_at=result.finished_at,
+                    final_answer=result.final_answer or None,
+                    error=result.error or None,
+                    artifacts=list(result.artifacts),
+                    allowed_count=counts.get("allowed", 0),
+                    blocked_count=counts.get("blocked", 0),
+                    escalated_count=counts.get("escalated", 0),
+                    redactions=dict(getattr(result, "redactions", {}) or {}),
+                )
+                if row is None:
+                    session.add(models.AgentRun(run_id=rid, **fields))
+                else:
+                    for key, value in fields.items():
+                        setattr(row, key, value)
+
+                # The trace is rewritten wholesale: a run is saved once at the
+                # end, and a partial trace from an earlier save must not be
+                # interleaved with the final one.
+                session.execute(sa_delete(models.AgentRunEvent)
+                                .where(models.AgentRunEvent.run_id == rid))
+                for event in result.events:
+                    session.add(models.AgentRunEvent(
+                        run_id=rid, seq=event.seq, kind=event.kind,
+                        summary=event.summary[:4000] if event.summary else None,
+                        verdict=(event.detail or {}).get("verdict"),
+                        at=event.at, detail=event.detail or {}))
+            return True
+        except Exception as e:
+            logger.warning("Failed to persist agent run: %s", e)
+            return False
+
+    @classmethod
+    def _run_to_dict(cls, r) -> dict:
+        return {
+            "run_id": str(r.run_id),
+            "agent_id": str(r.agent_id) if r.agent_id else None,
+            "agent_key": r.agent_key,
+            "agent_name": r.agent_name,
+            "operator": r.operator,
+            "prompt": r.prompt,
+            "task": r.task,
+            "goal": r.goal,
+            "approved_actions": r.approved_actions or [],
+            "forbidden_actions": r.forbidden_actions or [],
+            "status": r.status,
+            "brain": r.brain,
+            "started_at": r.started_at,
+            "finished_at": r.finished_at,
+            "final_answer": r.final_answer or "",
+            "error": r.error or "",
+            "artifacts": r.artifacts or [],
+            "allowed_count": r.allowed_count or 0,
+            "blocked_count": r.blocked_count or 0,
+            "escalated_count": r.escalated_count or 0,
+            "redactions": r.redactions or {},
+        }
+
+    @classmethod
+    def list_recent(cls, limit: int = 100, agent_key: Optional[str] = None,
+                    status: Optional[str] = None) -> list:
+        """Runs newest first, for the history page."""
+        try:
+            with get_db_session() as session:
+                stmt = select(models.AgentRun)
+                if agent_key:
+                    stmt = stmt.where(models.AgentRun.agent_key == agent_key)
+                if status:
+                    stmt = stmt.where(models.AgentRun.status == status)
+                stmt = stmt.order_by(models.AgentRun.started_at.desc()).limit(limit)
+                return [cls._run_to_dict(r) for r in session.execute(stmt).scalars().all()]
+        except Exception as e:
+            logger.warning("Failed to list agent runs: %s", e)
+            return []
+
+    @classmethod
+    def get(cls, run_id: str) -> Optional[dict]:
+        """One run with its full event trace attached under ``events``."""
+        try:
+            with get_db_session() as session:
+                row = session.get(models.AgentRun, uuid.UUID(str(run_id)))
+                if row is None:
+                    return None
+                data = cls._run_to_dict(row)
+                events = session.execute(
+                    select(models.AgentRunEvent)
+                    .where(models.AgentRunEvent.run_id == row.run_id)
+                    .order_by(models.AgentRunEvent.seq)
+                ).scalars().all()
+                data["events"] = [cls._event_to_dict(e) for e in events]
+                return data
+        except Exception as e:
+            logger.warning("Failed to load agent run %s: %s", run_id, e)
+            return None
+
+    @classmethod
+    def _event_to_dict(cls, e) -> dict:
+        return {"seq": e.seq, "kind": e.kind, "summary": e.summary or "",
+                "verdict": e.verdict, "at": e.at, "detail": e.detail or {}}
+
+    @classmethod
+    def blocked_actions(cls, limit: int = 200) -> list:
+        """Every action the gateway refused, across all runs."""
+        try:
+            with get_db_session() as session:
+                rows = session.execute(
+                    select(models.AgentRunEvent)
+                    .where(models.AgentRunEvent.verdict.in_(("blocked", "escalated")))
+                    .order_by(models.AgentRunEvent.at.desc()).limit(limit)
+                ).scalars().all()
+                return [cls._event_to_dict(r) | {"run_id": str(r.run_id)} for r in rows]
+        except Exception as e:
+            logger.warning("Failed to list blocked actions: %s", e)
+            return []

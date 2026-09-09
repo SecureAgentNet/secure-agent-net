@@ -38,16 +38,6 @@ class DaemonSettings(BaseSettings):
     desktop_notifications: bool = Field(default=True)
     alert_history_limit: int = Field(default=1000)
 
-    # Cloud scanning
-    cloud_scan_url: Optional[str] = Field(default=None)
-    cloud_scan_api_key: Optional[str] = Field(default=None)
-    cloud_scan_timeout_seconds: int = Field(default=10)
-    cloud_scan_demo_mode: bool = Field(default=False)
-
-    # Cloud Console reporting (central Webroot-style console). Enrollment creds
-    # live in <data_dir>/cloud.json, written by `san cloud enroll`.
-    cloud_report_interval_seconds: int = Field(default=15)
-
     @property
     def pid_file(self) -> Path:
         return self.data_dir / "daemon.pid"

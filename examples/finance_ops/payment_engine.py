@@ -76,7 +76,17 @@ class FinanceOpsStore:
         return any(p.get("idempotency_key") == request.idempotency_key for p in self.released_payments())
 
     def validate_business_rules(self, request: PaymentRequest) -> tuple[bool, bool, str]:
-        """Return ``(valid, requires_human_approval, explanation)``."""
+        """Return ``(valid, requires_human_approval, explanation)``.
+
+        These are facts about the ledger, not judgements about intent: whether
+        this key was already paid, whether the counterparty is on the register,
+        whether a cancellation got here first. An intent evaluator cannot answer
+        any of them from the request text alone, which is why the domain owns
+        them and the pipeline composes with them.
+        """
+        current = str(self.state(request.request_id).get("state", ""))
+        if current == PaymentState.CANCELLED.value:
+            return False, False, "Payment was cancelled before release"
         if self.is_duplicate(request):
             return False, False, "Duplicate idempotency key: payment was already released"
         counterparty = self.counterparties.get(request.counterparty_id)
@@ -93,6 +103,8 @@ class FinanceOpsStore:
         return True, False, "Approved counterparty and baseline amount"
 
     def release(self, request: PaymentRequest, released_by: str) -> dict:
+        if str(self.state(request.request_id).get("state", "")) == PaymentState.CANCELLED.value:
+            raise ValueError("Cancelled payment release attempted")
         if self.is_duplicate(request):
             raise ValueError("Duplicate payment release attempted")
         payment = {

@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -8,11 +9,10 @@ from .models import EvaluationRequest, EvaluationResult
 from .rule_filter import RuleFilter
 from .pii_redactor import PiiRedactor
 from .semantic_evaluator import SemanticEvaluator
-from .hitl import get_hitl_gate, HITLDecision
+from .hitl import get_hitl_gate, HITLDecision, fingerprint_action
 from .ast_verifier import ASTSemanticVerifier
 from secureagentnet.core.config import get_settings
 from secureagentnet.core.exceptions import PIIRedactionError
-from secureagentnet.integrations.cloud_scanner import CloudScanner
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,6 @@ class DecisionGateway:
         settings = get_settings()
         self.semantic_evaluator = SemanticEvaluator()
         self.block_threshold = settings.block_threshold
-        self.cloud_scanner = CloudScanner()
         self.host_telemetry_enabled = getattr(
             settings, "decide_host_telemetry_enabled", False)
 
@@ -85,9 +84,10 @@ class DecisionGateway:
         # Tier 2: PII Redaction
         try:
             redacted_payload = PiiRedactor.redact_payload(request.payload)
-            decision_log["tier2_pii_count"] = self._count_redacted(
-                redacted_payload, request.payload
-            )
+            pii_count = self._count_redacted(redacted_payload, request.payload)
+            pii_types = self._redacted_entity_types(redacted_payload)
+            decision_log["tier2_pii_count"] = pii_count
+            decision_log["tier2_entities"] = pii_types
         except PIIRedactionError as e:
             logger.error("Tier 2 PII redaction failed — failing closed: %s", e)
             decision_log["final_decision"] = "DENY"
@@ -105,17 +105,9 @@ class DecisionGateway:
         )
         decision_log["tier3_confidence"] = llm_score
 
-        # Tier 4: Optional Cloud Scan (remote + fallback)
-        cloud_result = self.cloud_scanner.scan(
-            agent_id=request.agent_id,
-            action_name=request.action_name,
-            payload=dict(redacted_payload),
-            intent=request.intent_summary,
-        )
-        # Use the higher of the two risk scores.
-        final_score = max(llm_score, cloud_result.risk_score)
-        final_reason = cloud_result.reason if cloud_result.risk_score > llm_score else llm_reason
-        final_source = f"SemanticEvaluator+{cloud_result.source}"
+        final_score = llm_score
+        final_reason = llm_reason
+        final_source = "SemanticEvaluator"
 
         # Tier 3.2: Host-telemetry context. A live host anomaly (e.g. an
         # outbound-network spike) during an exfiltration-shaped action raises the
@@ -135,6 +127,45 @@ class DecisionGateway:
         # Tier 3.5: HITL Approval Gate for medium-risk actions
         hitl = get_hitl_gate()
         if hitl.requires_approval(final_score) and final_score < self.block_threshold:
+            fingerprint = fingerprint_action(
+                request.agent_id, request.action_name,
+                request.target_resource, request.payload,
+            )
+
+            # An escalation is raised by a process that exits while the operator
+            # is still deciding, so the decision has to be honoured by the *next*
+            # attempt. Redeem one here before queueing a fresh request, otherwise
+            # approving and re-running would escalate again forever.
+            #
+            # This only ever settles an action that would have escalated anyway:
+            # a rule-filter, AST or PII denial returned long before this point,
+            # and a score at or above the block threshold never reaches it. An
+            # approval releases a held action; it cannot override a hard deny.
+            decided = hitl.consume_decision(fingerprint)
+            if decided is not None:
+                approved = decided.get("status") == HITLDecision.APPROVED.value
+                operator = decided.get("decided_by") or "operator"
+                decision_log["final_decision"] = "APPROVE" if approved else "DENY"
+                decision_log["hitl_request_id"] = decided.get("request_id")
+                decision_log["tier3_confidence"] = final_score
+                result = EvaluationResult(
+                    is_allowed=approved,
+                    risk_score=final_score,
+                    reason=(f"Released by operator '{operator}' "
+                            f"(approval {decided.get('request_id')})" if approved else
+                            f"Denied by operator '{operator}' "
+                            f"(request {decided.get('request_id')})"),
+                    evaluated_by="HITLApprovalGate",
+                    metadata={
+                        "hitl_request_id": decided.get("request_id"),
+                        "hitl_decision": decided.get("status"),
+                        "hitl_operator": operator,
+                    },
+                    pii_redacted_count=pii_count, pii_entity_types=pii_types,
+                )
+                self._persist_decision(decision_log, result, t_start)
+                return result
+
             hitl_id = hitl.create_pending_request(
                 request_id=str(uuid.uuid4()),
                 agent_id=request.agent_id,
@@ -143,6 +174,7 @@ class DecisionGateway:
                 intent_summary=request.intent_summary,
                 risk_score=final_score,
                 reason=final_reason,
+                request_fingerprint=fingerprint,
             )
             decision_log["final_decision"] = "ESCALATE"
             decision_log["hitl_request_id"] = hitl_id
@@ -152,7 +184,8 @@ class DecisionGateway:
                 risk_score=final_score,
                 reason=f"HITL approval required for: {request.action_name} ({final_reason})",
                 evaluated_by="HITLApprovalGate",
-                metadata={"hitl_request_id": hitl_id, "hitl_required": True, "cloud_scan": cloud_result.to_dict()},
+                metadata={"hitl_request_id": hitl_id, "hitl_required": True},
+                pii_redacted_count=pii_count, pii_entity_types=pii_types,
             )
             self._persist_decision(decision_log, result, t_start)
             return result
@@ -162,7 +195,7 @@ class DecisionGateway:
             result = EvaluationResult(
                 is_allowed=False, risk_score=final_score,
                 reason=final_reason, evaluated_by=final_source,
-                metadata={"cloud_scan": cloud_result.to_dict()},
+                pii_redacted_count=pii_count, pii_entity_types=pii_types,
             )
         else:
             decision_log["final_decision"] = "APPROVE"
@@ -170,7 +203,7 @@ class DecisionGateway:
                 is_allowed=True, risk_score=final_score,
                 reason="Approved by Semantic Evaluator",
                 evaluated_by=final_source,
-                metadata={"cloud_scan": cloud_result.to_dict()},
+                pii_redacted_count=pii_count, pii_entity_types=pii_types,
             )
 
         self._persist_decision(decision_log, result, t_start)
@@ -180,6 +213,15 @@ class DecisionGateway:
     def _count_redacted(redacted: dict, original: dict) -> int:
         redacted_str = str(redacted)
         return redacted_str.count("[REDACTED_")
+
+    @staticmethod
+    def _redacted_entity_types(redacted: dict) -> List[str]:
+        """The distinct PII entity types the redactor replaced, e.g. EMAIL_ADDRESS.
+
+        Read back off the placeholders rather than tracked separately, so this
+        can never disagree with what was actually substituted.
+        """
+        return sorted(set(re.findall(r"\[REDACTED_([A-Z_]+)\]", str(redacted))))
 
     def _persist_decision(self, log: dict, result: EvaluationResult, t_start: float):
         log["processing_time_ms"] = int((time.time() - t_start) * 1000)

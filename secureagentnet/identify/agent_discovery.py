@@ -27,8 +27,8 @@ AGENT_FRAMEWORKS = {"langchain", "crewai", "autogen"}
 EXTENDED_AGENT_FRAMEWORKS = AGENT_FRAMEWORKS | {"custom", "mcp", "mcp-server"}
 # Substrings that mark SecureAgentNet's own infrastructure (never an agent).
 _SAN_INFRA_MARKERS = (
-    "secureagentnet.daemon", "secureagentnet.cloud", "secureagentnet.main",
-    "secureagentnet-daemon", "secureagentnet-cloud", "secureagentnet-desktop",
+    "secureagentnet.daemon", "secureagentnet.main",
+    "secureagentnet-daemon", "secureagentnet-desktop",
     "interfaces.cli.terminal", "secureagentnet/main",
 )
 # Strong signals that a "custom" (unmatched-framework) process is really an AI agent:
@@ -435,7 +435,7 @@ class ProcessScanner(BaseScanner):
             if not cmdline_clean:
                 return None
 
-            # Never treat SecureAgentNet's own infrastructure (the daemon, cloud
+            # Never treat SecureAgentNet's own infrastructure (the daemon,
             # console, CLI, gateway) as an AI agent — it's the guard, not the guarded.
             if any(m in cmdline_clean.lower() for m in _SAN_INFRA_MARKERS):
                 return None

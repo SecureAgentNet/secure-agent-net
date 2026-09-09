@@ -122,6 +122,7 @@ class DiscoveryScheduler:
         if self.alert_manager and (discovered or registered):
             await self.alert_manager.emit(
                 severity="INFO",
+                phase="IDENTIFY",   # discovery is an IDENTIFY event, not a decision
                 title="System Scan Complete",
                 message=f"Discovered {len(discovered)} AI agent(s); auto-registered {registered}.",
                 metadata={"discovered": len(discovered), "registered": registered},

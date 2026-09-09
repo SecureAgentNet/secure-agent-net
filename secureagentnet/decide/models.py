@@ -23,3 +23,11 @@ class EvaluationResult(BaseModel):
     reason: str
     evaluated_by: str = Field(..., description="Which tier made the final decision (e.g., 'RuleFilter', 'SemanticEvaluator').")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (e.g., HITL request ID)")
+    # Tier 2 evidence. Redaction happens before the payload reaches any model,
+    # so without reporting it the operator has no way to confirm it occurred —
+    # a privacy control nobody can observe is a privacy control nobody can trust.
+    pii_redacted_count: int = Field(
+        default=0, description="Number of PII values replaced before Tier-3 evaluation.")
+    pii_entity_types: List[str] = Field(
+        default_factory=list,
+        description="Distinct PII entity types redacted, e.g. ['EMAIL_ADDRESS'].")

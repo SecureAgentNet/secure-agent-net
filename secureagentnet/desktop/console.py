@@ -47,7 +47,7 @@ class SanConsole(QWidget):
 
         self.proc: QProcess | None = None
         self._append("SecureAgentNet console — every `san` command is available here.\n"
-                     "Try:  doctor   ·   agent list   ·   view-logs   ·   cloud status\n")
+                     "Try:  doctor   ·   agent list   ·   view-logs   ·   hitl list\n")
 
     # ── public API used by the action panels ──
     def run(self, args: list[str], echo: str | None = None) -> None:

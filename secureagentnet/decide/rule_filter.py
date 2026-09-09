@@ -1,4 +1,5 @@
 import logging
+import posixpath
 import re
 from typing import Tuple, Set
 
@@ -8,10 +9,52 @@ logger = logging.getLogger(__name__)
 
 _HARDCODED_DENY_ACTIONS = {"delete_database", "format_drive", "exfiltrate_keys"}
 _HARDCODED_DANGEROUS_PATHS = {"/etc/shadow", "/etc/passwd", ".aws/credentials",
-                               ".kube/config", "/root"}
+                               ".kube/config", "/root",
+                               # Scheduler and privilege files: writing any of
+                               # these converts a "save a file" action into
+                               # persistent root execution.
+                               "/etc/cron.d", "/etc/crontab", "/etc/cron.daily",
+                               "/etc/sudoers", "/etc/systemd/system",
+                               # Key material and process environment.
+                               ".ssh/id_rsa", ".ssh/id_ed25519", ".docker/config.json",
+                               "/proc/self/environ", ".git-credentials", ".netrc"}
+
+# Fetch-and-execute: the payload never contains the malicious code, only the
+# instruction to go and get it, so no signature of the code itself can catch it.
+_PIPE_TO_SHELL = re.compile(
+    r"\b(?:curl|wget|fetch|iwr|invoke-webrequest)\b[^|;&\n]{0,200}[|;]\s*"
+    r"(?:sudo\s+)?(?:ba|z|k|d|fi)?sh\b", re.I)
+
+# Live credential material appearing in an action payload. Matching the shape of
+# a secret rather than the word "secret" keeps this off ordinary prose that
+# merely mentions credentials.
+_SECRET_PATTERNS = (
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "a private key block"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "an AWS access key id"),
+    (re.compile(r"\bASIA[0-9A-Z]{16}\b"), "an AWS temporary access key id"),
+    (re.compile(r"\baws_secret_access_key\s*[=:]\s*\S{20,}", re.I), "an AWS secret key"),
+    (re.compile(r"\bghp_[A-Za-z0-9]{36}\b"), "a GitHub token"),
+    (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"), "a Slack token"),
+    (re.compile(r"\bsk-[A-Za-z0-9]{32,}\b"), "an API secret key"),
+)
 _policies_loaded = False
 _deny_actions: Set[str] = set(_HARDCODED_DENY_ACTIONS)
 _dangerous_paths: Set[str] = set(_HARDCODED_DANGEROUS_PATHS)
+
+
+def _normalise_path(value: str) -> str:
+    """Collapse ``..`` segments so a traversal resolves to the path it reaches.
+
+    Applied to any string, not just well-formed paths — the point is to see what
+    a value *resolves to*, and a value that is not a path simply comes back
+    unchanged.
+    """
+    if ".." not in value:
+        return value
+    try:
+        return posixpath.normpath(value.replace("\\", "/"))
+    except Exception:
+        return value
 
 
 def _load_policies():
@@ -117,13 +160,23 @@ class RuleFilter:
             return True, 1.0, f"Action '{request.action_name}' is explicitly denied."
 
         target_resource = request.target_resource or ""
-        for path in cls.DANGEROUS_PATHS:
-            if path in target_resource:
-                return True, 0.9, f"Target resource contains restricted path: {path}"
+        payload_values = list(_iter_payload_strings(request.payload))
 
-        for value in _iter_payload_strings(request.payload):
+        # A traversal spells a restricted path without ever writing it literally:
+        # "/home/u/../../../etc/shadow" contains no substring "/etc/shadow" until
+        # it is normalised, which is how it used to walk past this filter.
+        for raw in [target_resource, *payload_values]:
             for path in cls.DANGEROUS_PATHS:
-                if path in value:
-                    return True, 0.9, f"Payload contains restricted path: {path}"
+                if path in raw or path in _normalise_path(raw):
+                    where = "Target resource" if raw is target_resource else "Payload"
+                    return True, 0.9, f"{where} contains restricted path: {path}"
+
+        for raw in [request.intent_summary or "", *payload_values]:
+            if _PIPE_TO_SHELL.search(raw):
+                return True, 0.95, ("Payload pipes a downloaded script into a shell "
+                                    "(fetch-and-execute)")
+            for pattern, label in _SECRET_PATTERNS:
+                if pattern.search(raw):
+                    return True, 0.9, f"Payload carries {label}"
 
         return False, 0.0, "Passed RuleFilter"

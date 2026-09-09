@@ -43,20 +43,13 @@ class SettingsWindow(QDialog):
         self.scan_interval_edit = QLineEdit()
         self.scan_interval_edit.setStyleSheet(self.port_edit.styleSheet())
 
-        self.cloud_url_edit = QLineEdit()
-        self.cloud_url_edit.setStyleSheet(self.port_edit.styleSheet())
 
-        self.cloud_key_edit = QLineEdit()
-        self.cloud_key_edit.setStyleSheet(self.port_edit.styleSheet())
-        self.cloud_key_edit.setEchoMode(QLineEdit.Password)
 
         self.notifications_check = QCheckBox("Enable desktop notifications")
         self.notifications_check.setStyleSheet(f"color: {COLORS['ink']};")
 
         form.addRow("Daemon Port:", self.port_edit)
         form.addRow("Scan Interval (sec):", self.scan_interval_edit)
-        form.addRow("Cloud Scan URL:", self.cloud_url_edit)
-        form.addRow("Cloud API Key:", self.cloud_key_edit)
         form.addRow(self.notifications_check)
         layout.addLayout(form)
 
@@ -73,8 +66,6 @@ class SettingsWindow(QDialog):
         settings = get_daemon_settings()
         self.port_edit.setText(str(settings.daemon_port))
         self.scan_interval_edit.setText(str(settings.discovery_interval_seconds))
-        self.cloud_url_edit.setText(settings.cloud_scan_url or "")
-        self.cloud_key_edit.setText(settings.cloud_scan_api_key or "")
         self.notifications_check.setChecked(settings.desktop_notifications)
 
     def _save(self) -> None:
@@ -99,8 +90,6 @@ class SettingsWindow(QDialog):
 
         update_or_add("SAN_DAEMON_PORT", str(port))
         update_or_add("SAN_DISCOVERY_INTERVAL_SECONDS", str(interval))
-        update_or_add("SAN_CLOUD_SCAN_URL", self.cloud_url_edit.text())
-        update_or_add("SAN_CLOUD_SCAN_API_KEY", self.cloud_key_edit.text())
         update_or_add("SAN_DESKTOP_NOTIFICATIONS", "true" if self.notifications_check.isChecked() else "false")
 
         env_path.parent.mkdir(parents=True, exist_ok=True)

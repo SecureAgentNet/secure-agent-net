@@ -2,7 +2,7 @@
 
 Each probe is bounded (short socket timeouts) and fail-safe — a probe that errors
 reports the service as offline rather than raising. Results feed the desktop and
-cloud System-Health panels.
+desktop System-Health panels.
 """
 from __future__ import annotations
 

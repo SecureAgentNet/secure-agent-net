@@ -134,6 +134,31 @@ class ContainerProvisioner:
     def _workspace_volume_name(sandbox_id: str) -> str:
         return f"san-ws-{sandbox_id}"
 
+    def _prepare_workspace_volume(self, volume_name: str, image: str, work_dir: str):
+        """Make a fresh workspace volume writable by the unprivileged sandbox user.
+
+        Docker creates a volume's mount point root-owned 0755. The sandbox runs
+        as uid 1000, so without this the agent cannot write to its own working
+        directory — while /tmp, which inherits 1777 from the image, can be
+        written. A throwaway root container fixes the mode; it holds no agent
+        code and exits immediately.
+
+        Best-effort: a failure leaves the workspace readable but not writable,
+        which is degraded rather than unsafe, so it must not fail provisioning.
+        """
+        try:
+            self.client.containers.run(
+                image, command=["chmod", "1777", work_dir],
+                volumes={volume_name: {"bind": work_dir, "mode": "rw"}},
+                user="0:0", network_mode="none", remove=True,
+                labels={"managed_by": "secureagentnet", "purpose": "workspace-init"},
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not make workspace volume %s writable (%s); the sandbox "
+                "will see a read-only working directory", volume_name, e,
+            )
+
     def _remove_workspace_volume(self, sandbox_id: str):
         """Drop a sandbox's workspace volume; a no-op when it never had one."""
         try:
@@ -311,8 +336,14 @@ class ContainerProvisioner:
                     }
                 }
             else:
+                # mode=1777 to match /tmp. The workspace is the container's
+                # working directory but does not exist in the base image, so
+                # Docker creates the mount point root-owned 0755 — leaving the
+                # unprivileged sandbox user unable to write to its own working
+                # directory. noexec/nosuid/nodev still apply, and the mount is
+                # per-container and destroyed at teardown.
                 run_kwargs["tmpfs"][config.work_dir] = (
-                    f"size={size},noexec,nosuid,nodev"
+                    f"size={size},noexec,nosuid,nodev,mode=1777"
                 )
 
         if request.args:
@@ -361,8 +392,9 @@ class ContainerProvisioner:
         if request.files:
             # Per-sandbox and removed at teardown, so one agent's injected files
             # can never be visible to another's workspace.
+            volume_name = self._workspace_volume_name(sandbox_id)
             self.client.volumes.create(
-                name=self._workspace_volume_name(sandbox_id),
+                name=volume_name,
                 labels={"managed_by": "secureagentnet", "sandbox_id": sandbox_id},
             )
 
@@ -378,6 +410,13 @@ class ContainerProvisioner:
         ContainerResourceManager.update_status(sandbox_id, "provisioned")
         try:
             self._inject_files(sandbox_id, request.files)
+            if request.files:
+                # Must run after containers.create, which re-initialises the
+                # volume's mount point and would undo an earlier chmod.
+                self._prepare_workspace_volume(
+                    self._workspace_volume_name(sandbox_id),
+                    config.image, config.work_dir,
+                )
         except Exception:
             container.remove(force=True)
             ContainerResourceManager.remove_container(sandbox_id)
